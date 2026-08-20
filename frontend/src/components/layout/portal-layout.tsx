@@ -6,9 +6,11 @@ import {
   GraduationCap,
   Home,
   LogOut,
+  Lock,
   Menu,
   Search,
   Settings,
+  TriangleAlert,
   UserCircle,
   X,
 } from 'lucide-react'
@@ -24,17 +26,38 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ErrorBoundary } from '@/components/shared/error-boundary'
+import {
+  ApplicationProvider,
+  useApplication,
+} from '@/features/applications/application-context'
 import { useAuth } from '@/hooks/use-auth'
-import { navForRole, ROLE_LABEL } from '@/lib/portal-nav'
+import { LOCKED_HINT, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
 import { UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export function PortalLayout() {
+  return (
+    <ApplicationProvider>
+      <TooltipProvider delay={120}>
+        <PortalShell />
+      </TooltipProvider>
+    </ApplicationProvider>
+  )
+}
+
+function PortalShell() {
   const { profile, logout } = useAuth()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
@@ -154,6 +177,17 @@ export function PortalLayout() {
 
             <ThemeToggle />
 
+            {/* The account menu is the one header control with enough moving
+                parts to fail. A compact fallback keeps the header intact
+                instead of dropping a card into a 4rem-tall bar. */}
+            <ErrorBoundary
+              fallback={
+                <span className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-2.5 py-1.5 text-xs text-destructive">
+                  <TriangleAlert className="size-3.5" />
+                  Menu unavailable
+                </span>
+              }
+            >
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -172,14 +206,20 @@ export function PortalLayout() {
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{profile.full_name ?? 'Account'}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {profile.email}
-                    </span>
+                {/* Presentational, not a menu part.
+                    This was `DropdownMenuLabel`, which is Base UI's
+                    `Menu.GroupLabel` and throws without a `Menu.Group`
+                    ancestor to supply MenuGroupContext. Wrapping it in a group
+                    would silence that, but the block labels no group of items
+                    — it is an account header — so an empty labelled group
+                    would be a lie told to screen readers to satisfy a context
+                    check. A plain div is what it always was. */}
+                <div className="flex flex-col gap-0.5 px-2 py-1.5">
+                  <span className="text-sm font-medium">{profile.full_name ?? 'Account'}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {profile.email}
                   </span>
-                </DropdownMenuLabel>
+                </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem render={<Link to="/dashboard/profile" />}>
                   <UserCircle className="size-4" />
@@ -196,16 +236,117 @@ export function PortalLayout() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </ErrorBoundary>
           </div>
         </header>
 
         <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl">
-            <PageTransition />
+            {/* Keyed on the path so a page that failed does not leave its
+                fallback showing over every route the user visits next — the
+                boundary remounts on navigation and drops the error with it. */}
+            <ErrorBoundary key={location.pathname}>
+              <PageTransition />
+            </ErrorBoundary>
           </div>
         </main>
       </div>
     </div>
+  )
+}
+
+/* -------------------------------------------------------------- nav row -- */
+
+const ROW_BASE =
+  'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors'
+
+/**
+ * One sidebar row, either navigable or locked.
+ *
+ * A locked row is not a disabled link — it is not a link at all. Rendering an
+ * `<a>` that goes nowhere leaves it focusable, in the tab order, and openable
+ * in a new tab, all of which promise something the row cannot deliver.
+ */
+function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }) {
+  const { hasRegistered, loading } = useApplication()
+
+  const gated = item.requires === 'application'
+
+  // Locked while loading too. Flashing a row unlocked and then shutting it
+  // reads as a bug; the reverse is just a row settling.
+  if (gated && !hasRegistered) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <div
+              aria-disabled="true"
+              className={cn(
+                ROW_BASE,
+                'cursor-not-allowed text-muted-foreground/45 select-none',
+                collapsed && 'justify-center px-0',
+              )}
+            />
+          }
+        >
+          <item.icon className="size-4.5 shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="flex-1 whitespace-nowrap">{item.label}</span>
+              {loading ? (
+                <Skeleton className="size-3.5 rounded-full" />
+              ) : (
+                <Lock className="size-3.5 shrink-0" />
+              )}
+            </>
+          )}
+          <span className="sr-only">{LOCKED_HINT}</span>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {collapsed ? `${item.label} — ${LOCKED_HINT}` : LOCKED_HINT}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <NavLink
+      to={item.href}
+      end={item.href.split('/').length <= 2}
+      title={collapsed ? item.label : undefined}
+      className={({ isActive }) =>
+        cn(
+          ROW_BASE,
+          isActive
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          collapsed && 'justify-center px-0',
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <motion.span
+              layoutId="portal-nav-active"
+              className="absolute inset-y-1 left-0 w-1 rounded-r-full bg-primary"
+              transition={{ type: 'spring', damping: 26, stiffness: 340 }}
+            />
+          )}
+          <item.icon className="size-4.5 shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="flex-1 whitespace-nowrap">{item.label}</span>
+              {item.badge && (
+                <Badge variant="secondary" className="text-[0.68rem]">
+                  {item.badge}
+                </Badge>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </NavLink>
   )
 }
 
@@ -262,44 +403,7 @@ function SidebarBody({
               </h3>
             )}
             {group.items.map((item) => (
-              <NavLink
-                key={item.href}
-                to={item.href}
-                end={item.href.split('/').length <= 2}
-                title={collapsed ? item.label : undefined}
-                className={({ isActive }) =>
-                  cn(
-                    'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                    collapsed && 'justify-center px-0',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <motion.span
-                        layoutId="portal-nav-active"
-                        className="absolute inset-y-1 left-0 w-1 rounded-r-full bg-primary"
-                        transition={{ type: 'spring', damping: 26, stiffness: 340 }}
-                      />
-                    )}
-                    <item.icon className="size-4.5 shrink-0" />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1 whitespace-nowrap">{item.label}</span>
-                        {item.badge && (
-                          <Badge variant="secondary" className="text-[0.68rem]">
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-              </NavLink>
+              <NavRow key={item.href} item={item} collapsed={collapsed} />
             ))}
           </div>
         ))}
