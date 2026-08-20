@@ -1,36 +1,84 @@
+/**
+ * The candidate's landing page, in two states.
+ *
+ * Which one renders is decided by real data, not a flag: if `/applications/mine`
+ * comes back empty the candidate has not applied, and they get the explainer.
+ * Otherwise they get the summary, with the tracker one click away.
+ */
+
 import { motion } from 'motion/react'
-import {
-  ArrowRight,
-  CalendarClock,
-  CheckCircle2,
-  Clock,
-  Download,
-  FileText,
-  MapPin,
-  Trophy,
-} from 'lucide-react'
+import { ArrowRight, CalendarClock, FileText, Hourglass, Radar, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { PageHeader, StatCard, Timeline } from '@/components/shared/portal-ui'
+import { Countdown } from '@/components/shared/countdown'
+import { PageHeader, StageBadge } from '@/components/shared/portal-ui'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress, ProgressIndicator, ProgressTrack } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyDashboard } from '@/features/applications/empty-dashboard'
+import { STAGE_GUIDANCE } from '@/features/applications/stage-guidance'
+import { useApplication } from '@/features/applications/application-context'
 import { useAuth } from '@/hooks/use-auth'
-import { MY_APPLICATION } from '@/lib/mock-data'
+import { completedSteps, isRejected, STAGE_LABEL, TOTAL_STEPS } from '@/lib/stages'
 
 export default function CandidateDashboardPage() {
   const { profile } = useAuth()
+  const { application, loading, error, openBootcamps, reload } = useApplication()
+
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  const completed = MY_APPLICATION.timeline.filter((t) => t.status === 'done').length
-  const percent = Math.round((completed / MY_APPLICATION.timeline.length) * 100)
+  if (loading) return <DashboardSkeleton />
+
+  if (error) {
+    return (
+      <>
+        <PageHeader title={`Welcome, ${firstName}`} />
+        <Alert variant="destructive">
+          <AlertTitle>Could not load your dashboard</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={reload}>
+              <RefreshCw className="size-4" />
+              Try again
+            </Button>
+          </AlertAction>
+        </Alert>
+      </>
+    )
+  }
+
+  if (!application) {
+    return (
+      <>
+        <PageHeader
+          title="Dashboard"
+          description="Everything about your bootcamp application lives here."
+        />
+        <EmptyDashboard firstName={firstName} openBootcamps={openBootcamps} />
+      </>
+    )
+  }
+
+  /* ------------------------------------------------------- applied state -- */
+
+  const stage = application.stage
+  const halted = isRejected(stage) || application.status !== 'ACTIVE'
+  const guidance = STAGE_GUIDANCE[stage]
+  const done = completedSteps(stage) + (halted ? 0 : 1)
+  const percent = Math.round((done / TOTAL_STEPS) * 100)
+
+  const deadline = guidance.deadlinePhase
+    ? application.phases.find((p) => p.phase === guidance.deadlinePhase)
+    : undefined
 
   return (
     <>
       <PageHeader
         title={`Welcome back, ${firstName}`}
-        description="Track your application through every stage of the process."
+        description={`${application.program.title} · ${application.bootcamp_name}`}
         actions={
           <Button render={<Link to="/dashboard/application" />} variant="outline">
             <FileText className="size-4" />
@@ -39,160 +87,140 @@ export default function CandidateDashboardPage() {
         }
       />
 
-      {/* Candidate code banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-        className="mb-6"
-      >
-        <Card className="relative overflow-hidden border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -top-16 -right-10 size-52 rounded-full bg-primary/15 blur-3xl animate-aurora"
-          />
-          <CardContent className="relative flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold uppercase tracking-widest text-primary">
-                Your candidate code
-              </span>
-              <span className="font-mono text-3xl font-semibold tracking-tight">
-                {MY_APPLICATION.code}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {MY_APPLICATION.program} · {MY_APPLICATION.bootcamp}
-              </span>
-            </div>
-
-            <div className="flex w-full max-w-xs flex-col gap-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Progress</span>
-                <span className="font-medium">{percent}%</span>
-              </div>
-              <Progress value={percent}>
-                <ProgressTrack>
-                  <ProgressIndicator />
-                </ProgressTrack>
-              </Progress>
-              <span className="text-xs text-muted-foreground">
-                {completed} of {MY_APPLICATION.timeline.length} stages complete
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      {/* Stats */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Current stage" value={3} suffix=" of 5" icon={Trophy} hint="Physical assessment" delay={0} />
-        <StatCard label="Interview score" value={82.5} decimals={1} icon={CheckCircle2} trend={12} hint="above average" delay={0.06} />
-        <StatCard label="Days until next stage" value={4} icon={Clock} hint="16 October" delay={0.12} />
-        <StatCard label="Documents pending" value={2} icon={FileText} hint="CNIC, bank details" delay={0.18} />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-start">
-        {/* Timeline */}
+      <div className="flex flex-col gap-6">
+        {/* The one thing this page exists to offer. Given the full width and
+            the only filled button so it cannot be missed. */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.1 }}
+          transition={{ duration: 0.45 }}
         >
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Your journey</CardTitle>
-              <CardDescription>
-                Every stage is deadline-gated. You will be emailed when the next one opens.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Timeline items={MY_APPLICATION.timeline} />
+          <Card className="group relative overflow-hidden border-primary/25 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent transition-shadow duration-300 hover:shadow-lg">
+            <div
+              aria-hidden="true"
+              className="animate-aurora pointer-events-none absolute -top-20 -right-12 size-60 rounded-full bg-primary/15 blur-3xl"
+            />
+            <CardContent className="relative flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="font-mono text-2xl font-semibold tracking-tight">
+                    {application.candidate_code}
+                  </span>
+                  <StageBadge stage={stage} />
+                </div>
+
+                <p className="max-w-lg text-sm text-muted-foreground">
+                  {guidance.headline}. See the full journey, your timestamps,
+                  and what happens next.
+                </p>
+
+                <div className="flex max-w-sm flex-col gap-2 pt-1">
+                  <Progress value={percent}>
+                    <ProgressTrack>
+                      <ProgressIndicator />
+                    </ProgressTrack>
+                  </Progress>
+                  <span className="text-xs text-muted-foreground">
+                    Step {Math.max(done, 1)} of {TOTAL_STEPS} · {STAGE_LABEL[stage]}
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                render={<Link to="/dashboard/track" />}
+                size="lg"
+                className="shrink-0"
+              >
+                <Radar className="size-4" />
+                Track application
+                <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+              </Button>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Side column */}
-        <div className="flex flex-col gap-6">
+        {/* ---------------------------------------------------- what next -- */}
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
+          >
+            <Card className="h-full">
+              <CardHeader>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-base">{guidance.headline}</CardTitle>
+                  {guidance.waiting && (
+                    <Badge variant="outline" className="gap-1.5 text-[0.68rem]">
+                      <Hourglass className="size-3" />
+                      Nothing needed from you
+                    </Badge>
+                  )}
+                </div>
+                <CardDescription>What happens at this stage</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {guidance.body}
+                </p>
+                {guidance.action && (
+                  <Button
+                    render={<Link to={guidance.action.to} />}
+                    variant="outline"
+                    className="w-fit"
+                  >
+                    {guidance.action.label}
+                    <ArrowRight className="size-4" />
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.16 }}
           >
-            <Card className="border-warning/35 bg-warning/5">
+            <Card className="h-full">
               <CardHeader>
                 <div className="flex items-center gap-2">
-                  <span className="grid size-8 place-items-center rounded-lg bg-warning/20 text-warning-foreground dark:text-warning">
+                  <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
                     <CalendarClock className="size-4" />
                   </span>
-                  <CardTitle className="text-base">Next up</CardTitle>
+                  <CardTitle className="text-base">Deadline</CardTitle>
                 </div>
-                <CardDescription>Physical assessment — attendance is required</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <dl className="flex flex-col gap-2.5 text-sm">
-                  <div className="flex items-center gap-2">
-                    <CalendarClock className="size-4 shrink-0 text-muted-foreground" />
-                    <dt className="sr-only">Date and time</dt>
-                    <dd>16 October 2026, 11:00 AM</dd>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                    <dt className="sr-only">Location</dt>
-                    <dd>Bahadurabad Campus, Room 204</dd>
-                  </div>
-                </dl>
-                <Button render={<Link to="/dashboard/interview" />} className="mt-1 w-full">
-                  View details
-                  <ArrowRight className="size-4" />
-                </Button>
+              <CardContent>
+                {deadline?.deadline_at ? (
+                  <Countdown
+                    deadline={deadline.deadline_at}
+                    label={guidance.deadlineLabel ?? 'Closes in'}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No deadline applies to you right now. You will be emailed
+                    when the next stage opens.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </motion.div>
+        </div>
+      </div>
+    </>
+  )
+}
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.22 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Bring with you</CardTitle>
-                <CardDescription>Required at the assessment</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {[
-                  { label: 'Original CNIC or B-Form', ready: true },
-                  { label: 'Printed candidate code slip', ready: true },
-                  { label: 'Educational certificates', ready: false },
-                  { label: 'Two passport photographs', ready: false },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2 text-sm">
-                      <CheckCircle2
-                        className={
-                          item.ready ? 'size-4 shrink-0 text-success' : 'size-4 shrink-0 text-muted-foreground/40'
-                        }
-                      />
-                      {item.label}
-                    </span>
-                    {item.ready ? (
-                      <Badge variant="secondary" className="text-[0.68rem]">
-                        Ready
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[0.68rem]">
-                        Pending
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-
-                <Button variant="outline" className="mt-2 w-full">
-                  <Download className="size-4" />
-                  Download code slip
-                </Button>
-              </CardContent>
-            </Card>
-          </motion.div>
+function DashboardSkeleton() {
+  return (
+    <>
+      <PageHeader title="Dashboard" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-40 w-full rounded-xl" />
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <Skeleton className="h-52 w-full rounded-xl" />
+          <Skeleton className="h-52 w-full rounded-xl" />
         </div>
       </div>
     </>
