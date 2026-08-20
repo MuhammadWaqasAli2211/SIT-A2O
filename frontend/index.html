@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Saylani Mass IT Training — Free IT Bootcamps in Pakistan</title>
+    <meta
+      name="description"
+      content="Free, industry-aligned IT education. Over 250,000 students trained across Pakistan in web development, data science, mobile, cloud, and design. Applications open now."
+    />
+    <meta name="theme-color" content="#0f7a45" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Saylani Mass IT Training — Free IT Bootcamps" />
+    <meta
+      property="og:description"
+      content="Build a career in tech. Pay nothing for it. Free, industry-aligned IT bootcamps across Pakistan."
+    />
+    <meta property="og:site_name" content="Saylani Mass IT Training" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Saylani Mass IT Training — Free IT Bootcamps" />
+    <meta
+      name="twitter:description"
+      content="Build a career in tech. Pay nothing for it. Applications open now."
+    />
+
+    <!-- Applies the saved theme before first paint so a dark-mode user never
+         sees a white flash while React boots. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('sit.theme')
+          var dark =
+            stored === 'dark' ||
+            ((!stored || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
