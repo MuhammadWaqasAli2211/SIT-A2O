@@ -1,14 +1,24 @@
 """Application settings, loaded from environment. Fails fast on missing values."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/app/core/config.py -> backend/
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+# Absolute, so the file is found no matter which directory the process was
+# started from. A bare ".env" resolves against the current working directory,
+# which meant running uvicorn from anywhere but backend/ silently loaded no
+# settings at all and failed with a wall of "Field required" errors.
+ENV_FILE = BACKEND_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=ENV_FILE, env_file_encoding="utf-8", extra="ignore"
     )
 
     # --- Supabase ---
