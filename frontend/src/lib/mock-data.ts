@@ -6,24 +6,12 @@
  * them in one module makes that swap mechanical rather than a hunt.
  */
 
-export type ApplicationStage =
-  | 'APPLIED'
-  | 'INTERVIEW_SCHEDULED'
-  | 'INTERVIEWED'
-  | 'ASSESSMENT'
-  | 'FORM_PENDING'
-  | 'ONBOARDED'
-  | 'REJECTED'
+// The journey itself is real, not placeholder: it is the same seven stages the
+// database stores. Re-exported here so the fixtures below and their consumers
+// keep working off one definition.
+export { STAGE_LABEL, type ApplicationStage } from '@/lib/stages'
 
-export const STAGE_LABEL: Record<ApplicationStage, string> = {
-  APPLIED: 'Applied',
-  INTERVIEW_SCHEDULED: 'Interview scheduled',
-  INTERVIEWED: 'Interviewed',
-  ASSESSMENT: 'Assessment',
-  FORM_PENDING: 'Form pending',
-  ONBOARDED: 'Onboarded',
-  REJECTED: 'Rejected',
-}
+import type { ApplicationStage } from '@/lib/stages'
 
 export interface CandidateRow {
   id: string
@@ -44,7 +32,7 @@ const PROGRAMS_SHORT = ['Web & App Dev', 'Mobile Dev', 'Data Science & AI', 'Clo
 const CITIES = ['Karachi', 'Lahore', 'Islamabad', 'Faisalabad', 'Multan', 'Hyderabad']
 const STAGES: ApplicationStage[] = [
   'APPLIED', 'APPLIED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_SCHEDULED',
-  'INTERVIEWED', 'ASSESSMENT', 'FORM_PENDING', 'ONBOARDED', 'REJECTED',
+  'INTERVIEWED', 'PHYSICAL_INTERVIEW', 'FORM', 'ONBOARDED', 'REJECTED',
 ]
 
 /**
@@ -232,7 +220,7 @@ export const MY_APPLICATION = {
   program: 'Web & App Development',
   bootcamp: 'Bootcamp 07 — Autumn 2026',
   appliedAt: '12 August 2026',
-  stage: 'ASSESSMENT' as ApplicationStage,
+  stage: 'PHYSICAL_INTERVIEW' as ApplicationStage,
   timeline: [
     { label: 'Application submitted', date: '12 Aug 2026', status: 'done', detail: 'Candidate code B07-142 assigned' },
     { label: 'Screening interview', date: '08 Oct 2026, 11:00', status: 'done', detail: 'Passed · Batch 2 · Score 82.5' },
