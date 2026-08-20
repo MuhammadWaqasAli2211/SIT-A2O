@@ -32,8 +32,8 @@ const STAGE_FILTERS: (ApplicationStage | 'ALL')[] = [
   'APPLIED',
   'INTERVIEW_SCHEDULED',
   'INTERVIEWED',
-  'ASSESSMENT',
-  'FORM_PENDING',
+  'PHYSICAL_INTERVIEW',
+  'FORM',
   'ONBOARDED',
   'REJECTED',
 ]
