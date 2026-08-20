@@ -149,6 +149,8 @@
   --animate-aurora: aurora 18s ease-in-out infinite alternate;
   --animate-shimmer: shimmer 2.2s linear infinite;
   --animate-float: float 6s ease-in-out infinite;
+  --animate-ring: ring-spin 2.6s linear infinite;
+  --animate-caret: caret 1s step-end infinite;
 }
 
 /* ------------------------------------------------------------- keyframes -- */
@@ -171,6 +173,19 @@
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-10px); }
+}
+
+/* Drives the "in progress" ring on the journey stepper. Rotating the whole
+   element is a compositor-only transform; animating a conic gradient's angle
+   would repaint it every frame instead. */
+@keyframes ring-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes caret {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
 }
 
 /* ------------------------------------------------------------------ base -- */
