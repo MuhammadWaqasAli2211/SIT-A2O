@@ -75,3 +75,20 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    # Supports `python -m app.main` from the backend/ directory, which is
+    # convenient for IDE run configurations. The canonical command remains
+    # `uvicorn app.main:app --reload` — see README.md.
+    import os
+
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=os.getenv("HOST", "127.0.0.1"),
+        # Overridable so a second instance can be started without editing code.
+        port=int(os.getenv("PORT", "8000")),
+        reload=settings.DEBUG and not settings.is_production,
+    )
