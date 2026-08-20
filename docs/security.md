@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `waqas` — last updated 2026-08-19
 
 # Security
 
@@ -169,20 +169,23 @@ production-appropriate at real bootcamp volume:
 - **Must move to Resend or SendGrid before the first real intake.** Tracked as
   an open item, not yet scheduled
 
-### The OAuth consent screen is unverified — by design, with a consequence
+### The OAuth consent screen is published, not verified
 
-The Google Cloud project's OAuth consent screen is in **Testing** status, not
-verified by Google. This is appropriate for a single internal mailbox — full
-verification is a review process meant for public-facing apps — but it has a
-real operational consequence: **while unverified, Google expires refresh
-tokens after 7 days.** Flipping the consent screen to **Production**
-(APIs & Services → OAuth consent screen → Publish App) removes the expiry
-without requiring verification, since only the one added test user
-(`thewaqasali59@gmail.com`) will ever authorize this app.
+The Google Cloud project's OAuth consent screen was moved to **Production** on
+2026-08-20. It is still not *verified* by Google, and does not need to be:
+verification is a review process aimed at public-facing apps, whereas this one
+has a single authorised user and requests only the `gmail.send` scope.
 
-**Open item:** confirm the consent screen has been flipped to Production. If
-not, the Gmail API integration will silently stop sending ~7 days after the
-refresh token was issued (2026-08-20), with no warning until a send fails.
+Publishing matters because **Testing-status apps have their refresh tokens
+expired by Google after 7 days.** In Production that expiry does not apply.
+Existing tokens survive the transition — the token issued during Testing was
+re-tested after publishing and sent successfully, so no re-authorisation was
+required.
+
+Refresh tokens can still be invalidated by an account password change, an
+explicit revocation, or roughly six months of disuse. None of those apply
+routinely, but a send failing with an auth error is the signal to re-run the
+OAuth Playground step in `development-logs.md`.
 
 ### Access granted by the refresh token
 
