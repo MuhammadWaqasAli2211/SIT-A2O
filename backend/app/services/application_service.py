@@ -7,11 +7,18 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
 from app.models.application import Application, StageTransition
-from app.models.bootcamp import BootcampProgram, Program
+from app.models.bootcamp import Bootcamp, BootcampProgram, Program
 from app.models.enums import ApplicationStage, ApplicationStatus, PhaseType
 from app.models.user import Profile
 from app.schemas.application import ApplicantRow, ApplicationCreate
 from app.services import bootcamp_service
+
+
+# The two stored stages that render as the single "Interview" node.
+_INTERVIEW_STAGES = (
+    ApplicationStage.INTERVIEW_SCHEDULED,
+    ApplicationStage.INTERVIEWED,
+)
 
 
 def _mint_candidate_code(db: Session, bootcamp_id: uuid.UUID) -> str:
@@ -76,15 +83,19 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
     return get_detail(db, application.id)
 
 
+# Everything ApplicationDetail serialises, eager-loaded in one place so the
+# detail and list paths cannot drift into different query plans. Phases come
+# along because the candidate tracker renders their deadlines.
+_DETAIL_LOADS = (
+    selectinload(Application.program),
+    selectinload(Application.bootcamp).selectinload(Bootcamp.phases),
+    selectinload(Application.transitions),
+)
+
+
 def get_detail(db: Session, application_id: uuid.UUID) -> Application:
     application = db.scalar(
-        select(Application)
-        .where(Application.id == application_id)
-        .options(
-            selectinload(Application.program),
-            selectinload(Application.bootcamp),
-            selectinload(Application.transitions),
-        )
+        select(Application).where(Application.id == application_id).options(*_DETAIL_LOADS)
     )
     if application is None:
         raise NotFoundError("Application not found.")
@@ -96,11 +107,7 @@ def my_applications(db: Session, applicant: Profile) -> list[Application]:
         db.scalars(
             select(Application)
             .where(Application.profile_id == applicant.id)
-            .options(
-                selectinload(Application.program),
-                selectinload(Application.bootcamp),
-                selectinload(Application.transitions),
-            )
+            .options(*_DETAIL_LOADS)
             .order_by(Application.applied_at.desc())
         )
     )
@@ -184,8 +191,18 @@ def advance_stage(
 
     previous = application.stage
     application.stage = to_stage
-    if to_stage == ApplicationStage.REJECTED:
+
+    # Selection is derived from the transition rather than passed in, so the
+    # flag can never disagree with the stage it describes.
+    if to_stage == ApplicationStage.PHYSICAL_INTERVIEW:
+        application.is_selected = True
+    elif to_stage == ApplicationStage.REJECTED:
         application.status = ApplicationStatus.REJECTED
+        # Only record a verdict when the interview is the round they fell at.
+        # Somebody rejected later was still selected, and overwriting that
+        # would lose which gate actually stopped them.
+        if previous in _INTERVIEW_STAGES:
+            application.is_selected = False
 
     db.add(
         StageTransition(
