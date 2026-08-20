@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-20
+> **Branch:** `waqas` — last updated 2026-08-20
 
 # Project Status
 
@@ -18,8 +18,24 @@ create an intake, assign an admin, open and close registration against a
 deadline, and candidates can apply and receive a candidate code. Scope and
 deadline enforcement are both proven with live tests.
 
-The frontend does not call these endpoints yet — portal screens still render
-from fixtures. Wiring them up is the next step.
+**The candidate dashboard is the first screen wired to real data.** It fetches
+`/applications/mine` and `/bootcamps/open` and picks its own state from the
+result: an explainer for candidates who have not applied, a live tracker for
+those who have. The remaining portal screens still render from fixtures.
+
+**Signing up and registering are now distinct in the UI, as they always were in
+the data.** A User is created at signup; an Application only when somebody
+registers for a bootcamp. Application, Interview, and Documents stay locked
+until an Application exists — in the sidebar *and* at the route, since a URL is
+typeable. The Register button remains frozen by instruction; the summary view
+behind "Application" is deliberately unbuilt until the registration form's
+fields are known.
+
+**One migration is written but not applied, and it now blocks reads.**
+`20260820180000_candidate_journey.sql` renames two enum values and adds
+`applications.is_selected`. Because SQLAlchemy selects that column, every
+application query fails until it runs — including `/applications/mine`, which
+the candidate dashboard calls on load. See *Blocked* below.
 
 ---
 
@@ -69,7 +85,11 @@ POST   /api/v1/applications/{id}/stage                 # ADMIN
 
 ### Database — applied
 
-**Two migrations applied.** `20260820120000_phase2_registration.sql` added the
+**Two of three migrations applied.** The third
+(`20260820180000_candidate_journey.sql`) is written but not yet run — see
+*Blocked*. It is a hard dependency, not a nicety.
+
+`20260820120000_phase2_registration.sql` added the
 pipeline: `programs`, `bootcamps`, `bootcamp_programs`, `bootcamp_admins`,
 `bootcamp_phases`, `applications`, `stage_transitions`, four enums, and the
 atomic `mint_candidate_code()` function. Pushed with the Supabase CLI. RLS is
@@ -99,7 +119,12 @@ Applied over the pooler connection rather than the CLI, and recorded in
 | Auth validation | Single source of truth in `features/auth/password-rules.ts` — drives both zod schema and UI checklist |
 | Role foundation | Student functional, Admin visible but disabled; selector is presentational only, no role sent to API |
 | Marketing site | Home, Programs, Program detail, Admissions, About, Success Stories, FAQ, Contact |
-| Candidate portal | Overview, Application, Interview, Documents, Profile |
+| Candidate portal | Overview, **Track application**, Application, Interview, Documents, Profile |
+| **Candidate dashboard — live data** | Fetches `/applications/mine` + `/bootcamps/open`; renders explainer or tracker from the result |
+| **Journey stepper** | One component, two modes: `demo` plays once per mount, `real` reflects actual stage. Five visible steps over seven stored stages. `components/shared/journey-stepper.tsx` |
+| Typewriter, Countdown | Written in-house — no `typewriter-effect`, no carousel library |
+| **User vs Candidate gating** | `ApplicationProvider` holds one answer portal-wide; `requires: 'application'` locks nav rows, `RequiresApplication` guards the routes |
+| **ErrorBoundary** | Class component around the portal outlet and the account menu; resets by `key` on navigation |
 | Admin portal | Dashboard, Candidates, Interviews, Phases, Emails |
 | Super-admin portal | Dashboard, Bootcamps, Administrators, Analytics |
 | Navigation | Animated mega-menu dropdowns, spring-driven mobile drawer |
@@ -111,9 +136,12 @@ Applied over the pooler connection rather than the CLI, and recorded in
 | Accessibility | `prefers-reduced-motion` honoured throughout |
 | Production build | Clean, no warnings |
 
-**Portal screens still render against fixtures** in
-`frontend/src/lib/mock-data.ts`. The Phase 2 endpoints they need now exist and
-are verified — nothing calls them yet. This is the main outstanding gap.
+**The candidate dashboard and tracker now call the API.** The remaining portal
+screens — admin, super-admin, and the candidate's Application / Interview /
+Documents pages — still render against fixtures in
+`frontend/src/lib/mock-data.ts`. That file no longer defines the stage enum; it
+re-exports it from `lib/stages.ts`, which is the single definition shared with
+the database.
 
 ### Verified end to end, not assumed
 
@@ -136,16 +164,40 @@ Database left clean: `auth.users` and `public.profiles` are both empty.
 
 ## Blocked
 
-Nothing blocks development. Two open items below need action but are not
-blocking today's work.
+### Open — candidate-journey migration not applied
 
-### Open — confirm before relying on Gmail API sending long-term
+`supabase/migrations/20260820180000_candidate_journey.sql` renames two enum
+values and adds `applications.is_selected`. The code already assumes all three
+changes.
 
-The Gmail API OAuth consent screen is unverified (Testing status). Refresh
-tokens for unverified apps expire after **7 days** — the current token was
-issued 2026-08-20, so **sending will silently break around 2026-08-27** unless
-the consent screen is flipped to Production (one toggle, no verification
-actually required — see `security.md`). Not yet confirmed done.
+Three attempts to run it were refused by the environment's permission
+classifier, so it must be applied manually. **Until it runs, the candidate
+dashboard is broken**: `is_selected` is on the SQLAlchemy model, so every
+`SELECT` on `applications` fails with `UndefinedColumn`, `/applications/mine`
+returns 500, and the dashboard renders its error state.
+
+Apply it in the Supabase SQL Editor:
+
+```sql
+alter type public.application_stage rename value 'ASSESSMENT'   to 'PHYSICAL_INTERVIEW';
+alter type public.application_stage rename value 'FORM_PENDING' to 'FORM';
+alter table public.applications add column if not exists is_selected boolean;
+```
+
+Zero application rows exist, so nothing is at risk.
+
+Everything else below needs action but is not blocking today's work.
+
+### Resolved — Gmail OAuth consent screen published
+
+The consent screen was moved from Testing to **Production** on 2026-08-20,
+which removes the 7-day refresh token expiry that applies to unverified apps.
+Publishing does not revoke existing tokens: the token issued during Testing was
+re-tested after publishing and sent successfully, so no re-authorisation was
+needed.
+
+Google verification is still not required, because the app has a single
+authorised user and requests only the `gmail.send` scope.
 
 ### Resolved — Gmail API integration built and verified
 
@@ -216,13 +268,17 @@ Unanswered questions carried forward:
 
 ## Next
 
-1. **Flip the Gmail API OAuth consent screen to Production** — prevents the
-   7-day refresh token expiry, no verification required
-2. **Wire the frontend to the Phase 2 endpoints** — replace `lib/mock-data.ts`
-   with real calls; this is the largest remaining gap
-3. Provision the first real `SUPER_ADMIN` (test accounts were deleted)
-4. Seed a real Bootcamp 07 so the flow can be exercised through the UI
-5. Phase 3: interview batching (50/50/25 slots) and the AI screening hook —
+1. **Apply `20260820180000_candidate_journey.sql`** — the candidate dashboard
+   returns 500 until it lands
+2. Provision the first real `SUPER_ADMIN` (test accounts were deleted)
+3. Seed a real Bootcamp 07 so the tracker can be exercised with a real
+   application rather than only its empty state
+4. Build the registration form behind the (currently frozen) Register button —
+   it is what creates an Application and unlocks the gated pages
+5. Build the Application summary view + Print/PDF, once that form's fields exist
+6. Wire the remaining portal screens to the API — admin and super-admin still
+   read `lib/mock-data.ts`
+7. Phase 3: interview batching (50/50/25 slots) and the AI screening hook —
    still blocked on deciding what the AI Interviewer actually is
 
 ## Running it
