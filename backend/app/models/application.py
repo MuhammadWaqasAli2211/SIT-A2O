@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,15 @@ class Application(Base, TimestampMixin):
         nullable=False,
         server_default=text("'ACTIVE'::application_status"),
     )
+    # Outcome of the Interview stage, and the condition for reaching the
+    # physical interview. Tri-state: None means undecided, which is distinct
+    # from a recorded "no" — a plain boolean would make every candidate who has
+    # not been interviewed yet look rejected.
+    #
+    # Not a stage. The candidate stepper has five nodes and selection is what
+    # lets somebody leave the second one.
+    is_selected: Mapped[bool | None] = mapped_column(Boolean)
+
     statement: Mapped[str | None] = mapped_column(Text)
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
