@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `waqas` — last updated 2026-08-19
 
 # Prompt Log
 
@@ -11,7 +11,7 @@ length; intent preserved.
 
 ### 1. Project brief
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Full specification: the recruitment workflow diagram, three roles, Phase 1 scope,
 tech stack, folder structure requirements, eight documentation files, and four
@@ -35,7 +35,7 @@ blocking and non-blocking.
 
 ### 2. Four blocking decisions answered
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 | Question | Answer |
 |----------|--------|
@@ -54,7 +54,7 @@ blocking and non-blocking.
 > "for identifying a student we use candidate code as key (format: B07-001)"
 > "Supabase CLI"
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Reversed decision 1 from the previous turn. Also supplied a JWT secret.
 
@@ -70,7 +70,7 @@ Reversed decision 1 from the previous turn. Also supplied a JWT secret.
 
 ### 4. Supabase credentials
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Project URL, anon key, service-role key, and JWT secret supplied.
 
@@ -83,7 +83,7 @@ string, not base64-decoded.
 
 > "ok, you'll just start for now, I'll provide you later about these"
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Approval to begin building, with the outstanding decisions and `DATABASE_URL` to
 follow.
@@ -98,7 +98,7 @@ in `project-status.md`. Nothing committed.
 > logged in yet, can you please do it for me"
 > "I have added supabase couple of env's in backend\.env, you can check it out"
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 **Produced:**
 
@@ -124,7 +124,7 @@ in `project-status.md`. Nothing committed.
 > "create the full UI of portals, and their dashboards as well"
 > "No compromise on animation"
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Recruitment logic explicitly deferred in favour of the interface.
 
