@@ -106,8 +106,8 @@ const STAGE_STYLE: Record<ApplicationStage, string> = {
   APPLIED: 'bg-muted text-muted-foreground',
   INTERVIEW_SCHEDULED: 'bg-info/12 text-info',
   INTERVIEWED: 'bg-info/12 text-info',
-  ASSESSMENT: 'bg-warning/15 text-warning-foreground dark:text-warning',
-  FORM_PENDING: 'bg-warning/15 text-warning-foreground dark:text-warning',
+  PHYSICAL_INTERVIEW: 'bg-success/12 text-success',
+  FORM: 'bg-warning/15 text-warning-foreground dark:text-warning',
   ONBOARDED: 'bg-success/12 text-success',
   REJECTED: 'bg-destructive/12 text-destructive',
 }
