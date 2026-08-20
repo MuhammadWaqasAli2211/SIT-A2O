@@ -7,7 +7,7 @@ import HomePage from '@/pages/public/home-page'
 import LoginPage from '@/pages/auth/login-page'
 import SignupPage from '@/pages/auth/signup-page'
 import NotFoundPage from '@/pages/not-found-page'
-import { GuestRoute, ProtectedRoute, RoleRoute } from '@/routes/guards'
+import { GuestRoute, ProtectedRoute, RequiresApplication, RoleRoute } from '@/routes/guards'
 import { UserRole } from '@/lib/types'
 
 /**
@@ -26,6 +26,7 @@ const FaqPage = lazy(() => import('@/pages/public/faq-page'))
 const ContactPage = lazy(() => import('@/pages/public/contact-page'))
 
 const CandidateDashboardPage = lazy(() => import('@/pages/candidate/dashboard-page'))
+const CandidateTrackPage = lazy(() => import('@/pages/candidate/track-page'))
 const CandidateApplicationPage = lazy(() => import('@/pages/candidate/application-page'))
 const CandidateInterviewPage = lazy(() => import('@/pages/candidate/interview-page'))
 const CandidateDocumentsPage = lazy(() => import('@/pages/candidate/documents-page'))
@@ -77,11 +78,23 @@ export const router = createBrowserRouter([
           {
             element: <RoleRoute allow={[UserRole.CANDIDATE]} />,
             children: [
+              // Open to any signed-in candidate: the overview explains what to
+              // do next, the tracker explains the process in demo mode, and
+              // the profile belongs to the account rather than to any intake.
               { path: '/dashboard', element: <CandidateDashboardPage /> },
-              { path: '/dashboard/application', element: <CandidateApplicationPage /> },
-              { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
-              { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
+              { path: '/dashboard/track', element: <CandidateTrackPage /> },
               { path: '/dashboard/profile', element: <CandidateProfilePage /> },
+
+              // Everything here describes a submitted application, so it stays
+              // shut until one exists. Signing up is not registering.
+              {
+                element: <RequiresApplication />,
+                children: [
+                  { path: '/dashboard/application', element: <CandidateApplicationPage /> },
+                  { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
+                  { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
+                ],
+              },
             ],
           },
           {
