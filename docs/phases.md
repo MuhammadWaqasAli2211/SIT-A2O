@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `huzaifa` — last updated 2026-08-20
 
 # Workflow Phases
 
@@ -80,8 +80,16 @@ with two formats in circulation.
 ## Rules that hold across all phases
 
 1. **Deadlines are enforced server-side.** Hiding a button is not enforcement.
-   Every stage-advancing endpoint checks `bootcamp_phases` before acting.
+   Every stage-advancing endpoint checks `bootcamp_phases` before acting. Editing
+   a phase window only ever changes the fields actually sent — an admin
+   updating the open date cannot accidentally clear the deadline.
 2. **Transitions are logged.** `stage_transitions` records who moved a candidate,
-   from which stage to which, and why.
+   from which stage to which, and why. A rejection is not permanent: `POST
+   /applications/{id}/reinstate` reopens one at an explicit stage.
 3. **Bootcamps are isolated.** An admin never sees another bootcamp's candidates,
-   regardless of holding a valid token.
+   regardless of holding a valid token. Covered directly by
+   `tests/unit/test_bootcamp_scope.py`, not only by the routes that depend on it.
+4. **Every privileged write is audited.** `audit_logs` records the actor, the
+   action, and a before/after diff for every bootcamp, phase, application,
+   profile, interview, and email change — an admin's own scoped history is at
+   `GET /bootcamps/{id}/audit`; the platform-wide view is super-admin only.
