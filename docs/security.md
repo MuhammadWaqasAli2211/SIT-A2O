@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `huzaifa` — last updated 2026-08-20
 
 # Security
 
@@ -82,6 +82,27 @@ unsupported algorithms.
 An unknown `kid` is an authentication failure (`401`); an unreachable JWKS
 endpoint is an upstream failure (`502`). Different causes, different answers.
 
+This was previously only *documented*, not true: any `PyJWKClientError` whose
+message contained "Unable to find" produced a 401, including a key set that
+came back empty. Telling every signed-in user their token is invalid, for a
+fault none of them can fix, is the wrong answer. The split is now real — a
+connection error or an unreadable/empty key set is a 502, a readable key set
+genuinely lacking the `kid` is a 401 — and an unknown `kid` triggers one
+refetch first, so real key rotation resolves rather than locking everyone out.
+
+### Clock skew is tolerated, deliberately
+
+GoTrue stamps `iat` from its own clock. Supabase's auth servers run slightly
+ahead of ours, which made freshly issued tokens fail `iat` validation for the
+first seconds of their life — a user who had just signed in successfully was
+met with `401`s until the clocks converged.
+
+`decode_access_token` therefore allows **60 seconds** of leeway. That leeway
+also extends `exp` by the same amount, which is the accepted trade-off: a
+minute of grace on expiry is unremarkable, being unable to use a token you
+were just issued is not. Signature, audience, and subject checks are
+unaffected, and a token claiming an hour of skew is still rejected.
+
 ### Failure ordering
 
 Token verification is a separate dependency (`get_token_claims`) declared ahead
@@ -95,9 +116,15 @@ Role is read from `public.profiles` on every request, never from a JWT claim.
 Cost is one indexed primary-key lookup; the benefit is that demotion and
 deactivation take effect immediately rather than at next token refresh.
 
-`require_roles()` in `app/api/deps.py` builds role gates. Bootcamp-level scoping
-(an admin must not read another bootcamp's candidates) arrives in Phase 2 and is
-**not yet enforced** — no such endpoints exist today.
+`require_roles()` in `app/api/deps.py` builds role gates. Bootcamp-level
+scoping — an admin must not read another bootcamp's candidates — is enforced
+by `assert_can_manage()` in `bootcamp_service.py`, called at the top of every
+admin-facing bootcamp, phase, application, interview, and email endpoint.
+`SUPER_ADMIN` bypasses it entirely; `ADMIN` is checked against
+`bootcamp_admins` membership on every call, so a valid token for the wrong
+intake still returns `403`. Covered directly by
+`tests/unit/test_bootcamp_scope.py` — including the URL-tampering case, where
+an admin assigned to one bootcamp requests another's id.
 
 ## Row Level Security
 
@@ -130,8 +157,54 @@ Self-service signup can only ever produce a `CANDIDATE`:
 - `handle_new_user()` hardcodes `'CANDIDATE'` and never reads a role from
   `raw_user_meta_data`, which is client-controllable
 
-Admin and super-admin accounts are provisioned deliberately. *Open question:
-by whom and through what interface.*
+**Answered:** admin and super-admin accounts are provisioned through `POST
+/api/v1/users` (`create_staff`), gated by `require_super_admin`. It calls
+GoTrue's admin API directly — `app/integrations/supabase_auth.py`'s
+`admin_create_user()` — with `email_confirm=True`, so a staff account works
+immediately without a confirmation-email round trip. `StaffCreate` rejects
+`role=CANDIDATE` outright, pointing the caller at self-service signup instead;
+there is exactly one path that can mint a `CANDIDATE` and exactly one that can
+mint staff, and they do not overlap.
+
+The very first super admin has nobody to authorise them, so
+`backend/scripts/create_super_admin.py` exists as a one-time bootstrap: reads
+credentials from env vars (never a CLI arg, never a committed file), calls the
+same admin API, and is idempotent — re-running resets the password rather than
+duplicating the account. Every account after the first should go through the
+API instead, so it lands in `audit_logs` with a named actor; the bootstrap
+script records `actor=None` for exactly this reason, so that gap is visible in
+the log rather than attributed to nobody in particular.
+
+**A super admin cannot lock the platform out of itself.** `user_service.py`
+refuses to demote, deactivate, or delete: (a) the caller's own account, and
+(b) the last active `SUPER_ADMIN`, checked independently of who's asking.
+Both return `409`, not `403` — this is a state conflict the caller could
+resolve (promote someone else first), not a permissions wall.
+
+## Audit trail
+
+Every privileged write — creating or editing a bootcamp, opening or closing a
+phase, moving or reinstating an application, changing a role, resetting a
+password, sending email — goes through `audit_service.record()` in the same
+database transaction as the change itself. If the change fails, the audit row
+never commits either; there is no path to an audit entry describing something
+that didn't actually happen.
+
+Each entry carries the actor, a dotted action (`bootcamp.update`,
+`profile.role_change`), the entity it touched, a human-readable summary, and a
+`jsonb` diff of exactly what changed — computed by `audit_service.diff()`,
+which stringifies UUIDs and datetimes since the column is `jsonb` but the
+inputs often aren't JSON-native types.
+
+`email_log` and `audit_logs` carry **no RLS policies at all**, unlike every
+other table in this project. That is deliberate, not an oversight: both are
+staff-only records with no legitimate "select own row" case for a candidate,
+so the safest policy is none — readable exclusively through the API's role
+gates, useless to a leaked anon key either way.
+
+A password reset is logged as *that a password was reset*, never the value
+itself — `user_service.reset_password()`'s audit call passes an empty
+`metadata` dict by design.
 
 ## Token storage in the browser
 
@@ -191,12 +264,35 @@ Gmail account, scoped to `gmail.send` only (cannot read mail, cannot access
 other Google services). Equivalent in sensitivity to a password for that one
 capability — never logged, never returned by any endpoint, never committed.
 
+## Candidate documents
+
+Uploads (CNIC scans, photographs, qualification certificates) live in a
+**private** Supabase Storage bucket. The `documents` table indexes them; it
+holds metadata only, never the bytes.
+
+The browser never holds a storage credential or a durable object URL:
+
+- **Uploads** pass through the API, which is the only place the 5 MB limit and
+  the content-type allowlist can actually be enforced. A file that fails
+  validation is never written, so nothing is orphaned in the bucket.
+- **Reads** are served by a signed URL valid for **120 seconds**, minted per
+  request. Short by intent — these are identity documents.
+- **Allowed types** are PDF, JPEG, PNG, and WebP. SVG is excluded on purpose:
+  it is an image format that can carry script.
+
+`storage_path` is never returned by any endpoint. RLS on `documents` grants a
+candidate `SELECT` on their own rows only, and that grants metadata — reading
+the file still requires a signed URL the API mints after checking ownership.
+
+Every upload, deletion, and review decision is written to `audit_logs`.
+
 ## Sensitive data (Phase 4)
 
-The onboarding form collects **IBAN** and **CNIC**. Neither is yet implemented.
-Requirements when it is:
+The onboarding form collects **IBAN** and **CNIC**. CNIC is now captured on
+`candidate_profiles` as a plain column with a uniqueness constraint; IBAN is
+not yet implemented. Requirements still outstanding:
 
-- encrypted at rest, not stored as plain columns
+- encrypted at rest, not stored as plain columns — **not yet done for CNIC**
 - never written to application logs
 - never returned by list endpoints — detail views only, for roles that need them
 - access recorded in `audit_logs`
