@@ -8,7 +8,6 @@ import {
   LogOut,
   Menu,
   Search,
-  Settings,
   UserCircle,
   X,
 } from 'lucide-react'
@@ -24,6 +23,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -172,22 +172,27 @@ export function PortalLayout() {
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{profile.full_name ?? 'Account'}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {profile.email}
+                {/* Base UI requires GroupLabel to sit inside a Group — rendering
+                    one loose throws MenuGroupContext is missing and takes the
+                    whole portal down, since this menu is in every portal page. */}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">
+                        {profile.full_name ?? 'Account'}
+                      </span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {profile.email}
+                      </span>
                     </span>
-                  </span>
-                </DropdownMenuLabel>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem render={<Link to="/dashboard/profile" />}>
+                {/* /account, not /dashboard/profile — the latter is behind the
+                    candidate role gate and bounced staff straight back out. */}
+                <DropdownMenuItem render={<Link to="/account" />}>
                   <UserCircle className="size-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="size-4" />
-                  Settings
+                  Profile & settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => void logout()} variant="destructive">
