@@ -30,8 +30,52 @@ class PhaseOut(BaseModel):
 
 
 class PhaseUpdate(BaseModel):
+    """Partial by design.
+
+    Both fields are nullable *and* optional, which are different things here:
+    omitting `deadline_at` must leave the stored deadline alone, while sending
+    an explicit null must clear it. The service distinguishes the two with
+    `model_dump(exclude_unset=True)`; assigning both unconditionally would wipe
+    a deadline every time somebody edited only the open date.
+    """
+
     opens_at: datetime | None = None
     deadline_at: datetime | None = None
+
+
+class ProgramCreate(BaseModel):
+    slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    title: str = Field(min_length=2, max_length=150)
+    tagline: str = Field(min_length=2, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    duration: str | None = Field(default=None, max_length=60)
+    mode: str | None = Field(default=None, max_length=60)
+    level: str | None = Field(default=None, max_length=60)
+    is_active: bool = True
+    sort_order: int = Field(default=0, ge=0, le=999)
+
+
+class ProgramUpdate(BaseModel):
+    """Partial update; the slug is immutable because the frontend maps it to
+    icons and curriculum copy, and a rename would silently break that link."""
+
+    title: str | None = Field(default=None, min_length=2, max_length=150)
+    tagline: str | None = Field(default=None, min_length=2, max_length=300)
+    description: str | None = Field(default=None, max_length=4000)
+    duration: str | None = Field(default=None, max_length=60)
+    mode: str | None = Field(default=None, max_length=60)
+    level: str | None = Field(default=None, max_length=60)
+    is_active: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=999)
+
+
+class ProgramAdminOut(ProgramOut):
+    """Adds the operational fields a public visitor has no business seeing."""
+
+    is_active: bool
+    sort_order: int
+    bootcamp_count: int = 0
+    application_count: int = 0
 
 
 class BootcampCreate(BaseModel):
@@ -47,6 +91,9 @@ class BootcampUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     starts_at: date | None = None
     status: BootcampStatus | None = None
+    # Not a column: the service replaces the bootcamp_programs rows to match.
+    # Omitted leaves the offered tracks alone; an empty list clears them.
+    program_ids: list[uuid.UUID] | None = None
 
 
 class BootcampOut(BaseModel):
