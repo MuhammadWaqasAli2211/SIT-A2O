@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { Counter } from '@/components/motion/counter'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { STAGE_LABEL, type ApplicationStage } from '@/lib/mock-data'
+import { STAGE_LABEL, type ApplicationStage } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /* ---------------------------------------------------------- page header -- */
