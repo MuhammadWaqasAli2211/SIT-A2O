@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { PublicLayout } from '@/components/layout/public-layout'
@@ -7,6 +7,8 @@ import HomePage from '@/pages/public/home-page'
 import LoginPage from '@/pages/auth/login-page'
 import SignupPage from '@/pages/auth/signup-page'
 import NotFoundPage from '@/pages/not-found-page'
+import { AdminBootcampLayout } from '@/routes/admin-layout'
+import { RouteErrorBoundary } from '@/routes/error-boundary'
 import { GuestRoute, ProtectedRoute, RoleRoute } from '@/routes/guards'
 import { UserRole } from '@/lib/types'
 
@@ -29,23 +31,33 @@ const CandidateDashboardPage = lazy(() => import('@/pages/candidate/dashboard-pa
 const CandidateApplicationPage = lazy(() => import('@/pages/candidate/application-page'))
 const CandidateInterviewPage = lazy(() => import('@/pages/candidate/interview-page'))
 const CandidateDocumentsPage = lazy(() => import('@/pages/candidate/documents-page'))
-const CandidateProfilePage = lazy(() => import('@/pages/candidate/profile-page'))
+
+// One account screen for every role, rather than a candidate-only profile page
+// that staff could reach from the topbar and get bounced out of.
+const AccountPage = lazy(() => import('@/pages/account-page'))
 
 const AdminDashboardPage = lazy(() => import('@/pages/admin/dashboard-page'))
 const AdminCandidatesPage = lazy(() => import('@/pages/admin/candidates-page'))
 const AdminInterviewsPage = lazy(() => import('@/pages/admin/interviews-page'))
 const AdminPhasesPage = lazy(() => import('@/pages/admin/phases-page'))
 const AdminEmailsPage = lazy(() => import('@/pages/admin/emails-page'))
+const AdminDocumentsPage = lazy(() => import('@/pages/admin/documents-page'))
 
 const SuperAdminDashboardPage = lazy(() => import('@/pages/super-admin/dashboard-page'))
 const SuperAdminBootcampsPage = lazy(() => import('@/pages/super-admin/bootcamps-page'))
 const SuperAdminAdminsPage = lazy(() => import('@/pages/super-admin/admins-page'))
 const SuperAdminAnalyticsPage = lazy(() => import('@/pages/super-admin/analytics-page'))
+const SuperAdminProgramsPage = lazy(() => import('@/pages/super-admin/programs-page'))
+
+// Attached to every top-level branch so a crash inside one section renders the
+// boundary rather than white-screening the whole app.
+const onError = { errorElement: <RouteErrorBoundary /> }
 
 export const router = createBrowserRouter([
   // ------------------------------------------------------------ marketing --
   {
     element: <PublicLayout />,
+    ...onError,
     children: [
       { path: '/', element: <HomePage /> },
       { path: '/programs', element: <ProgramsPage /> },
@@ -61,6 +73,7 @@ export const router = createBrowserRouter([
   // ----------------------------------------------------------------- auth --
   {
     element: <GuestRoute />,
+    ...onError,
     children: [
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
@@ -70,37 +83,59 @@ export const router = createBrowserRouter([
   // --------------------------------------------------------------- portal --
   {
     element: <ProtectedRoute />,
+    ...onError,
     children: [
       {
         element: <PortalLayout />,
         children: [
+          // Any signed-in role. Sits outside the role gates because it is the
+          // one screen every role legitimately shares.
+          { path: '/account', element: <AccountPage />, ...onError },
+
           {
             element: <RoleRoute allow={[UserRole.CANDIDATE]} />,
+            ...onError,
             children: [
               { path: '/dashboard', element: <CandidateDashboardPage /> },
               { path: '/dashboard/application', element: <CandidateApplicationPage /> },
               { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
               { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
-              { path: '/dashboard/profile', element: <CandidateProfilePage /> },
+              // Kept so old links and bookmarks still land somewhere real.
+              { path: '/dashboard/profile', element: <Navigate to="/account" replace /> },
             ],
           },
+
+          // Staff. The outer gate admits both roles so the bootcamp provider
+          // loads once for either; the inner gate narrows to super admins.
+          // Nesting them this way means a super admin can use the per-bootcamp
+          // tools without a second provider or a duplicated route table.
           {
             element: <RoleRoute allow={[UserRole.ADMIN, UserRole.SUPER_ADMIN]} />,
+            ...onError,
             children: [
-              { path: '/admin', element: <AdminDashboardPage /> },
-              { path: '/admin/candidates', element: <AdminCandidatesPage /> },
-              { path: '/admin/interviews', element: <AdminInterviewsPage /> },
-              { path: '/admin/phases', element: <AdminPhasesPage /> },
-              { path: '/admin/emails', element: <AdminEmailsPage /> },
-            ],
-          },
-          {
-            element: <RoleRoute allow={[UserRole.SUPER_ADMIN]} />,
-            children: [
-              { path: '/super-admin', element: <SuperAdminDashboardPage /> },
-              { path: '/super-admin/bootcamps', element: <SuperAdminBootcampsPage /> },
-              { path: '/super-admin/admins', element: <SuperAdminAdminsPage /> },
-              { path: '/super-admin/analytics', element: <SuperAdminAnalyticsPage /> },
+              {
+                element: <AdminBootcampLayout />,
+                children: [
+                  { path: '/admin', element: <AdminDashboardPage /> },
+                  { path: '/admin/candidates', element: <AdminCandidatesPage /> },
+                  { path: '/admin/interviews', element: <AdminInterviewsPage /> },
+                  { path: '/admin/phases', element: <AdminPhasesPage /> },
+                  { path: '/admin/emails', element: <AdminEmailsPage /> },
+                  { path: '/admin/documents', element: <AdminDocumentsPage /> },
+
+                  {
+                    element: <RoleRoute allow={[UserRole.SUPER_ADMIN]} />,
+                    ...onError,
+                    children: [
+                      { path: '/super-admin', element: <SuperAdminDashboardPage /> },
+                      { path: '/super-admin/bootcamps', element: <SuperAdminBootcampsPage /> },
+                      { path: '/super-admin/admins', element: <SuperAdminAdminsPage /> },
+                      { path: '/super-admin/analytics', element: <SuperAdminAnalyticsPage /> },
+                      { path: '/super-admin/programs', element: <SuperAdminProgramsPage /> },
+                    ],
+                  },
+                ],
+              },
             ],
           },
         ],
