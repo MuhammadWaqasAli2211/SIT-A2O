@@ -17,7 +17,10 @@ from app.schemas.bootcamp import (
     ProgramOut,
     PublicBootcampOut,
 )
-from app.services import application_service, bootcamp_service
+from app.schemas.dashboard import BootcampStats
+from app.schemas.ops import AuditEntry, Page
+from app.schemas.user import ProfileOut
+from app.services import application_service, audit_service, bootcamp_service, dashboard_service
 
 router = APIRouter(prefix="/bootcamps", tags=["bootcamps"])
 
@@ -84,8 +87,33 @@ def update_bootcamp(
     bootcamp_id: uuid.UUID, payload: BootcampUpdate, user: AdminUser, db: DbSession
 ) -> BootcampDetail:
     bootcamp_service.assert_can_manage(db, user, bootcamp_id)
-    bootcamp_service.update_bootcamp(db, bootcamp_id, payload)
-    return _to_detail(db, bootcamp_service.get_bootcamp(db, bootcamp_id))
+    return _to_detail(db, bootcamp_service.update_bootcamp(db, bootcamp_id, payload, user))
+
+
+@router.delete(
+    "/{bootcamp_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_super_admin)],
+)
+def delete_bootcamp(bootcamp_id: uuid.UUID, user: SuperAdminUser, db: DbSession) -> None:
+    """Only while no one has applied — the service refuses otherwise."""
+    bootcamp_service.delete_bootcamp(db, bootcamp_id, user)
+
+
+@router.get("/{bootcamp_id}/stats", response_model=BootcampStats)
+def bootcamp_stats(bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession) -> BootcampStats:
+    return dashboard_service.bootcamp_stats(db, bootcamp_id, user)
+
+
+# ---------------------------------------------------------------- admins --
+
+
+@router.get("/{bootcamp_id}/admins", response_model=list[ProfileOut])
+def list_bootcamp_admins(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> list[ProfileOut]:
+    bootcamp_service.assert_can_manage(db, user, bootcamp_id)
+    return [ProfileOut.model_validate(p) for p in bootcamp_service.admins_for(db, bootcamp_id)]
 
 
 @router.post(
@@ -97,6 +125,17 @@ def assign_admin(
     bootcamp_id: uuid.UUID, profile_id: uuid.UUID, user: SuperAdminUser, db: DbSession
 ) -> None:
     bootcamp_service.assign_admin(db, bootcamp_id, profile_id, user)
+
+
+@router.delete(
+    "/{bootcamp_id}/admins/{profile_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_super_admin)],
+)
+def unassign_admin(
+    bootcamp_id: uuid.UUID, profile_id: uuid.UUID, user: SuperAdminUser, db: DbSession
+) -> None:
+    bootcamp_service.unassign_admin(db, bootcamp_id, profile_id, user)
 
 
 # ---------------------------------------------------------------- phases --
@@ -111,9 +150,7 @@ def update_phase(
     db: DbSession,
 ) -> PhaseOut:
     bootcamp_service.assert_can_manage(db, user, bootcamp_id)
-    row = bootcamp_service.update_phase_window(
-        db, bootcamp_id, phase, payload.opens_at, payload.deadline_at
-    )
+    row = bootcamp_service.update_phase_window(db, bootcamp_id, phase, payload, user)
     return PhaseOut.model_validate(row)
 
 
@@ -155,3 +192,22 @@ def list_applicants(
         db, bootcamp_id, stage=stage, search=search, limit=limit, offset=offset
     )
     return ApplicantPage(items=items, total=total, limit=limit, offset=offset)
+
+
+# ----------------------------------------------------------------- audit --
+
+
+@router.get("/{bootcamp_id}/audit", response_model=Page[AuditEntry])
+def bootcamp_audit(
+    bootcamp_id: uuid.UUID,
+    user: AdminUser,
+    db: DbSession,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> Page[AuditEntry]:
+    """Activity for this intake, so an admin sees their own history in scope."""
+    bootcamp_service.assert_can_manage(db, user, bootcamp_id)
+    items, total = audit_service.list_entries(
+        db, entity_type="bootcamp", entity_id=bootcamp_id, limit=limit, offset=offset
+    )
+    return Page(items=items, total=total, limit=limit, offset=offset)
