@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `huzaifa` — last updated 2026-08-20
 
 # Project Summary
 
@@ -38,5 +38,8 @@ is logged.
 
 ## Status
 
-Phase 1 — authentication and the application shell — is built and tested. The
-recruitment pipeline itself is not yet implemented. See `project-status.md`.
+Phase 1 (auth) and Phase 2 (registration pipeline) are built and tested. The
+admin portal — dashboard, candidates, interviews, phases, emails — is now
+wired to the real API with a working `SUPER_ADMIN` account. Super-admin
+management screens and the candidate portal still run on fixtures, though
+their backend already exists. See `project-status.md`.
