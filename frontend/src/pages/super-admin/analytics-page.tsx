@@ -1,246 +1,227 @@
-import { motion } from 'motion/react'
-import { Download, Percent, TrendingUp, UserCheck, Users } from 'lucide-react'
+import { BarChart3, MapPin, RefreshCw } from 'lucide-react'
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
-  Legend,
   Pie,
   PieChart,
-  PolarAngleAxis,
-  PolarGrid,
-  Radar,
-  RadarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 
-import { PageHeader, StatCard } from '@/components/shared/portal-ui'
+import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { chartTooltipStyle } from '@/lib/chart-theme'
-import {
-  APPLICATIONS_OVER_TIME,
-  CITY_SPLIT,
-  FUNNEL,
-  PROGRAM_SPLIT,
-} from '@/lib/mock-data'
+import { platformApi } from '@/features/admin/api'
+import { AsyncSection, CardsSkeleton } from '@/features/admin/components'
+import { useAsync } from '@/hooks/use-async'
+import { CHART_COLORS, chartTooltipStyle } from '@/lib/chart-theme'
+import { STAGE_LABEL, type PlatformStats } from '@/lib/types'
 
-const CONVERSION_BY_BOOTCAMP = [
-  { bootcamp: 'BC 04', applied: 401, selected: 250, rate: 62 },
-  { bootcamp: 'BC 05', applied: 478, selected: 280, rate: 59 },
-  { bootcamp: 'BC 06', applied: 512, selected: 300, rate: 59 },
-  { bootcamp: 'BC 07', applied: 441, selected: 112, rate: 25 },
-]
+const AXIS = {
+  stroke: 'var(--color-muted-foreground)',
+  fontSize: 12,
+  tickLine: false,
+  axisLine: false,
+} as const
 
-const QUALITY_RADAR = [
-  { dimension: 'Communication', current: 82, previous: 74 },
-  { dimension: 'Problem solving', current: 76, previous: 71 },
-  { dimension: 'Motivation', current: 91, previous: 88 },
-  { dimension: 'Technical aptitude', current: 68, previous: 64 },
-  { dimension: 'Attendance', current: 88, previous: 79 },
-]
+function shortDate(day: string) {
+  return new Date(day).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
+}
 
 export default function SuperAdminAnalyticsPage() {
+  const { data, error, initialLoading, loading, refetch } = useAsync(
+    () => platformApi.stats(),
+    [],
+  )
+
   return (
     <>
       <PageHeader
         title="Analytics"
-        description="Cross-bootcamp performance, conversion, and candidate quality."
+        description="Applications, tracks, and reach across every intake."
         actions={
-          <Button variant="outline">
-            <Download className="size-4" />
-            Export report
+          <Button variant="outline" size="icon" onClick={refetch} aria-label="Refresh">
+            <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />
           </Button>
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total applications" value={1832} icon={Users} trend={19} hint="last 4 intakes" delay={0} />
-        <StatCard label="Selected" value={942} icon={UserCheck} trend={7} delay={0.06} />
-        <StatCard label="Conversion rate" value={51.4} decimals={1} suffix="%" icon={Percent} trend={-2} delay={0.12} />
-        <StatCard label="Avg interview score" value={78.2} decimals={1} icon={TrendingUp} trend={4} delay={0.18} />
+      <AsyncSection
+        initialLoading={initialLoading}
+        error={error}
+        onRetry={refetch}
+        skeleton={<CardsSkeleton count={3} />}
+      >
+        {data && <Charts stats={data} />}
+      </AsyncSection>
+    </>
+  )
+}
+
+function Charts({ stats }: { stats: PlatformStats }) {
+  // Cumulative reads better than a daily spike for tracking reach. Summed from
+  // the slice rather than a counter carried across the map — a mutable
+  // accumulator in render is impure, and the series is capped at 30 points.
+  const trend = stats.applications_over_time.map((point, index, all) => ({
+    date: shortDate(point.day),
+    total: all.slice(0, index + 1).reduce((sum, p) => sum + p.count, 0),
+  }))
+
+  const funnel = stats.by_stage.filter((row) => row.count > 0)
+  const programs = stats.by_program.filter((row) => row.count > 0)
+
+  const empty = stats.total_applications === 0
+
+  if (empty) {
+    return (
+      <EmptyState
+        icon={BarChart3}
+        title="Nothing to chart yet"
+        description="Analytics fill in once candidates start applying to an intake."
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Applications over time</CardTitle>
+          <CardDescription>Cumulative across all intakes, last 30 days.</CardDescription>
+        </CardHeader>
+        <CardContent className="h-72">
+          {trend.length === 0 ? (
+            <EmptyState icon={BarChart3} title="No applications in the last 30 days" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="platform-apps" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" {...AXIS} />
+                <YAxis {...AXIS} width={44} allowDecimals={false} />
+                <Tooltip {...chartTooltipStyle} />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  name="Applications"
+                  stroke="var(--color-chart-1)"
+                  strokeWidth={2}
+                  fill="url(#platform-apps)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pipeline funnel</CardTitle>
+            <CardDescription>Where candidates sit across every intake.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={funnel.map((row) => ({ stage: STAGE_LABEL[row.stage], count: row.count }))}
+                layout="vertical"
+                margin={{ top: 4, right: 16, left: 24, bottom: 4 }}
+              >
+                <XAxis type="number" {...AXIS} allowDecimals={false} />
+                <YAxis type="category" dataKey="stage" {...AXIS} width={110} />
+                <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
+                <Bar dataKey="count" name="Candidates" radius={[0, 6, 6, 0]}>
+                  {funnel.map((row, index) => (
+                    <Cell key={row.stage} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">By track</CardTitle>
+            <CardDescription>Which programs applicants chose.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={190}>
+              <PieChart>
+                <Pie
+                  data={programs}
+                  dataKey="count"
+                  nameKey="title"
+                  innerRadius="55%"
+                  outerRadius="80%"
+                  paddingAngle={2}
+                  strokeWidth={0}
+                >
+                  {programs.map((row, index) => (
+                    <Cell key={row.program_id} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip {...chartTooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {programs.map((row, index) => (
+                <li key={row.program_id} className="flex items-center gap-2 text-xs">
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: CHART_COLORS[index % CHART_COLORS.length] }}
+                  />
+                  <span className="flex-1 truncate text-muted-foreground">{row.title}</span>
+                  <span className="font-medium tabular-nums">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.1 }}
-      >
-        <Tabs defaultValue="volume">
-          <TabsList className="mb-5">
-            <TabsTrigger value="volume">Volume</TabsTrigger>
-            <TabsTrigger value="conversion">Conversion</TabsTrigger>
-            <TabsTrigger value="quality">Quality</TabsTrigger>
-            <TabsTrigger value="reach">Reach</TabsTrigger>
-          </TabsList>
-
-          {/* Volume */}
-          <TabsContent value="volume">
-            <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Applications & interviews</CardTitle>
-                  <CardDescription>Cumulative across the current intake</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={320}>
-                    <AreaChart data={APPLICATIONS_OVER_TIME} margin={{ left: -18, right: 8, top: 8 }}>
-                      <defs>
-                        <linearGradient id="anApplications" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0.02} />
-                        </linearGradient>
-                        <linearGradient id="anInterviews" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="var(--color-chart-2)" stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                      <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                      <Tooltip {...chartTooltipStyle} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Area type="monotone" dataKey="applications" stroke="var(--color-chart-1)" strokeWidth={2} fill="url(#anApplications)" name="Applications" />
-                      <Area type="monotone" dataKey="interviews" stroke="var(--color-chart-2)" strokeWidth={2} fill="url(#anInterviews)" name="Interviews" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Selection funnel</CardTitle>
-                  <CardDescription>Drop-off at each stage</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={320}>
-                    <BarChart data={FUNNEL} layout="vertical" margin={{ left: 12, right: 16 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
-                      <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                      <YAxis type="category" dataKey="stage" tickLine={false} axisLine={false} width={84} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                      <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
-                      <Bar dataKey="count" fill="var(--color-chart-1)" radius={[0, 6, 6, 0]} name="Candidates" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Conversion */}
-          <TabsContent value="conversion">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Conversion by bootcamp</CardTitle>
-                <CardDescription>
-                  Applied versus selected. Bootcamp 07 is still mid-cycle, so its rate is
-                  not yet comparable.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={360}>
-                  <BarChart data={CONVERSION_BY_BOOTCAMP} margin={{ left: -18, right: 8, top: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="bootcamp" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                    <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="applied" fill="var(--color-chart-1)" radius={[6, 6, 0, 0]} name="Applied" />
-                    <Bar dataKey="selected" fill="var(--color-chart-2)" radius={[6, 6, 0, 0]} name="Selected" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Quality */}
-          <TabsContent value="quality">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Candidate quality</CardTitle>
-                  <CardDescription>Average interview scores, this intake vs last</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={340}>
-                    <RadarChart data={QUALITY_RADAR}>
-                      <PolarGrid stroke="var(--color-border)" />
-                      <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} />
-                      <Tooltip {...chartTooltipStyle} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Radar name="Bootcamp 07" dataKey="current" stroke="var(--color-chart-1)" fill="var(--color-chart-1)" fillOpacity={0.28} />
-                      <Radar name="Bootcamp 06" dataKey="previous" stroke="var(--color-chart-2)" fill="var(--color-chart-2)" fillOpacity={0.18} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Applicants by program</CardTitle>
-                  <CardDescription>Where demand is concentrated</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-4">
-                  <ResponsiveContainer width="100%" height={230}>
-                    <PieChart>
-                      <Pie data={PROGRAM_SPLIT} dataKey="value" nameKey="name" innerRadius={56} outerRadius={92} paddingAngle={3} strokeWidth={0}>
-                        {PROGRAM_SPLIT.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip {...chartTooltipStyle} />
-                    </PieChart>
-                  </ResponsiveContainer>
-
-                  <ul className="flex flex-col gap-2">
-                    {PROGRAM_SPLIT.map((entry) => (
-                      <li key={entry.name} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: entry.fill }} />
-                          <span className="truncate text-muted-foreground">{entry.name}</span>
-                        </span>
-                        <span className="font-medium tabular-nums">{entry.value}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Reach */}
-          <TabsContent value="reach">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Geographic reach</CardTitle>
-                <CardDescription>Applicants by city, current intake</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={360}>
-                  <BarChart data={CITY_SPLIT} margin={{ left: -18, right: 8, top: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="city" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--color-muted-foreground)' }} />
-                    <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
-                    <Bar dataKey="applicants" radius={[6, 6, 0, 0]} name="Applicants">
-                      {CITY_SPLIT.map((_, index) => (
-                        <Cell key={index} fill={`var(--color-chart-${(index % 5) + 1})`} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </motion.div>
-    </>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Where applicants come from</CardTitle>
+          <CardDescription>
+            Top cities by application count. Candidates who have not filled in a city are not
+            counted.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="h-72">
+          {stats.by_city.length === 0 ? (
+            <EmptyState
+              icon={MapPin}
+              title="No city data yet"
+              description="City is collected on the candidate's profile; it fills in as applicants complete their details."
+            />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.by_city} margin={{ top: 4, right: 8, left: -18, bottom: 4 }}>
+                <XAxis dataKey="city" {...AXIS} />
+                <YAxis {...AXIS} width={44} allowDecimals={false} />
+                <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
+                <Bar
+                  dataKey="count"
+                  name="Applicants"
+                  fill="var(--color-chart-2)"
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
