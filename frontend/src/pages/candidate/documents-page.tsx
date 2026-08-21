@@ -1,264 +1,351 @@
-import { motion } from 'motion/react'
+/**
+ * Candidate document uploads.
+ *
+ * Driven by the server's checklist rather than a hardcoded list, so what is
+ * asked for can change without a frontend release. Files go straight to a
+ * private bucket through the API; reads come back as short-lived signed URLs.
+ */
+
 import {
+  AlertTriangle,
   CheckCircle2,
   CloudUpload,
-  Download,
+  Clock,
+  ExternalLink,
   FileText,
-  Lock,
-  ShieldCheck,
+  Loader2,
   Trash2,
-  TriangleAlert,
+  XCircle,
 } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
 
-import { PageHeader } from '@/components/shared/portal-ui'
+import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
+import { AsyncSection } from '@/features/admin/components'
+import { candidateApi } from '@/features/candidate/api'
+import { useAsync, useMutation } from '@/hooks/use-async'
+import {
+  DOCUMENT_STATUS_LABEL,
+  type ApplicationDetail,
+  type DocumentStatus,
+  type DocumentType,
+  type RequiredDocument,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-const UPLOADED = [
-  { name: 'CNIC — front.jpg', size: '620 KB', uploaded: '12 Aug 2026', verified: true },
-  { name: 'CNIC — back.jpg', size: '598 KB', uploaded: '12 Aug 2026', verified: true },
-  { name: 'Intermediate certificate.pdf', size: '840 KB', uploaded: '12 Aug 2026', verified: true },
-  { name: 'Passport photo.jpg', size: '320 KB', uploaded: '12 Aug 2026', verified: false },
-]
+const ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp'
+const MAX_MB = 5
 
-const REQUIRED = [
-  { name: 'Matriculation certificate', note: 'Scanned copy, PDF or JPG', done: false },
-  { name: 'Domicile certificate', note: 'Optional but recommended', done: false },
-]
+const STATUS_ICON: Record<DocumentStatus, typeof CheckCircle2> = {
+  PENDING: Clock,
+  ACCEPTED: CheckCircle2,
+  REJECTED: XCircle,
+}
+
+const STATUS_TONE: Record<DocumentStatus, string> = {
+  PENDING: 'text-warning-foreground dark:text-warning',
+  ACCEPTED: 'text-success',
+  REJECTED: 'text-destructive',
+}
+
+function formatSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.round(bytes / 1024)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 export default function CandidateDocumentsPage() {
+  const applications = useAsync(() => candidateApi.myApplications(), [])
+  const application = applications.data?.[0]
+
   return (
     <>
       <PageHeader
-        title="Documents & onboarding form"
-        description="Upload the remaining documents and complete your onboarding details."
-        actions={
-          <Button variant="outline">
-            <Download className="size-4" />
-            Download checklist
-          </Button>
-        }
+        title="Documents"
+        description="Upload the papers we need to confirm your place."
       />
 
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="mb-6"
+      <AsyncSection
+        initialLoading={applications.initialLoading}
+        error={applications.error}
+        onRetry={applications.refetch}
+        skeleton={<Skeleton className="h-80 w-full rounded-xl" />}
       >
-        <Alert>
-          <Lock className="size-4" />
-          <AlertTitle>The onboarding form opens after your assessment</AlertTitle>
-          <AlertDescription>
-            Bank and identity details are collected only once you have been selected. The
-            form unlocks on 20 October and closes on 27 October.
-          </AlertDescription>
-        </Alert>
-      </motion.div>
+        {!application ? (
+          <EmptyState
+            icon={FileText}
+            title="No application yet"
+            description="Documents are collected once you have applied to an intake."
+            action={
+              <Link to="/dashboard/application" className={buttonVariants({ size: 'sm' })}>
+                Apply now
+              </Link>
+            }
+          />
+        ) : (
+          <Checklist application={application} />
+        )}
+      </AsyncSection>
+    </>
+  )
+}
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-start">
-        <div className="flex flex-col gap-6">
-          {/* Upload area */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.06 }}
+function Checklist({ application }: { application: ApplicationDetail }) {
+  const { data, error, initialLoading, refetch } = useAsync(
+    () => candidateApi.checklist(application.id),
+    [application.id],
+  )
+
+  const rows = data ?? []
+  const required = rows.filter((r) => r.required)
+  const done = required.filter((r) => r.document?.status === 'ACCEPTED').length
+  const rejected = rows.filter((r) => r.document?.status === 'REJECTED')
+
+  return (
+    <AsyncSection
+      initialLoading={initialLoading}
+      error={error}
+      onRetry={refetch}
+      skeleton={<Skeleton className="h-80 w-full rounded-xl" />}
+    >
+      <div className="flex flex-col gap-5">
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">
+                {done} of {required.length} required documents accepted
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {application.candidate_code} · {application.bootcamp_name}
+              </span>
+            </div>
+            <div className="h-2 w-full max-w-48 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${required.length ? (done / required.length) * 100 : 0}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {rejected.length > 0 && (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertTitle>
+              {rejected.length} document{rejected.length === 1 ? '' : 's'} need re-uploading
+            </AlertTitle>
+            <AlertDescription>
+              Read the note under each one, then upload a replacement.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {rows.map((row) => (
+            <DocumentSlot
+              key={row.doc_type}
+              row={row}
+              applicationId={application.id}
+              onChanged={refetch}
+            />
+          ))}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          PDF, JPG, PNG, or WebP · maximum {MAX_MB} MB per file. Your documents are stored
+          privately and are only visible to the admissions team.
+        </p>
+      </div>
+    </AsyncSection>
+  )
+}
+
+function DocumentSlot({
+  row,
+  applicationId,
+  onChanged,
+}: {
+  row: RequiredDocument
+  applicationId: string
+  onChanged: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [localError, setLocalError] = useState<string | null>(null)
+
+  const document = row.document
+  const accepted = document?.status === 'ACCEPTED'
+
+  const upload = useMutation((file: File) =>
+    candidateApi.upload(applicationId, row.doc_type as DocumentType, file),
+  )
+  const remove = useMutation(() => candidateApi.deleteDocument(document!.id))
+  const view = useMutation(async () => {
+    const { url } = await candidateApi.documentLink(document!.id)
+    window.open(url, '_blank', 'noopener,noreferrer')
+  })
+
+  async function pick(file: File | undefined) {
+    if (!file) return
+    setLocalError(null)
+
+    // Checked here as well as server-side so an oversized file is not spent on
+    // an upload that will be refused.
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setLocalError(`That file is ${formatSize(file.size)}. The limit is ${MAX_MB} MB.`)
+      return
+    }
+
+    if (await upload.run(file)) {
+      toast.success(`${row.label} uploaded`)
+      onChanged()
+    }
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  async function doRemove() {
+    if ((await remove.run()) !== undefined) {
+      toast.success(`${row.label} removed`)
+      onChanged()
+    }
+  }
+
+  const StatusIcon = document ? STATUS_ICON[document.status] : null
+
+  return (
+    <Card className={cn(accepted && 'border-success/40')}>
+      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+        <div className="flex flex-col gap-1.5">
+          <CardTitle className="text-base">{row.label}</CardTitle>
+          <CardDescription>
+            {row.required ? 'Required' : 'Optional'}
+          </CardDescription>
+        </div>
+        {document && StatusIcon && (
+          <span
+            className={cn(
+              'flex shrink-0 items-center gap-1.5 text-xs font-medium',
+              STATUS_TONE[document.status],
+            )}
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Upload documents</CardTitle>
-                <CardDescription>PDF, JPG, or PNG · maximum 5 MB per file</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <label
-                  htmlFor="file-upload"
-                  className={cn(
-                    'group flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-border p-10 text-center',
-                    'transition-all duration-300 hover:border-primary/50 hover:bg-primary/5',
-                  )}
-                >
-                  <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:-translate-y-1 group-hover:scale-110">
-                    <CloudUpload className="size-6" />
-                  </span>
-                  <span className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
-                      Drop files here, or click to browse
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Make sure text is legible and the whole document is visible
-                    </span>
-                  </span>
-                  <input id="file-upload" type="file" multiple className="sr-only" />
-                </label>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <StatusIcon className="size-4" />
+            {DOCUMENT_STATUS_LABEL[document.status]}
+          </span>
+        )}
+      </CardHeader>
 
-          {/* Uploaded files */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.12 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Uploaded</CardTitle>
-                <CardDescription>{UPLOADED.length} files on record</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2.5">
-                {UPLOADED.map((doc, index) => (
-                  <motion.div
-                    key={doc.name}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.35, delay: 0.15 + index * 0.06 }}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-colors hover:border-primary/35"
-                  >
-                    <span className="flex min-w-0 items-center gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                        <FileText className="size-4" />
-                      </span>
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-sm font-medium">{doc.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {doc.size} · {doc.uploaded}
-                        </span>
-                      </span>
-                    </span>
-
-                    <span className="flex shrink-0 items-center gap-2">
-                      {doc.verified ? (
-                        <Badge variant="secondary" className="gap-1 text-[0.68rem]">
-                          <CheckCircle2 className="size-3" />
-                          Verified
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="gap-1 text-[0.68rem]">
-                          <TriangleAlert className="size-3" />
-                          In review
-                        </Badge>
-                      )}
-                      <button
-                        type="button"
-                        aria-label={`Delete ${doc.name}`}
-                        className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </span>
-                  </motion.div>
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Locked onboarding form preview */}
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.18 }}
-          >
-            <Card className="relative overflow-hidden">
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/70 backdrop-blur-[3px]">
-                <span className="flex flex-col items-center gap-2 text-center">
-                  <span className="grid size-11 place-items-center rounded-2xl bg-muted text-muted-foreground">
-                    <Lock className="size-5" />
-                  </span>
-                  <span className="text-sm font-medium">Unlocks 20 October</span>
-                  <span className="max-w-xs text-xs text-muted-foreground">
-                    Available after you pass the physical assessment
-                  </span>
+      <CardContent className="flex flex-col gap-3">
+        {document ? (
+          <>
+            <div className="flex items-center gap-2.5 rounded-lg border border-border p-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                <FileText className="size-4" />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium">{document.file_name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {formatSize(document.size_bytes)}
                 </span>
               </div>
+            </div>
 
-              <CardHeader>
-                <CardTitle className="text-base">Onboarding form</CardTitle>
-                <CardDescription>Bank and identity details for enrolment</CardDescription>
-              </CardHeader>
-              <CardContent aria-hidden="true">
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Account title</Label>
-                    <Input disabled placeholder="As printed on your bank record" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Bank name</Label>
-                    <Input disabled placeholder="e.g. Meezan Bank" />
-                  </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>IBAN</Label>
-                    <Input disabled placeholder="PK00 XXXX 0000 0000 0000 0000" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
+            {document.review_note && (
+              <Alert variant="destructive">
+                <AlertTriangle className="size-4" />
+                <AlertDescription>{document.review_note}</AlertDescription>
+              </Alert>
+            )}
 
-        {/* Sidebar */}
-        <div className="flex flex-col gap-6">
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => view.run()}
+                disabled={view.pending}
+              >
+                {view.pending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <ExternalLink className="size-3.5" />
+                )}
+                View
+              </Button>
+
+              {!accepted && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => inputRef.current?.click()}
+                    disabled={upload.pending}
+                  >
+                    {upload.pending && <Loader2 className="size-3.5 animate-spin" />}
+                    Replace
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={doRemove}
+                    disabled={remove.pending}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Remove
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {accepted && (
+              <Badge variant="outline" className="w-fit font-normal">
+                Accepted — this can no longer be changed.
+              </Badge>
+            )}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={upload.pending}
+            className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border px-4 py-6 text-center transition-colors hover:bg-muted/50 disabled:opacity-60"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Still needed</CardTitle>
-                <CardDescription>{REQUIRED.length} documents outstanding</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {REQUIRED.map((doc) => (
-                  <div key={doc.name} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 size-4 shrink-0 rounded-full border-2 border-muted-foreground/30" />
-                    <span className="flex flex-col">
-                      <span className="text-sm font-medium">{doc.name}</span>
-                      <span className="text-xs text-muted-foreground">{doc.note}</span>
-                    </span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
+            <span className="grid size-10 place-items-center rounded-xl bg-muted text-muted-foreground">
+              {upload.pending ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <CloudUpload className="size-5" />
+              )}
+            </span>
+            <span className="text-sm font-medium">
+              {upload.pending ? 'Uploading…' : 'Choose a file'}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              PDF, JPG, PNG, or WebP · up to {MAX_MB} MB
+            </span>
+          </button>
+        )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.16 }}
-          >
-            <Card className="border-primary/25 bg-primary/5">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <span className="grid size-8 place-items-center rounded-lg bg-primary/15 text-primary">
-                    <ShieldCheck className="size-4" />
-                  </span>
-                  <CardTitle className="text-base">Your data is protected</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-                  {[
-                    'Bank details are encrypted at rest',
-                    'Only authorised staff can view your documents',
-                    'Every access is recorded in an audit log',
-                    'Documents are never shared with third parties',
-                  ].map((item) => (
-                    <li key={item} className="flex gap-2">
-                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-      </div>
-    </>
+        {(localError || upload.error || remove.error) && (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertDescription>
+              {localError ?? upload.error ?? remove.error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPT}
+          className="hidden"
+          onChange={(event) => pick(event.target.files?.[0])}
+        />
+      </CardContent>
+    </Card>
   )
 }
