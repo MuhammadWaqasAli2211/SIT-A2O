@@ -152,3 +152,59 @@ def sign_out(access_token: str) -> None:
             )
     except httpx.RequestError:
         pass
+
+
+# ------------------------------------------------------------ admin API --
+# These carry the service_role key and can act on any account without a user
+# session. Reachable only from routes behind require_super_admin — never from
+# anything a candidate can call.
+
+
+def _admin_headers() -> dict[str, str]:
+    return {
+        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _admin_request(method: str, path: str, json: dict[str, Any] | None = None) -> dict:
+    url = f"{settings.auth_url}/admin/users{path}"
+    try:
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            response = client.request(method, url, json=json, headers=_admin_headers())
+    except httpx.RequestError as exc:
+        raise UpstreamError("Could not reach the authentication service.") from exc
+
+    _translate(response, "signup")
+    return response.json() if response.content else {}
+
+
+def admin_create_user(
+    email: str, password: str, metadata: dict[str, Any], *, email_confirm: bool = True
+) -> dict:
+    """Create an account directly, bypassing self-service signup.
+
+    `email_confirm=True` marks the address verified without sending a
+    confirmation mail: a staff account is provisioned by someone who already
+    knows the address is real, and waiting on an inbox click would leave the
+    account unusable in the meantime.
+    """
+    return _admin_request(
+        "POST",
+        "",
+        {
+            "email": email,
+            "password": password,
+            "email_confirm": email_confirm,
+            "user_metadata": metadata,
+        },
+    )
+
+
+def admin_update_user(user_id: str, changes: dict[str, Any]) -> dict:
+    return _admin_request("PUT", f"/{user_id}", changes)
+
+
+def admin_delete_user(user_id: str) -> None:
+    _admin_request("DELETE", f"/{user_id}")
