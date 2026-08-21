@@ -46,3 +46,35 @@ class ApplicationStatus(StrEnum):
     ACTIVE = "ACTIVE"
     REJECTED = "REJECTED"
     WITHDRAWN = "WITHDRAWN"
+
+
+class InterviewMode(StrEnum):
+    ONLINE = "ONLINE"
+    ONSITE = "ONSITE"
+
+
+class InterviewStatus(StrEnum):
+    SCHEDULED = "SCHEDULED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    NO_SHOW = "NO_SHOW"
+
+
+class EmailStatus(StrEnum):
+    SENT = "SENT"
+    FAILED = "FAILED"
+
+
+class DocumentType(StrEnum):
+    CNIC_FRONT = "CNIC_FRONT"
+    CNIC_BACK = "CNIC_BACK"
+    PHOTO = "PHOTO"
+    QUALIFICATION = "QUALIFICATION"
+    BANK_LETTER = "BANK_LETTER"
+    OTHER = "OTHER"
+
+
+class DocumentStatus(StrEnum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
