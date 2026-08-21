@@ -3,15 +3,32 @@
 import uuid
 
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.application import Application, StageTransition
 from app.models.bootcamp import BootcampProgram, Program
 from app.models.enums import ApplicationStage, ApplicationStatus, PhaseType
+from app.models.interview import Interview
 from app.models.user import Profile
-from app.schemas.application import ApplicantRow, ApplicationCreate
-from app.services import bootcamp_service
+from app.schemas.application import (
+    AdminApplicationDetail,
+    ApplicantRow,
+    ApplicationCreate,
+    ApplicationOut,
+    StageTransitionOut,
+)
+from app.schemas.bootcamp import ProgramOut
+from app.services import audit_service, bootcamp_service
+
+# Set by the unique (bootcamp_id, profile_id) index on applications.
+_DUPLICATE_APPLICATION_CONSTRAINT = "applications_bootcamp_id_profile_id_key"
+
+
+def _is_duplicate_application(exc: IntegrityError) -> bool:
+    constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+    return constraint == _DUPLICATE_APPLICATION_CONSTRAINT
 
 
 def _mint_candidate_code(db: Session, bootcamp_id: uuid.UUID) -> str:
@@ -59,7 +76,18 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
         statement=payload.statement,
     )
     db.add(application)
-    db.flush()
+
+    # The SELECT above is not a lock, so two simultaneous submissions can both
+    # pass it. The unique (bootcamp_id, profile_id) index is the real guard —
+    # translate its violation into the same 409 the non-racing path returns,
+    # rather than letting it surface as an opaque 500.
+    try:
+        with db.begin_nested():
+            db.flush()
+    except IntegrityError as exc:
+        if _is_duplicate_application(exc):
+            raise ConflictError("You have already applied to this bootcamp.") from exc
+        raise
 
     # Record the opening entry too, so the timeline starts at submission
     # rather than at the first admin action.
@@ -89,6 +117,44 @@ def get_detail(db: Session, application_id: uuid.UUID) -> Application:
     if application is None:
         raise NotFoundError("Application not found.")
     return application
+
+
+def get_admin_detail(
+    db: Session, application_id: uuid.UUID, actor: Profile
+) -> AdminApplicationDetail:
+    """The full record, with the contact details an admin needs to act on it."""
+    application = get_detail(db, application_id)
+    bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
+
+    profile = db.scalar(
+        select(Profile)
+        .where(Profile.id == application.profile_id)
+        .options(selectinload(Profile.candidate_profile))
+    )
+    if profile is None:
+        raise NotFoundError("The applicant's profile no longer exists.")
+
+    candidate = profile.candidate_profile
+    interviews = db.scalar(
+        select(func.count())
+        .select_from(Interview)
+        .where(Interview.application_id == application_id)
+    )
+
+    return AdminApplicationDetail(
+        **ApplicationOut.model_validate(application).model_dump(),
+        program=ProgramOut.model_validate(application.program),
+        bootcamp_name=application.bootcamp.name,
+        bootcamp_number=application.bootcamp.bootcamp_number,
+        timeline=[StageTransitionOut.model_validate(t) for t in application.transitions],
+        full_name=profile.full_name,
+        email=profile.email,
+        phone=profile.phone,
+        city=candidate.city if candidate else None,
+        education=candidate.education if candidate else None,
+        date_of_birth=candidate.date_of_birth if candidate else None,
+        interview_count=interviews or 0,
+    )
 
 
 def my_applications(db: Session, applicant: Profile) -> list[Application]:
@@ -177,9 +243,14 @@ def advance_stage(
 
     if application.stage == to_stage:
         raise ConflictError(f"Application is already at {to_stage.value}.")
+
+    # A closed application is a state conflict, not a permissions problem — the
+    # same admin may reopen it via reinstate(). Returning 403 here (as this once
+    # did) told the caller to go find someone with more rights, which was wrong.
     if application.status != ApplicationStatus.ACTIVE:
-        raise PermissionDeniedError(
-            f"This application is {application.status.value.lower()} and cannot be advanced."
+        raise ConflictError(
+            f"This application is {application.status.value.lower()}. "
+            "Reinstate it before moving it to another stage."
         )
 
     previous = application.stage
@@ -196,5 +267,134 @@ def advance_stage(
             reason=reason,
         )
     )
+    audit_service.record(
+        db,
+        actor=actor,
+        action="application.advance_stage",
+        entity_type="application",
+        entity_id=application.id,
+        summary=f"{application.candidate_code}: {previous.value} to {to_stage.value}",
+        metadata={"from": previous.value, "to": to_stage.value, "reason": reason},
+    )
     db.flush()
     return application
+
+
+def reinstate(
+    db: Session,
+    application_id: uuid.UUID,
+    *,
+    to_stage: ApplicationStage,
+    actor: Profile,
+    reason: str | None = None,
+) -> Application:
+    """Reopen a rejected or withdrawn application.
+
+    Exists because rejection was otherwise terminal: an accidental reject had
+    no route back, and the candidate's only option was to reapply, which the
+    unique (bootcamp, profile) index forbids.
+    """
+    application = get_detail(db, application_id)
+    bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
+
+    if application.status == ApplicationStatus.ACTIVE:
+        raise ConflictError("This application is already active.")
+    if to_stage == ApplicationStage.REJECTED:
+        raise ConflictError("Reinstating to REJECTED is not a reinstatement.")
+
+    previous = application.stage
+    application.stage = to_stage
+    application.status = ApplicationStatus.ACTIVE
+
+    db.add(
+        StageTransition(
+            application_id=application.id,
+            from_stage=previous,
+            to_stage=to_stage,
+            actor_id=actor.id,
+            reason=reason or "Reinstated",
+        )
+    )
+    audit_service.record(
+        db,
+        actor=actor,
+        action="application.reinstate",
+        entity_type="application",
+        entity_id=application.id,
+        summary=f"Reinstated {application.candidate_code} at {to_stage.value}",
+        metadata={"from_status": previous.value, "to": to_stage.value, "reason": reason},
+    )
+    db.flush()
+    return application
+
+
+def update_application(
+    db: Session,
+    application_id: uuid.UUID,
+    *,
+    actor: Profile,
+    program_id: uuid.UUID | None = None,
+    statement: str | None = None,
+) -> Application:
+    """Admin correction of an application's own fields.
+
+    Stage and status are deliberately not editable here — they move through
+    advance_stage/reinstate so that every change leaves a StageTransition.
+    """
+    application = get_detail(db, application_id)
+    bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
+
+    changes: dict[str, object] = {}
+    if program_id is not None and program_id != application.program_id:
+        offered = db.get(
+            BootcampProgram,
+            {"bootcamp_id": application.bootcamp_id, "program_id": program_id},
+        )
+        if offered is None:
+            raise ConflictError("That program is not offered in this bootcamp.")
+        changes["program_id"] = {"from": str(application.program_id), "to": str(program_id)}
+        application.program_id = program_id
+
+    if statement is not None and statement != application.statement:
+        changes["statement"] = {"from": application.statement, "to": statement}
+        application.statement = statement
+
+    if changes:
+        audit_service.record(
+            db,
+            actor=actor,
+            action="application.update",
+            entity_type="application",
+            entity_id=application.id,
+            summary=f"Edited {application.candidate_code}",
+            metadata={"changes": changes},
+        )
+    db.flush()
+    return get_detail(db, application_id)
+
+
+def delete_application(db: Session, application_id: uuid.UUID, actor: Profile) -> None:
+    """Hard delete, for genuine mistakes only.
+
+    The candidate code is *not* returned to the pool: next_candidate_seq only
+    moves forward, so a deleted B07-004 leaves a permanent gap rather than
+    letting a later applicant inherit a code that already appeared in an email.
+    """
+    application = get_detail(db, application_id)
+    bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="application.delete",
+        entity_type="application",
+        entity_id=application.id,
+        summary=f"Deleted application {application.candidate_code}",
+        metadata={
+            "candidate_code": application.candidate_code,
+            "bootcamp_id": str(application.bootcamp_id),
+            "profile_id": str(application.profile_id),
+        },
+    )
+    db.delete(application)
+    db.flush()
