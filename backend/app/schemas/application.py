@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -72,3 +72,32 @@ class ApplicantPage(BaseModel):
 class StageAdvance(BaseModel):
     to_stage: ApplicationStage
     reason: str | None = Field(default=None, max_length=500)
+
+
+class ApplicationEdit(BaseModel):
+    """Admin correction of an application's own fields.
+
+    Stage and status are absent deliberately: they move through
+    advance_stage/reinstate so every change leaves a StageTransition behind.
+    """
+
+    program_id: uuid.UUID | None = None
+    statement: str | None = Field(default=None, max_length=2000)
+
+
+class AdminApplicationDetail(ApplicationDetail):
+    """The full record for an administrator.
+
+    Kept separate from ApplicationDetail rather than adding optional fields to
+    it: the candidate-facing route returns that shape, and personal contact
+    data must not be one forgotten `exclude` away from leaking into it.
+    """
+
+    full_name: str | None = None
+    email: EmailStr
+    phone: str | None = None
+    city: str | None = None
+    education: str | None = None
+    date_of_birth: date | None = None
+    bootcamp_number: int
+    interview_count: int = 0
