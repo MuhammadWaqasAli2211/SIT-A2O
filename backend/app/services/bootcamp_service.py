@@ -21,7 +21,14 @@ from app.models.bootcamp import (
 )
 from app.models.enums import BootcampStatus, PhaseType, UserRole
 from app.models.user import Profile
-from app.schemas.bootcamp import BootcampCreate, BootcampUpdate
+from app.schemas.bootcamp import (
+    BootcampCreate,
+    BootcampUpdate,
+    PhaseUpdate,
+    ProgramCreate,
+    ProgramUpdate,
+)
+from app.services import audit_service
 
 # Every bootcamp gets all four phases at creation, closed, so an admin only
 # ever opens and dates them rather than creating them ad hoc.
@@ -33,12 +40,94 @@ class PhaseClosedError(PermissionDeniedError):
     message = "This stage is closed."
 
 
-def list_programs(db: Session) -> list[Program]:
-    return list(
-        db.scalars(
-            select(Program).where(Program.is_active.is_(True)).order_by(Program.sort_order)
+def list_programs(db: Session, *, include_inactive: bool = False) -> list[Program]:
+    stmt = select(Program).order_by(Program.sort_order)
+    if not include_inactive:
+        stmt = stmt.where(Program.is_active.is_(True))
+    return list(db.scalars(stmt))
+
+
+def get_program(db: Session, program_id: uuid.UUID) -> Program:
+    program = db.get(Program, program_id)
+    if program is None:
+        raise NotFoundError("Program not found.")
+    return program
+
+
+def create_program(db: Session, payload: ProgramCreate, actor: Profile) -> Program:
+    if db.scalar(select(Program).where(Program.slug == payload.slug)) is not None:
+        raise ConflictError(f"A program with the slug '{payload.slug}' already exists.")
+
+    program = Program(**payload.model_dump())
+    db.add(program)
+    db.flush()
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="program.create",
+        entity_type="program",
+        entity_id=program.id,
+        summary=f"Created the {program.title} track",
+        metadata={"slug": program.slug},
+    )
+    return program
+
+
+def update_program(
+    db: Session, program_id: uuid.UUID, payload: ProgramUpdate, actor: Profile
+) -> Program:
+    program = get_program(db, program_id)
+    changes = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(program, field) for field in changes}
+
+    for field, value in changes.items():
+        setattr(program, field, value)
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="program.update",
+        entity_type="program",
+        entity_id=program.id,
+        summary=f"Updated the {program.title} track",
+        metadata={"changes": audit_service.diff(before, changes)},
+    )
+    db.flush()
+    return program
+
+
+def delete_program(db: Session, program_id: uuid.UUID, actor: Profile) -> None:
+    """Refused while anything references it.
+
+    The FKs are RESTRICT, so the database would reject this anyway — checking
+    here turns an opaque IntegrityError into an answer that says which
+    bootcamps still offer the track.
+    """
+    program = get_program(db, program_id)
+
+    offered_by = db.scalar(
+        select(func.count()).select_from(BootcampProgram).where(
+            BootcampProgram.program_id == program_id
         )
     )
+    if offered_by:
+        raise ConflictError(
+            f"{offered_by} bootcamp(s) still offer this track. "
+            "Deactivate it instead, or remove it from those intakes first."
+        )
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="program.delete",
+        entity_type="program",
+        entity_id=program.id,
+        summary=f"Deleted the {program.title} track",
+        metadata={"slug": program.slug, "title": program.title},
+    )
+    db.delete(program)
+    db.flush()
 
 
 def get_bootcamp(db: Session, bootcamp_id: uuid.UUID) -> Bootcamp:
@@ -108,18 +197,109 @@ def create_bootcamp(db: Session, actor: Profile, payload: BootcampCreate) -> Boo
     for phase in _ALL_PHASES:
         db.add(BootcampPhase(bootcamp_id=bootcamp.id, phase=phase, is_open=False))
 
+    audit_service.record(
+        db,
+        actor=actor,
+        action="bootcamp.create",
+        entity_type="bootcamp",
+        entity_id=bootcamp.id,
+        summary=f"Created bootcamp {bootcamp.name}",
+        metadata={"bootcamp_number": bootcamp.bootcamp_number},
+    )
     db.flush()
     return get_bootcamp(db, bootcamp.id)
 
 
 def update_bootcamp(
-    db: Session, bootcamp_id: uuid.UUID, payload: BootcampUpdate
+    db: Session, bootcamp_id: uuid.UUID, payload: BootcampUpdate, actor: Profile
 ) -> Bootcamp:
     bootcamp = get_bootcamp(db, bootcamp_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+
+    # Not a column — the offered tracks live in a join table, so they are
+    # replaced as a set rather than assigned.
+    program_ids = changes.pop("program_ids", None)
+    before = {field: getattr(bootcamp, field) for field in changes}
+
+    for field, value in changes.items():
         setattr(bootcamp, field, value)
+
+    if program_ids is not None:
+        _replace_programs(db, bootcamp, program_ids)
+        changes["program_ids"] = [str(pid) for pid in program_ids]
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="bootcamp.update",
+        entity_type="bootcamp",
+        entity_id=bootcamp.id,
+        summary=f"Updated {bootcamp.name}",
+        metadata={"changes": audit_service.diff(before, changes)},
+    )
     db.flush()
-    return bootcamp
+    return get_bootcamp(db, bootcamp_id)
+
+
+def _replace_programs(db: Session, bootcamp: Bootcamp, program_ids: list[uuid.UUID]) -> None:
+    """Set the offered tracks to exactly `program_ids`.
+
+    Removing a track an application already points at is refused rather than
+    cascaded: the application's program_id is RESTRICT for the same reason, and
+    silently orphaning a candidate's chosen track would be worse than an error.
+    """
+    wanted = set(program_ids)
+    current = {bp.program_id for bp in bootcamp.programs}
+
+    for program_id in wanted - current:
+        if db.get(Program, program_id) is None:
+            raise NotFoundError(f"Program {program_id} not found.")
+        db.add(BootcampProgram(bootcamp_id=bootcamp.id, program_id=program_id))
+
+    for program_id in current - wanted:
+        in_use = db.scalar(
+            select(func.count())
+            .select_from(Application)
+            .where(
+                Application.bootcamp_id == bootcamp.id,
+                Application.program_id == program_id,
+            )
+        )
+        if in_use:
+            raise ConflictError(
+                f"{in_use} application(s) already chose that track; it cannot be removed."
+            )
+        db.delete(db.get(BootcampProgram, {"bootcamp_id": bootcamp.id, "program_id": program_id}))
+
+    db.flush()
+    db.refresh(bootcamp)
+
+
+def delete_bootcamp(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> None:
+    """Remove an intake outright.
+
+    Refused once anybody has applied: applications cascade from bootcamps, so
+    deleting one would take real candidate history with it. Archive instead.
+    """
+    bootcamp = get_bootcamp(db, bootcamp_id)
+    count = application_count(db, bootcamp_id)
+    if count:
+        raise ConflictError(
+            f"{count} application(s) belong to this bootcamp. "
+            "Set its status to ARCHIVED instead of deleting it."
+        )
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="bootcamp.delete",
+        entity_type="bootcamp",
+        entity_id=bootcamp.id,
+        summary=f"Deleted bootcamp {bootcamp.name}",
+        metadata={"bootcamp_number": bootcamp.bootcamp_number, "name": bootcamp.name},
+    )
+    db.delete(bootcamp)
+    db.flush()
 
 
 def assign_admin(
@@ -140,7 +320,48 @@ def assign_admin(
     db.add(
         BootcampAdmin(bootcamp_id=bootcamp_id, profile_id=profile_id, assigned_by=actor.id)
     )
+    audit_service.record(
+        db,
+        actor=actor,
+        action="bootcamp.assign_admin",
+        entity_type="bootcamp",
+        entity_id=bootcamp_id,
+        summary=f"Assigned {target.email} as an administrator",
+        metadata={"profile_id": str(profile_id), "email": target.email},
+    )
     db.flush()
+
+
+def unassign_admin(
+    db: Session, bootcamp_id: uuid.UUID, profile_id: uuid.UUID, actor: Profile
+) -> None:
+    row = db.get(BootcampAdmin, {"bootcamp_id": bootcamp_id, "profile_id": profile_id})
+    if row is None:
+        raise NotFoundError("That administrator is not assigned to this bootcamp.")
+
+    target = db.get(Profile, profile_id)
+    db.delete(row)
+    audit_service.record(
+        db,
+        actor=actor,
+        action="bootcamp.unassign_admin",
+        entity_type="bootcamp",
+        entity_id=bootcamp_id,
+        summary=f"Removed {target.email if target else profile_id} as an administrator",
+        metadata={"profile_id": str(profile_id)},
+    )
+    db.flush()
+
+
+def admins_for(db: Session, bootcamp_id: uuid.UUID) -> list[Profile]:
+    return list(
+        db.scalars(
+            select(Profile)
+            .join(BootcampAdmin, BootcampAdmin.profile_id == Profile.id)
+            .where(BootcampAdmin.bootcamp_id == bootcamp_id)
+            .order_by(Profile.full_name)
+        )
+    )
 
 
 # ------------------------------------------------------------------ phases --
@@ -198,16 +419,50 @@ def set_phase_open(
     if phase == PhaseType.REGISTRATION:
         row.bootcamp.status = BootcampStatus.REG_OPEN if is_open else BootcampStatus.REG_CLOSED
 
+    audit_service.record(
+        db,
+        actor=actor,
+        action=f"phase.{'open' if is_open else 'close'}",
+        entity_type="bootcamp_phase",
+        entity_id=row.id,
+        summary=f"{'Opened' if is_open else 'Closed'} the {phase.value.lower()} stage",
+        metadata={"bootcamp_id": str(bootcamp_id), "phase": phase.value},
+    )
     db.flush()
     return row
 
 
 def update_phase_window(
-    db: Session, bootcamp_id: uuid.UUID, phase: PhaseType, opens_at, deadline_at
+    db: Session, bootcamp_id: uuid.UUID, phase: PhaseType, payload: PhaseUpdate, actor: Profile
 ) -> BootcampPhase:
+    """Apply only the fields the caller actually sent.
+
+    `exclude_unset` is load-bearing: an admin editing just the open date must
+    not have the deadline silently cleared, which is what assigning both
+    unconditionally used to do — quietly removing the gate that closes
+    registration.
+    """
     row = get_phase(db, bootcamp_id, phase)
-    row.opens_at = opens_at
-    row.deadline_at = deadline_at
+    changes = payload.model_dump(exclude_unset=True)
+    before = {field: getattr(row, field) for field in changes}
+
+    for field, value in changes.items():
+        setattr(row, field, value)
+
+    # The DB CHECK only fires on the final pair, so catch the ordering here
+    # where the message can name the actual problem.
+    if row.opens_at and row.deadline_at and row.deadline_at <= row.opens_at:
+        raise ConflictError("The deadline must fall after the opening time.")
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="phase.update_window",
+        entity_type="bootcamp_phase",
+        entity_id=row.id,
+        summary=f"Updated the {phase.value.lower()} window",
+        metadata={"bootcamp_id": str(bootcamp_id), "changes": audit_service.diff(before, changes)},
+    )
     db.flush()
     return row
 
