@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-20
+> **Branch:** `huzaifa` — last updated 2026-08-20
 
 # Architecture
 
@@ -29,9 +29,15 @@ so authorization, deadline enforcement, and audit logging live in one place.
 | Routes | `app/api/v1/routes/` | HTTP shape only: parse, delegate, return |
 | Dependencies | `app/api/deps.py` | Session, current user, role gates |
 | Services | `app/services/` | Business rules — the testable core |
-| Integrations | `app/integrations/` | External boundaries (GoTrue today; email and AI interviewer later) |
+| Integrations | `app/integrations/` | External boundaries (GoTrue, GoTrue admin API, Gmail API; AI interviewer later) |
 | Models | `app/models/` | SQLAlchemy ORM, mirrors `supabase/migrations/` |
 | Schemas | `app/schemas/` | Pydantic request and response contracts |
+
+Nine route modules as of the admin-portal build: `health`, `auth`, `programs`,
+`bootcamps`, `applications`, `interviews`, `emails`, `users`, `audit`. Nine
+matching service modules, plus `audit_service.py`, which every mutating
+service calls into rather than writing `audit_logs` rows itself — one place
+decides what an audit entry looks like.
 
 Routes never touch the ORM directly, and services never see a `Request`. This
 keeps business rules unit-testable without HTTP, and makes the eventual second
@@ -68,8 +74,16 @@ SUPER_ADMIN ── sees every bootcamp, every admin, global analytics
 
 Authorization is always **role plus scope**. An admin holding a valid token must
 still be denied another bootcamp's candidates. `require_roles()` in
-`app/api/deps.py` covers the role half; bootcamp scoping arrives with the
-`bootcamp_admins` table in Phase 2.
+`app/api/deps.py` covers the role half; `assert_can_manage()` in
+`bootcamp_service.py` covers scope, checking `bootcamp_admins` membership on
+every admin-facing call. Unit-tested directly (`tests/unit/test_bootcamp_scope.py`)
+rather than only asserted by integration tests, after this exact gap was found
+during the admin-portal review.
+
+`ADMIN` stays bootcamp-scoped by design, even though the platform's one
+`SUPER_ADMIN` account currently does everything: keeping the scope check live
+means a second admin can be assigned to one intake later without touching
+authorization code.
 
 ## Data flow: the pipeline
 
@@ -93,7 +107,33 @@ five directories.
 - `routes/guards.tsx` — `ProtectedRoute`, `RoleRoute`, `GuestRoute`
 - `lib/` — API client, token storage, shared types
 
-`lib/types.ts` mirrors the backend enums by hand. Both must change together.
+`lib/types.ts` mirrors the backend enums and every response schema by hand.
+Both must change together — a shape mismatch is a runtime bug, not a typecheck
+failure, since `axios` does not validate responses against the TypeScript
+type. Verified field-for-field against live API responses after the
+admin-portal build; `lib/mock-data.ts` re-exports `ApplicationStage` from
+`types.ts` rather than redeclaring it, so the two cannot drift.
+
+### The admin feature
+
+```
+features/admin/
+├── api.ts                # typed wrapper over every admin endpoint
+├── bootcamp-context.tsx   # the selected intake, shared across all 5 admin screens
+└── components.tsx         # BootcampSwitcher, AsyncSection, ConfirmDialog, Pagination
+```
+
+All five admin pages (`pages/admin/*`) are scoped to one bootcamp at a time.
+`BootcampProvider` sits above them as a layout route
+(`routes/admin-layout.tsx`) rather than inside each page, so switching from
+Candidates to Interviews does not re-fetch the bootcamp list or lose the
+selection — it is persisted to `localStorage` and falls back to the newest
+intake if the stored one is gone.
+
+There is no react-query dependency. `hooks/use-async.ts` covers what the five
+screens actually need — loading state, error state, refetch, and cancellation
+of a stale response — in about 80 lines, which is lighter than adding a query
+library for five screens.
 
 ### The auth feature
 
@@ -126,6 +166,9 @@ invite flow, so the component's shape does not change; only `enabled` flips.
 | Auth traffic | Through FastAPI | Browser to GoTrue directly | One API surface, one place for error shaping and logging |
 | Migrations | Supabase CLI | Alembic | Chosen by project owner; SQL is the source of truth, ORM mirrors it by hand |
 | Frontend layout | Feature-first | Type-first | Three role surfaces would otherwise fragment |
+| Admin scope model | `SUPER_ADMIN` global, `ADMIN` bootcamp-scoped | Flatten `ADMIN` to global too | Keeps per-bootcamp admin isolation viable once a second admin exists; requested by project owner |
+| Frontend data fetching | A ~80-line hook (`use-async.ts`) | react-query / SWR | Five admin screens don't justify a query-library dependency |
+| Audit logging | One `audit_service.record()` call site per mutation | Database triggers | Triggers can't capture *why* (the human-readable summary, the actor's reason) — only *what* |
 
 ## Consequences worth remembering
 
