@@ -38,6 +38,14 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "Saylani Bootcamp Recruitment Platform"
 
+    # --- Candidate document uploads ---
+    # Private bucket; files are only ever reachable through a short-lived
+    # signed URL the API mints, never by a public path.
+    DOCUMENTS_BUCKET: str = "candidate-documents"
+    DOCUMENT_MAX_BYTES: int = 5 * 1024 * 1024
+    # Seconds a download link stays valid. Short by intent: these are CNICs.
+    DOCUMENT_SIGNED_URL_TTL: int = 120
+
     # Supabase signs access tokens with this audience.
     JWT_AUDIENCE: str = "authenticated"
     # Algorithms are selected per token in app/core/security.py; Supabase may
@@ -69,6 +77,10 @@ class Settings(BaseSettings):
     def jwks_url(self) -> str:
         """Public signing keys for asymmetric (ES256/RS256) access tokens."""
         return f"{self.auth_url}/.well-known/jwks.json"
+
+    @property
+    def storage_url(self) -> str:
+        return f"{self.SUPABASE_URL}/storage/v1"
 
     @property
     def gmail_configured(self) -> bool:
