@@ -1,8 +1,289 @@
-> **Branch:** `development` — last updated 2026-08-20
+> **Branch:** `huzaifa` — last updated 2026-08-22
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-22 — Fixtures removed, documents built, two real auth bugs found
+
+**Branch:** `huzaifa`
+
+Brief: remove every mock fixture, fix routing, make each bootcamp's dashboard
+properly scoped, and fix a Base UI menu crash. Three decisions were taken
+first: build real document uploads (Supabase Storage + a `documents` table)
+rather than hiding the page, add `PATCH /auth/me` so candidates can edit their
+own profile, and keep interview scores hidden from candidates.
+
+### The menu crash, and what it really was
+
+```
+Base UI: MenuGroupContext is missing.
+```
+
+`DropdownMenuLabel` renders `MenuPrimitive.GroupLabel`, which Base UI requires
+to sit inside a `Menu.Group`. Three call sites rendered one loose — including
+`portal-layout.tsx`, which is on **every** portal page, so the account menu
+took the whole app down whenever it opened. Fixed by wrapping each in
+`DropdownMenuGroup`, not by suppressing the error.
+
+A `RouteErrorBoundary` is now attached as `errorElement` on every top-level
+branch, so the next error of this class degrades to one section instead of a
+white screen.
+
+### Two auth bugs, found by end-to-end testing rather than review
+
+**1. Clock skew — spurious 401s right after login (the serious one).**
+
+The scope test kept failing: a freshly created admin's token was rejected on
+every call while the super admin's worked. Three hypotheses were wrong (JWKS
+rotation, an empty key set, upstream rate limiting) before unwrapping the real
+exception:
+
+```
+ImmatureSignatureError: The token is not yet valid (iat)
+```
+
+GoTrue stamps `iat` from **its** clock. Supabase's runs a second or two ahead
+of this machine, so a token is "not yet valid" for the first moments of its
+life. The super admin's token only worked because it had been minted seconds
+earlier and local time had caught up — which is exactly why this looked
+intermittent rather than systematic.
+
+In production this reads as *users randomly getting 401s immediately after
+signing in successfully*. Fixed with a 60-second `leeway` on decode, with
+tests covering drift up to 59s, rejection at an hour, and confirmation that
+expiry, audience, subject, and signature checks all still hold.
+
+**2. A JWKS outage was reported as a bad token.**
+
+Found while chasing the above. `security.md` claimed an unreachable JWKS
+endpoint returns 502 and an unknown `kid` returns 401, but any
+`PyJWKClientError` whose message contained "Unable to find" produced a 401 —
+including a key set that came back empty. Telling every signed-in user their
+token is invalid, for a fault none of them can fix, is the wrong answer.
+
+Now: a connection error or an unreadable/empty key set is a 502; a readable
+key set that genuinely lacks the `kid` is a 401. An unknown `kid` also
+refetches once before giving up, so genuine key rotation resolves instead of
+locking everyone out.
+
+### Documents — migration `20260820160000_candidate_documents.sql`
+
+A `documents` table indexing objects in a **private** Supabase Storage bucket,
+plus `document_type` and `document_status` enums. Metadata only — no base64
+column, or every listing query would drag megabytes through the API.
+
+The browser never holds a storage credential: uploads pass through the API
+(the only place size and content-type limits can be enforced), and reads are
+served by a signed URL valid for 120 seconds. Content types are restricted to
+PDF/JPEG/PNG/WebP — SVG is excluded deliberately, being an image that can
+carry script.
+
+One live document per `(application, doc_type)`: a re-upload replaces the row,
+so "the candidate's CNIC front" is never ambiguous. A rejection must carry a
+reason, enforced by a CHECK constraint *and* at the service boundary so the
+admin gets a usable message instead of an integrity error. Accepted documents
+cannot be replaced or deleted by the candidate.
+
+### Everything else wired to real data
+
+`lib/mock-data.ts` is **deleted**. Every fixture it exported had reached zero
+consumers first, verified per-symbol rather than by deleting and seeing what
+broke.
+
+- **Super admin**: Bootcamps (create/edit/delete, assign admins, programme
+  sets), Administrators (provision staff, roles, activation, password reset),
+  Analytics (funnel, tracks, cities, 30-day trend), Overview.
+- **Programs**: full CRUD screen — the backend had it since the last sprint
+  with no UI.
+- **Candidate**: dashboard, application *and* the apply flow, interview
+  schedule, documents.
+- **Account**: one `/account` screen for every role, replacing a
+  candidate-only profile page that the topbar linked staff to — they were
+  bounced straight back out by the role gate.
+
+`PlatformStats` gained `by_city`, `applications_over_time`, and per-intake
+summaries so the super-admin screens need one call rather than N+1.
+
+### Scoping proven, not assumed
+
+The provider now wraps both staff branches, so a super admin uses the same
+per-bootcamp tools without a parallel mechanism. A live end-to-end run —
+create intake → set deadlines → create admin → assign → sign in as them —
+confirms an admin sees exactly one intake and gets **403** on another's
+detail, applicants, interviews, documents, emails, and stats, plus platform
+stats, global audit, bootcamp creation, and staff creation. 31/31 checks pass.
+
+A second run covers documents end to end against live Supabase: apply →
+checklist → upload → signed-URL download (bytes match) → executable refused →
+reject without reason refused → reject with reason → candidate sees it →
+re-upload → accept → deletion refused. 16/16 pass.
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| Backend tests | 185 pass, up from 120 |
+| Frontend typecheck | Clean |
+| Production build | Clean |
+| Frontend lint | 0 errors |
+| Fixture imports outside tests | None — the module is gone |
+| Live scope/flow run | 31/31 |
+| Live documents run | 16/16 |
+
+Lint warnings dropped from a mix including purity, immutability, and
+ref-during-render to only fast-refresh notices plus three `set-state-in-effect`
+in files this sprint did not touch.
+
+### Not done
+
+The Gmail OAuth Production flip and the Resend/SendGrid migration remain open,
+as does the AI Interviewer and Agilytic — all explicitly out of scope.
+
+---
+
+## 2026-08-20 (night) — Admin portal: full backend surface, frontend wired to it
+
+**Branch:** `huzaifa`
+
+Brief: build out full admin functionality — every feature an admin should
+have, wired to real data, plus a working `SUPER_ADMIN` account
+(`admin@sita2o.com`). Preceded by a codebase-wide analysis pass (branches
+confirmed: `main`, `development`, `waqas`, `huzaifa` all present) that
+surfaced three real bugs, folded into this work rather than fixed separately.
+
+Four decisions confirmed before building: `SUPER_ADMIN` stays the only truly
+global role rather than flattening `ADMIN` to global too, three new tables
+(`interviews`, `email_log`, `audit_logs`) get built rather than left as mock
+UI, the password was supplied directly rather than generated, and the build
+went page-by-page (Dashboard → Candidates → Phases/Interviews → Emails) rather
+than backend-then-frontend in two passes.
+
+### Schema — migration `20260820140000_admin_portal.sql`
+
+Three new tables, three new enums (`interview_mode`, `interview_status`,
+`email_status`). Applied over the pooler connection — the Supabase CLI is
+still not on this machine's PATH — and recorded in the ledger.
+
+`email_log` and `audit_logs` carry **no RLS policies at all**, a deliberate
+departure from every earlier table: both are staff-only with no "select own
+row" case for a candidate, so the safest policy is none rather than a
+partial one someone might extend incorrectly later.
+
+`interviews` is many-per-application by design: a reschedule adds a row
+instead of overwriting one, so the history of attempts survives.
+`Application.stage` remains the single source of truth for pipeline position
+— interview rows never drive routing decisions on their own.
+
+### Backend: 21 → 59 endpoints
+
+Nine route modules (four new: `interviews`, `emails`, `users`, `audit`), nine
+matching services, plus `audit_service.py` as the one call site every mutating
+service goes through — `record()` joins the caller's transaction rather than
+committing separately, so a failed action never leaves an audit row claiming
+it succeeded.
+
+**Staff provisioning answers the open question from `security.md`.** `POST
+/users` (`create_staff`) calls GoTrue's admin API with `email_confirm=True`,
+rejects `role=CANDIDATE` outright, and is gated `require_super_admin`. The
+first super admin has nobody to authorise them, so
+`scripts/create_super_admin.py` exists as a one-time, idempotent bootstrap
+reading credentials from env vars only.
+
+**Guardrails added, not just documented:** a super admin cannot demote,
+deactivate, or delete their own account, or the last active super admin —
+checked server-side, both return `409` since the caller could resolve the
+conflict (promote someone else first), which is not what `403` means.
+
+### Three real bugs found and fixed
+
+Found during an initial full-codebase review (requested separately, before
+this build started), then fixed as part of it rather than deferred:
+
+1. **HIGH — `PATCH` on a phase window silently wiped the deadline.**
+   `update_phase_window` assigned `opens_at` and `deadline_at`
+   unconditionally; sending only one field nulled the other, leaving
+   registration open indefinitely with no error. `PhaseUpdate` schema and
+   service now use `model_dump(exclude_unset=True)`, matching the pattern
+   `update_bootcamp` already used correctly. Six unit tests pin the
+   omitted-vs-explicit-null distinction; verified against the *live* database
+   in a smoke test, not just the fixture.
+2. **MEDIUM — duplicate-application race surfaced as a raw 500.** The
+   pre-insert `SELECT` is not a lock; two simultaneous submissions could both
+   pass it and collide on the DB's unique constraint. Now caught by
+   constraint name and translated to the same `409` the non-racing path
+   already returned.
+3. **MEDIUM — rejection was permanently terminal.** `advance_stage` raised
+   `403 permission_denied` for any non-`ACTIVE` application, with no route
+   back — and no way to reapply either, since `(bootcamp_id, profile_id)` is
+   unique. Added `POST /applications/{id}/reinstate`; corrected the status
+   code to `409` to match the identical "already at this stage" case two
+   lines above it in the same function.
+
+### Frontend: admin portal wired to the real API
+
+`lib/types.ts` is now the canonical mirror of every backend schema, not just
+the enums — `lib/mock-data.ts` re-exports `ApplicationStage` from it instead
+of redeclaring it, closing a drift risk that existed even before this session.
+
+**No react-query added.** `hooks/use-async.ts` covers loading/error/refetch
+and stale-response cancellation in ~80 lines — judged lighter than a query
+library for five screens.
+
+**`BootcampProvider` is a layout route**, not a per-page hook: the selected
+intake has to survive navigation between Candidates, Interviews, Phases, and
+Emails, so it sits above all five as `routes/admin-layout.tsx` and persists
+the choice to `localStorage`.
+
+**Batch interview scheduling** spaces slots evenly from a chosen start time
+and duration, is all-or-nothing server-side, and advances each candidate to
+`INTERVIEW_SCHEDULED` automatically. Built for the 50/50/25 split the docs
+describe, but nothing hardcodes those numbers — batch size is a plain input.
+
+**Email compose** renders four starting templates through the backend's
+`$candidate_name`-style merge fields (`string.Template.safe_substitute`,
+chosen specifically because an admin's typo in a placeholder must not fail
+the send — it must render literally and stay visible in the sent mail).
+
+Two `set-state-in-effect` lint warnings introduced during the build were
+removed before finishing, not left for later: one intake-selection default
+moved from an effect into a `useMemo` (it was being derived correctly every
+render already; writing it back bought nothing), and one phase-edit form's
+sync-with-server-props effect was replaced with a remount key built from the
+server's own field values.
+
+### Verified end to end against the live database, not assumed
+
+Real login as `admin@sita2o.com` → confirmed `SUPER_ADMIN` from both the
+login response and `/auth/me`. Real Bootcamp 07 created with all 5 tracks.
+The phase-window fix specifically verified live: a deadline set, then a
+follow-up PATCH touching only `opens_at`, then confirmed the deadline was
+still present — the exact failure mode of bug #1, reproduced and disproven
+against production data, not a mock.
+
+Every self-guardrail exercised for real: self-demotion `409`, self-deactivation
+`409`, no-token `401`. Response shapes for all 7 representative endpoints
+diffed key-for-key against the TypeScript types — zero missing, zero extra
+fields.
+
+| Check | Result |
+|-------|--------|
+| Backend tests | 120/120 pass, up from 38 |
+| Frontend typecheck | Clean |
+| Frontend production build | Clean |
+| Frontend lint | 0 errors (34 pre-existing-style warnings, same count as before minus the 2 introduced-then-fixed) |
+| OpenAPI schema generation | 44 paths, 67 models, no errors |
+| Live smoke test | Login, stats, Bootcamp 07 lifecycle, phase-window regression, all guardrails — all pass |
+
+### Not yet wired
+
+Super-admin pages (`/super-admin/*` — Bootcamps, Administrators, Analytics)
+and the whole candidate portal still render `lib/mock-data.ts` fixtures. The
+backend every one of them needs already exists and is covered by the same
+`features/admin/api.ts` wrapper — `bootcampApi`, `userApi`, `platformApi`,
+and `GET /me/interviews` are ready to call.
 
 ---
 
