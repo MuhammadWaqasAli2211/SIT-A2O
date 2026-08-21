@@ -9,8 +9,8 @@ from app.schemas.auth import (
     SignupResponse,
 )
 from app.schemas.common import MessageResponse
-from app.schemas.user import ProfileOut
-from app.services import auth_service
+from app.schemas.user import ProfileOut, SelfProfileUpdate, UserDetail
+from app.services import auth_service, user_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -40,3 +40,22 @@ def logout(token: AccessToken) -> MessageResponse:
 @router.get("/me", response_model=ProfileOut)
 def me(user: CurrentUser) -> ProfileOut:
     return ProfileOut.model_validate(user)
+
+
+@router.get("/me/detail", response_model=UserDetail)
+def me_detail(user: CurrentUser, db: DbSession) -> UserDetail:
+    """The caller's own record, including their candidate fields."""
+    return user_service.get_detail(db, user.id)
+
+
+@router.patch("/me", response_model=UserDetail)
+def update_me(payload: SelfProfileUpdate, user: CurrentUser, db: DbSession) -> UserDetail:
+    """Update your own contact and candidate details.
+
+    Deliberately a different schema from the admin `PATCH /users/{id}`: this
+    one has no route to `role` or `is_active`, so a candidate editing their own
+    phone number cannot reach a privilege field even if one were added to the
+    admin schema later.
+    """
+    user_service.update_own_profile(db, user, payload)
+    return user_service.get_detail(db, user.id)
