@@ -6,8 +6,6 @@ import { PageHeader } from '@/components/shared/portal-ui'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/hooks/use-auth'
 import { ROLE_LABEL } from '@/lib/portal-nav'
@@ -48,6 +46,7 @@ function Toggle({
 
 export default function CandidateProfilePage() {
   const { profile, logout } = useAuth()
+  const candidate = profile?.candidate_profile ?? null
   const [notifications, setNotifications] = useState({
     email: true,
     sms: true,
@@ -135,31 +134,31 @@ export default function CandidateProfilePage() {
               <CardHeader>
                 <CardTitle className="text-base">Personal details</CardTitle>
                 <CardDescription>
-                  Changes here update your application record too.
+                  {candidate
+                    ? 'Captured when you registered for a bootcamp.'
+                    : 'These fill in automatically once you register for a bootcamp.'}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-col gap-5">
+                {/* Read-only. The registration form is the single place this
+                    data is entered; a second editable copy here would let the
+                    profile and the submitted application disagree. */}
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="full_name">Full name</Label>
-                    <Input id="full_name" defaultValue={profile?.full_name ?? ''} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" defaultValue={profile?.email} disabled />
-                    <p className="text-xs text-muted-foreground">
-                      Your email is your login and cannot be changed here.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input id="phone" type="tel" defaultValue={profile?.phone ?? '0300 1234567'} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Input id="city" defaultValue="Karachi" />
-                  </div>
+                  <Field label="Full name" value={candidate?.full_name ?? profile?.full_name} />
+                  <Field label="Email" value={profile?.email} hint="Your login. It cannot be changed here." />
+                  <Field label="Phone" value={candidate?.phone ?? profile?.phone} />
+                  <Field label="City" value={candidate?.city} />
+                  <Field label="Father's name" value={candidate?.father_name} />
+                  <Field label="Father's phone" value={candidate?.father_phone} />
+                  <Field label="Date of birth" value={formatDate(candidate?.date_of_birth)} />
+                  <Field label="Gender" value={candidate?.gender} />
+                  <Field label="Your CNIC" value={candidate?.cnic} emptyNote="Not provided" />
+                  <Field label="Father's CNIC" value={candidate?.father_cnic} />
+                  <Field label="Saylani roll number" value={candidate?.saylani_roll_number} />
+                  <Field label="Last qualification" value={candidate?.education} />
                 </div>
+
+                <Field label="Address" value={candidate?.address} />
               </CardContent>
             </Card>
           </motion.div>
@@ -274,4 +273,45 @@ export default function CandidateProfilePage() {
       </div>
     </>
   )
+}
+
+
+/* ------------------------------------------------------------- helpers -- */
+
+/**
+ * One read-only detail. Renders an explicit placeholder rather than a blank
+ * line, so an unregistered candidate sees "not yet provided" rather than
+ * wondering whether the page failed to load.
+ */
+function Field({
+  label,
+  value,
+  hint,
+  emptyNote = 'Not yet provided',
+}: {
+  label: string
+  value?: string | null
+  hint?: string
+  emptyNote?: string
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <span
+        className={
+          value ? 'text-sm text-foreground' : 'text-sm text-muted-foreground/60 italic'
+        }
+      >
+        {value || emptyNote}
+      </span>
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </div>
+  )
+}
+
+function formatDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
 }
