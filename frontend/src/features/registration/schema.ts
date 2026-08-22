@@ -12,6 +12,25 @@
 
 import { z } from 'zod'
 
+/**
+ * Age on the day of applying, calendar-correct.
+ *
+ * Duplicated deliberately from `fields.tsx` rather than imported: schema.ts is
+ * the validation layer and importing from a component module would make the
+ * dependency point the wrong way. Both call sites are one expression and are
+ * tested by the same submit.
+ */
+function isEighteenOrOlder(value: unknown): boolean {
+  if (typeof value !== 'string' || !value) return false
+  const dob = new Date(value)
+  if (Number.isNaN(dob.getTime())) return false
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const m = today.getMonth() - dob.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1
+  return age >= 18
+}
+
 import {
   CAMPUSES,
   CITIES,
@@ -28,6 +47,9 @@ import {
 } from '@/features/registration/constants'
 import { DECLARATIONS, POLICY_CONSENT } from '@/features/registration/terms'
 
+/** Hard-capped at the input as well, so this bound is a backstop, not the UX. */
+export const ROLL_NUMBER_MAX = 6
+
 /** Unicode-aware, matching the signup form: O'Brien and Anne-Marie are names. */
 const NAME_ALLOWED = /^[\p{L}\s'.-]+$/u
 
@@ -36,6 +58,21 @@ const PK_PHONE = /^(\+92|0)?3\d{2}[\s-]?\d{7}$/
 
 /** 13 digits, hyphens optional. */
 const CNIC = /^\d{5}-?\d{7}-?\d$/
+
+/** Present-and-valid, or absent. */
+export const optionalCnic = z
+  .string()
+  .trim()
+  .regex(CNIC, 'Enter a valid CNIC, e.g. 42101-1234567-1')
+  .optional()
+  .or(z.literal(''))
+
+/** Required and valid — swapped in once the applicant is 18 or older. */
+export const requiredCnic = z
+  .string()
+  .trim()
+  .min(1, 'Your CNIC is required from age 18')
+  .regex(CNIC, 'Enter a valid CNIC, e.g. 42101-1234567-1')
 
 function personName(label: string) {
   return z
@@ -87,6 +124,7 @@ export const identitySchema = z.object({
     .string()
     .trim()
     .min(1, 'Saylani roll number is required')
+    .max(ROLL_NUMBER_MAX, `Roll number cannot exceed ${ROLL_NUMBER_MAX} digits`)
     .regex(/^\d+$/, 'Roll number must contain digits only'),
 })
 
@@ -97,14 +135,10 @@ export const contactSchema = z.object({
   phone: phone('Phone number'),
   father_phone: phone("Father's phone number"),
 
-  // Optional: applicants under 18 may not hold a CNIC yet. Empty passes;
-  // anything present must still be a real CNIC rather than a placeholder.
-  cnic: z
-    .string()
-    .trim()
-    .regex(CNIC, 'Enter a valid CNIC, e.g. 42101-1234567-1')
-    .optional()
-    .or(z.literal('')),
+  // Optional *here*, because whether it is required depends on a date entered
+  // in the previous section. The age rule is applied by `registrationSchema`
+  // below and by the unlock gate; this shape only says "if present, be valid".
+  cnic: optionalCnic,
 
   // Required — a guardian's CNIC is always available even when the
   // applicant's is not.
@@ -158,11 +192,27 @@ export const termsSchema = z.object(
 
 /* ------------------------------------------------------- combined -- */
 
+/**
+ * The whole form.
+ *
+ * The CNIC rule lives here rather than on `contactSchema` because it reads a
+ * field from a different section: an applicant who is 18 or older must supply
+ * their own CNIC, while a younger one may not have been issued one yet.
+ * `path: ['cnic']` puts the message under the field it concerns.
+ */
 export const registrationSchema = locationSchema
   .extend(identitySchema.shape)
   .extend(contactSchema.shape)
   .extend(educationSchema.shape)
   .extend(termsSchema.shape)
+  .superRefine((values, ctx) => {
+    if (!isEighteenOrOlder(values.date_of_birth) || values.cnic) return
+    ctx.addIssue({
+      code: 'custom',
+      path: ['cnic'],
+      message: 'Your CNIC is required from age 18',
+    })
+  })
 
 export type LocationValues = z.infer<typeof locationSchema>
 export type IdentityValues = z.infer<typeof identitySchema>
