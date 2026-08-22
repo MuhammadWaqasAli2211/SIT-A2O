@@ -56,4 +56,19 @@ class CandidateProfile(Base, TimestampMixin):
     city: Mapped[str | None] = mapped_column(String(80))
     education: Mapped[str | None] = mapped_column(String(120))
 
+    # Captured at registration. These describe the person rather than any one
+    # intake, so a second application reuses them instead of asking again —
+    # and the candidate's profile page reads them straight from here.
+    full_name: Mapped[str | None] = mapped_column(String(100))
+    father_name: Mapped[str | None] = mapped_column(String(100))
+    gender: Mapped[str | None] = mapped_column(String(10))
+    phone: Mapped[str | None] = mapped_column(String(30))
+    father_phone: Mapped[str | None] = mapped_column(String(30))
+    father_cnic: Mapped[str | None] = mapped_column(String(20))
+    address: Mapped[str | None] = mapped_column(String(220))
+    saylani_roll_number: Mapped[str | None] = mapped_column(String(30))
+
+    # Object path inside the storage bucket, never the image bytes.
+    picture_path: Mapped[str | None] = mapped_column(String(300))
+
     profile: Mapped[Profile] = relationship(back_populates="candidate_profile")

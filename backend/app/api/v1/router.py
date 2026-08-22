@@ -9,6 +9,7 @@ from app.api.v1.routes import (
     emails,
     health,
     interviews,
+    profile,
     programs,
     users,
 )
@@ -24,3 +25,4 @@ api_router.include_router(emails.router)
 api_router.include_router(users.router)
 api_router.include_router(documents.router)
 api_router.include_router(audit.router)
+api_router.include_router(profile.router)

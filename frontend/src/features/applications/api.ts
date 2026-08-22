@@ -63,21 +63,52 @@ export interface OpenBootcamp {
   programs: Program[]
 }
 
+/** Mirrors ApplicationCreate — the whole registration form in one payload. */
+export interface RegistrationPayload {
+  bootcamp_id: string
+  program_id: string
+  full_name: string
+  father_name: string
+  gender: string
+  date_of_birth: string
+  city: string
+  email: string
+  phone: string
+  father_phone: string
+  cnic?: string | null
+  father_cnic: string
+  address: string
+  saylani_roll_number: string
+  prior_course: string
+  prior_course_status: string
+  campus: string
+  computer_proficiency: string
+  last_qualification: string
+  referral_source: string
+  has_laptop: boolean
+  terms_version: string
+}
+
+/** Mirrors RegistrationResult — what the success modal renders. */
+export interface RegistrationResult {
+  application_id: string
+  candidate_code: string
+  bootcamp_name: string
+  program_title: string
+  email: string
+}
+
 export const applicationsApi = {
+  async register(payload: RegistrationPayload) {
+    const { data } = await api.post<RegistrationResult>('/applications', payload)
+    return data
+  },
   async mine() {
     const { data } = await api.get<ApplicationDetail[]>('/applications/mine')
     return data
   },
   async get(id: string) {
     const { data } = await api.get<ApplicationDetail>(`/applications/${id}`)
-    return data
-  },
-  async submit(payload: {
-    bootcamp_id: string
-    program_id: string
-    statement?: string
-  }) {
-    const { data } = await api.post<ApplicationDetail>('/applications', payload)
     return data
   },
   async openBootcamps() {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Controller, useFormContext } from 'react-hook-form'
-import { ImageUp, Info, Laptop, X } from 'lucide-react'
+import { CheckCircle2, ImageUp, Info, Laptop, Loader2, X } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,8 @@ import {
   SelectField,
   unlockedCount,
 } from '@/features/registration/fields'
+import { pictureApi } from '@/features/registration/picture-api'
+import { toErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 
 export function EducationSection() {
@@ -81,6 +83,8 @@ export function EducationSection() {
 function PictureField({ locked }: { locked: boolean }) {
   const { control } = useFormContext()
   const [preview, setPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // Object URLs are not garbage collected on their own; without this every
   // re-pick would leak the previous image for the life of the page.
@@ -96,10 +100,34 @@ function PictureField({ locked }: { locked: boolean }) {
         control={control}
         name="picture"
         render={({ field }) => {
-          function choose(file: File | undefined) {
+          /**
+           * Uploads immediately on selection rather than at submit.
+           *
+           * The field is only set once the upload has succeeded, so the form's
+           * unlock gate doubles as proof the picture is stored — there is no
+           * way to reach the last step with a photo that never made it.
+           */
+          async function choose(file: File | undefined) {
             if (preview) URL.revokeObjectURL(preview)
-            setPreview(file ? URL.createObjectURL(file) : null)
-            field.onChange(file ?? undefined)
+            setUploadError(null)
+
+            if (!file) {
+              setPreview(null)
+              field.onChange(undefined)
+              return
+            }
+
+            setPreview(URL.createObjectURL(file))
+            setUploading(true)
+            try {
+              await pictureApi.upload(file)
+              field.onChange(file)
+            } catch (error) {
+              field.onChange(undefined)
+              setUploadError(toErrorMessage(error, 'Could not upload your picture.'))
+            } finally {
+              setUploading(false)
+            }
           }
 
           return (
@@ -111,8 +139,16 @@ function PictureField({ locked }: { locked: boolean }) {
                 )}
               >
                 <ImageUp className="size-6 text-muted-foreground" />
-                <span className="text-sm font-medium">
-                  {field.value ? 'Choose a different picture' : 'Choose a picture'}
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  {uploading && <Loader2 className="size-3.5 animate-spin" />}
+                  {field.value && !uploading && (
+                    <CheckCircle2 className="size-3.5 text-success" />
+                  )}
+                  {uploading
+                    ? 'Uploading…'
+                    : field.value
+                      ? 'Uploaded — choose a different picture'
+                      : 'Choose a picture'}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {(field.value as File | undefined)?.name ?? 'JPG, JPEG or PNG · under 1 MB'}
@@ -120,9 +156,9 @@ function PictureField({ locked }: { locked: boolean }) {
                 <input
                   type="file"
                   accept={PICTURE_ACCEPT}
-                  disabled={locked}
+                  disabled={locked || uploading}
                   className="sr-only"
-                  onChange={(e) => choose(e.target.files?.[0])}
+                  onChange={(e) => void choose(e.target.files?.[0])}
                 />
               </label>
 
@@ -138,7 +174,7 @@ function PictureField({ locked }: { locked: boolean }) {
                     size="icon"
                     variant="outline"
                     aria-label="Remove picture"
-                    onClick={() => choose(undefined)}
+                    onClick={() => void choose(undefined)}
                     className="absolute -top-2 -right-2 size-7 rounded-full"
                   >
                     <X className="size-3.5" />
@@ -152,6 +188,12 @@ function PictureField({ locked }: { locked: boolean }) {
 
       {/* Inline rather than a stacked list: three short rules cost three rows
           of height for no added clarity. */}
+      {uploadError && (
+        <p role="alert" className="text-xs font-medium text-destructive">
+          {uploadError}
+        </p>
+      )}
+
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
         {PICTURE_RULES.map((rule) => (
           <li key={rule} className="flex items-center gap-1.5 text-xs text-muted-foreground">

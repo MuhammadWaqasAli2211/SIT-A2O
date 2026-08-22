@@ -12,6 +12,13 @@
  * applicant was actually shown.
  */
 
+/**
+ * Identifies the wording below. Sent with the submission and stored beside the
+ * acceptance timestamp, so a record says which text was agreed to rather than
+ * merely when. Bump this whenever a declaration changes.
+ */
+export const TERMS_VERSION = '2026-08-22'
+
 export interface Declaration {
   /** Field name in the form schema, and the column suffix when persisted. */
   id: string
