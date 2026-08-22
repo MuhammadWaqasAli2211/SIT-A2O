@@ -1,14 +1,21 @@
 """Application settings, loaded from environment. Fails fast on missing values."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The backend package root, resolved from this file rather than from the
+# working directory. `.env` lives beside it, and anchoring the path here means
+# the app starts the same way whether it was launched from backend/, from the
+# repo root, or by a supervisor with no meaningful cwd at all.
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=_BACKEND_DIR / ".env", env_file_encoding="utf-8", extra="ignore"
     )
 
     # --- Supabase ---
