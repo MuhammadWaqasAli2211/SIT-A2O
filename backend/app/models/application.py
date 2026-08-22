@@ -53,6 +53,21 @@ class Application(Base, TimestampMixin):
     is_selected: Mapped[bool | None] = mapped_column(Boolean)
 
     statement: Mapped[str | None] = mapped_column(Text)
+
+    # Registration answers specific to this intake. Person-level answers live
+    # on candidate_profiles; these are the ones that could differ next time.
+    prior_course: Mapped[str | None] = mapped_column(String(120))
+    prior_course_status: Mapped[str | None] = mapped_column(String(20))
+    campus: Mapped[str | None] = mapped_column(String(120))
+    computer_proficiency: Mapped[str | None] = mapped_column(String(20))
+    last_qualification: Mapped[str | None] = mapped_column(String(40))
+    referral_source: Mapped[str | None] = mapped_column(String(40))
+    has_laptop: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Paired by a CHECK constraint: a timestamp without the version cannot say
+    # which wording was accepted.
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    terms_version: Mapped[str | None] = mapped_column(String(20))
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
