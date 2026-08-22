@@ -4,7 +4,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import ApplicationStage, ApplicationStatus
-from app.schemas.bootcamp import ProgramOut
+from app.schemas.bootcamp import PhaseOut, ProgramOut
 
 
 class ApplicationCreate(BaseModel):
@@ -35,6 +35,12 @@ class ApplicationOut(BaseModel):
     program_id: uuid.UUID
     stage: ApplicationStage
     status: ApplicationStatus
+
+    # None until the interview has been decided. The tracker uses it to tell
+    # "waiting on a result" apart from "cleared it", which the stage alone
+    # cannot express while a candidate is still sitting at INTERVIEWED.
+    is_selected: bool | None = None
+
     statement: str | None = None
     applied_at: datetime
 
@@ -43,6 +49,14 @@ class ApplicationDetail(ApplicationOut):
     program: ProgramOut
     bootcamp_name: str
     timeline: list[StageTransitionOut] = Field(default_factory=list)
+
+    # The applicant's own deadlines. Carried here rather than behind a separate
+    # candidate endpoint because the tracker needs them on every render and
+    # they cost no extra query — the bootcamp is already loaded.
+    #
+    # Safe to expose: PhaseOut is windows and an open flag, nothing about other
+    # applicants or the intake's internal status.
+    phases: list[PhaseOut] = Field(default_factory=list)
 
 
 class ApplicantRow(BaseModel):

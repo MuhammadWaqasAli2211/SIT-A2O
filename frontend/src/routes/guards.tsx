@@ -1,6 +1,10 @@
-import { Loader2 } from 'lucide-react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { ArrowRight, ClipboardPen, Loader2 } from 'lucide-react'
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 
+import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useApplication } from '@/features/applications/application-context'
 import { useAuth } from '@/hooks/use-auth'
 import { HOME_BY_ROLE, type UserRole } from '@/lib/types'
 
@@ -29,6 +33,51 @@ export function RoleRoute({ allow }: { allow: UserRole[] }) {
   if (isLoading) return <FullPageSpinner />
   if (!profile) return <Navigate to="/login" replace />
   if (!allow.includes(profile.role)) return <Navigate to={HOME_BY_ROLE[profile.role]} replace />
+  return <Outlet />
+}
+
+/**
+ * Requires a submitted bootcamp application, not merely an account.
+ *
+ * Locking the sidebar row is not enough on its own — the URL is still typeable
+ * and still bookmarkable, and behind it sit pages that would otherwise render
+ * fixtures as though they were the user's own data.
+ *
+ * Explains rather than redirects. Bouncing somebody who followed a link from an
+ * email to `/dashboard` with no word why is worse than telling them what the
+ * page is and what unlocks it.
+ */
+export function RequiresApplication() {
+  const { hasRegistered, loading } = useApplication()
+
+  if (loading) {
+    return (
+      <>
+        <PageHeader title="Loading" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </>
+    )
+  }
+
+  if (!hasRegistered) {
+    return (
+      <>
+        <PageHeader title="Not available yet" />
+        <EmptyState
+          icon={ClipboardPen}
+          title="Available after you register"
+          description="This page summarises a bootcamp application. You have an account, but you have not registered for a bootcamp yet — once you do, this unlocks."
+          action={
+            <Button render={<Link to="/dashboard" />}>
+              Back to overview
+              <ArrowRight className="size-4" />
+            </Button>
+          }
+        />
+      </>
+    )
+  }
+
   return <Outlet />
 }
 

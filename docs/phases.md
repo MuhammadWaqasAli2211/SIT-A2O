@@ -1,4 +1,4 @@
-> **Branch:** `huzaifa` — last updated 2026-08-20
+> **Branch:** `huzaifa` — last updated 2026-08-22
 
 # Workflow Phases
 
@@ -6,6 +6,38 @@ Four gates. Each is opened and closed by an admin, each has a deadline, and no
 candidate advances without an explicit admin action.
 
 Phase state lives in `bootcamp_phases`, one row per (bootcamp, phase).
+
+---
+
+## Two different things called "stages"
+
+Phases are admin gates. The candidate journey is what a candidate sees. They
+are related but not the same count, and conflating them causes confusion:
+
+| Candidate step (5) | Stored stage(s) | Phase gate |
+|---|---|---|
+| Application | `APPLIED` | `REGISTRATION` |
+| Interview | `INTERVIEW_SCHEDULED`, `INTERVIEWED` | `INTERVIEW` |
+| Physical Interview | `PHYSICAL_INTERVIEW` | *(none — see below)* |
+| Form | `FORM` | `FORM` |
+| Onboarded | `ONBOARDED` | `ONBOARDING` |
+
+Three consequences worth holding on to:
+
+**The Interview step spans two stored stages.** A candidate is told one thing —
+"Interview" — while admins keep the difference between holding a slot and
+having been seen. Batching is impossible without it: the 300 → 50/50/25 split
+is a question about who is scheduled, not who is finished.
+
+**Selection is not a step.** Clearing the interview is the *condition* for
+reaching Physical Interview. Failing it ends the journey at Interview, as
+`REJECTED`. The decision is recorded on `applications.is_selected` —
+`NULL` while undecided, so an un-interviewed candidate never reads as rejected.
+
+**Physical Interview has no phase gate of its own.** `phase_type` has four
+values and this is not one of them; the step sits between the `INTERVIEW` and
+`FORM` windows. *Open question: should it get its own gate and deadline, or
+stay governed by the surrounding two?*
 
 ---
 
@@ -28,27 +60,33 @@ Phase state lives in `bootcamp_phases`, one row per (bootcamp, phase).
   50 / 50 / 25 across slots at 10:00, 11:00, and 12:00.
   *Open question: are these numbers fixed, or configurable per bootcamp?*
 - Candidates receive slot invitations by email (one-click batch trigger)
+- Stage moves `APPLIED` → `INTERVIEW_SCHEDULED` → `INTERVIEWED`. Both render as
+  the single "Interview" node on the candidate's stepper
 - The AI Interviewer scores and filters.
   *Open question: automated scoring over submitted data, or a conversational
   interview?* This determines whether transcripts need storing.
-- Admin reviews results and confirms who advances
+- Admin reviews results and confirms who advances. Advancing sets
+  `is_selected = true`; rejecting from either interview stage sets it `false`
 
-## Phase 3 — Physical assessment
+## Phase 3 — Physical interview
 
 **Opens:** admin advances the interview passers.
-**Closes:** assessment deadline.
+**Closes:** governed by the surrounding windows — this step has no
+`phase_type` value of its own.
 
 - Selected candidates attend in person, one-to-one with HR
-- HR records pass/fail, score, and notes
+- Non-technical: a conversation, not a test. Named `PHYSICAL_INTERVIEW` rather
+  than the earlier `ASSESSMENT` for exactly that reason
+- HR records pass/fail and notes
 - *Open question: does the system schedule these sessions, or only record the
   outcome?*
 
 ## Phase 4 — Form and onboarding
 
-**Opens:** admin advances the assessment passers.
+**Opens:** admin advances the physical-interview passers.
 **Closes:** onboarding deadline.
 
-- Passers receive a form link
+- Passers receive a form link; stage moves to `FORM`
 - The form collects bank details (IBAN) and identity data (CNIC) — both
   sensitive, see `security.md`
 - Submission feeds analytics and Agilytic onboarding
@@ -84,7 +122,9 @@ with two formats in circulation.
    a phase window only ever changes the fields actually sent — an admin
    updating the open date cannot accidentally clear the deadline.
 2. **Transitions are logged.** `stage_transitions` records who moved a candidate,
-   from which stage to which, and why. A rejection is not permanent: `POST
+   from which stage to which, and why. Its `created_at` is the only source of
+   per-step timestamps — there are no dated columns on `applications`, so the
+   log is not optional bookkeeping. A rejection is not permanent: `POST
    /applications/{id}/reinstate` reopens one at an explicit stage.
 3. **Bootcamps are isolated.** An admin never sees another bootcamp's candidates,
    regardless of holding a valid token. Covered directly by

@@ -1,8 +1,174 @@
+<<<<<<< HEAD
 > **Branch:** `huzaifa` — last updated 2026-08-22
+=======
+> **Branch:** `waqas` — last updated 2026-08-22
+>>>>>>> origin/waqas
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-22 (later) — Fix: Register button never left the frozen state
+
+**Branch:** `waqas`
+
+The registration form shipped reachable at `/dashboard/register`, but the
+Register button in the portal header still ran the placeholder from the auth
+task — a toast reading "Registration opens soon" and no navigation. The form
+was only findable by typing the URL.
+
+The freeze was correct when it was written: there was no form to open. It
+simply outlived its reason, and nothing connected the two facts.
+
+```
+- <Button size="sm" onClick={() => toast('Registration opens soon', ...)}>
++ <Button render={<Link to="/dashboard/register" />} size="sm">
+```
+
+`Link` rather than an `onClick` calling `navigate()`. Both route client-side,
+but only the anchor supports middle-click, ctrl-click and "open in new tab",
+and only the anchor is announced as a link. The `render` prop is how this
+codebase composes Base UI buttons with router links — the "Website" button two
+lines below already does exactly this.
+
+The `toast` import became dead and was removed with it.
+
+### Left alone, pending a decision
+
+The button behaves identically for somebody who has already registered. That
+case has not been agreed yet, so it was not changed — the recommendation is
+recorded in `project-status.md` under *Awaiting decisions*.
+
+Worth noting the backend already refuses a duplicate: `application_service.
+submit()` raises `ConflictError` with the existing candidate code, and the
+`unique (bootcamp_id, profile_id)` constraint backs it. The gap is only that
+the UI still invites the attempt.
+
+### Verified
+
+- Typecheck, production build and `oxlint` clean
+- Route path confirmed from the router config rather than assumed
+- **Not** click-tested in a browser — no frontend test runner is configured.
+  The pattern is the one already shipping on the adjacent "Website" button.
+
+---
+
+## 2026-08-22 — Multi-step bootcamp registration form
+
+**Branch:** `waqas`
+
+The form behind the Register button: four sections, one on screen at a time,
+each field unlocking only after the one above it validates. UI and local state
+only — **no database work**, by instruction. The field list was approved before
+any code was written.
+
+### Not the general enrolment form
+
+Adapted from Saylani's public enrolment form rather than copied. The
+differences are the point:
+
+| Change | Why |
+|---|---|
+| Class Preference removed | Bootcamp intake has no class options |
+| Course Status added | Replaces it; only meaningful once a course is named, so it is not rendered before then |
+| Saylani Roll Number added | Bootcamp applicants are existing students |
+| Country locked to Pakistan | One country runs bootcamps |
+| Campus locked to Zaitoon Ashraf IT Park | One campus runs bootcamps |
+| Course list filtered to 19 IT tracks | Six non-IT vocational courses on the public list are not preparation for an IT bootcamp |
+| Laptop callout added | A personal machine is mandatory; worth saying out loud, not burying in a Yes/No |
+| CAPTCHA omitted | Deferred to a later task. No stub either — a fake "not a robot" box implies protection that does not exist |
+
+**Only the applicant's CNIC is optional.** An applicant under 18 may not hold
+one yet; a guardian always does, so `father_cnic` is required. An earlier draft
+had both optional and was corrected.
+
+### Declarations written for this platform
+
+The reference form's declarations were not reused. A bootcamp applicant is
+entering a competitive, deadline-gated process with an interview, a physical
+interview and a capacity limit — none of which apply to open enrolment, and all
+of which they should be told about before agreeing to anything. Five
+declarations now cover accuracy, conduct, attendance and commitment, project
+completion, and the dress code, plus a separate policy consent.
+
+Each is its own checkbox. Bundling them into one "I agree to everything" makes
+consent unfalsifiable and leaves no record of which term was actually shown.
+
+### Progressive unlocking is derived, never stored
+
+`unlockedCount()` walks a section's field order and returns the index of the
+first field that does not parse against its own schema. Field `i` is enabled
+when `i <= unlockedCount`. Clearing a field re-locks everything after it for
+free, with no state to keep in step and no way for the gate to disagree with
+validation.
+
+This is why the schemas are split per section rather than kept as one flat
+object: the gate needs each field's schema reachable through `.shape`.
+
+### A separate stepper, on purpose
+
+`JourneyStepper` was not reused. It is typed to recruitment concepts —
+`ApplicationStage`, stage-to-step mapping, timestamps, a halted flag — none of
+which mean anything to a form, and its demo mode advances on a timer, which is
+exactly wrong for something that must move only when the user says so. Sharing
+it would have meant a third mode and a generic step type, making a component
+that does one job well do two badly.
+
+The *design language* is shared: node sizing, checkmark on completion, rotating
+ring on the active node, connectors filled by transform. A third consumer would
+be the moment to extract a primitive; two is not.
+
+Completed steps are clickable to go back. Forward jumps are not, because that
+would skip the validation each Next enforces.
+
+### Page fold
+
+CSS 3D transforms driven by Motion, no new dependency. The outgoing section
+pivots on its Y axis about the leading edge while a gradient darkens across it
+— the light-catch is what makes it read as paper rather than a rotating
+rectangle. The incoming section settles in from a shallower angle.
+
+Only `transform` and `opacity` animate, so it stays on the compositor.
+`AnimatePresence mode="wait"` sequences the two: overlapping them needs
+absolute positioning and a measured container height, which fights sections of
+different lengths. Reduced motion gets a plain crossfade.
+
+### Two bugs found while building
+
+**Base UI Select treats `''` as a selected value**, not as empty, which
+suppresses the placeholder. The controller now passes `null` for empty while
+form state keeps `''`, so the zod enums still report "required" rather than
+"expected string, received null".
+
+**Object URLs leak.** The picture preview revokes the previous URL on every
+re-pick and on unmount; without that, each change would strand an image for the
+life of the page.
+
+### No new libraries
+
+`react-hook-form`, `@hookform/resolvers`, `zod` and `motion` were all already
+installed. The project has no checkbox primitive, so the declaration checkboxes
+are buttons with `role="checkbox"` and `aria-checked` — real buttons, so
+keyboard operation comes free and the whole row is the hit target.
+
+### Not wired to the Register button
+
+The button in the portal header stays frozen, as previously instructed, and
+submitting persists nothing. The form is reachable at `/dashboard/register` for
+review. Activating the button is a one-line change once the database layer
+exists.
+
+### Verified
+
+- Typecheck (`tsc -b --force`), production build, and `oxlint` all clean
+- Register page code-splits to its own 54 kB chunk, so the rest of the portal
+  does not pay for it
+- Base UI Select and SelectValue props confirmed against their type
+  definitions rather than assumed
+- **Not** click-tested in a browser — no frontend test runner is configured,
+  and adding one would be a new dependency
 
 ---
 
@@ -287,9 +453,455 @@ and `GET /me/interviews` are ready to call.
 
 ---
 
+## 2026-08-20 (night, later still) — Correction: signing up is not registering
+
+**Branch:** `waqas`
+
+The dashboard had been built as though every signed-in user was a candidate.
+They are not, and the distinction is the whole shape of the product:
+
+- **Sign up / log in** creates a **User**. That is all it does. The person now
+  has an account.
+- **Register** — a separate, deliberate action — creates an **Application**.
+  Only now is the person a candidate.
+
+Everything downstream (candidate code, interview, physical interview, form,
+onboarding, the tracker) belongs to the Application, not the User. None of it
+should be reachable, populated, or implied before that second action.
+
+### Two things named alike, doing different jobs
+
+Worth writing down because the names invite confusion:
+
+| | What it is |
+|---|---|
+| **"Register"** button, portal header | The entry point to the actual application *form*. Frozen for now — fires a toast, navigates nowhere. Untouched by this change. |
+| **"Application"** sidebar item | Not a form. A read-only *summary* of what was submitted, plus Print/PDF. Nothing to summarise until registration happens, so it stays locked. |
+
+### What was already right
+
+Checked before changing anything, rather than assumed:
+
+- **Candidate codes were never minted at signup.** `mint_candidate_code()` is
+  called in exactly one place — `application_service.submit()`, behind
+  `POST /applications`. `auth_service.py` contains no reference to it. Signup
+  cannot produce a code.
+- **The data model already separates User from Application.** `profiles` is
+  created by the provisioning trigger; `applications` only ever by an explicit
+  submission.
+
+So the backend needed no change and no migration. The fault was entirely in
+what the frontend implied.
+
+### Sidebar: locked, not hidden
+
+`PortalNavItem` gains `requires?: 'application'`. Overview and Track
+application stay open; Application, Interview, and Documents carry the flag.
+
+A locked row is **not a disabled link** — it is not a link at all. Rendering an
+`<a>` that goes nowhere leaves it focusable, tabbable, and openable in a new
+tab, promising something it cannot deliver. Locked rows render as a plain
+element with `aria-disabled`, a padlock, and a tooltip reading *"Available
+after you register"*, plus the same text in `sr-only` for screen readers.
+
+**Locked while loading, deliberately.** Unlocked-then-locked flashes doors open
+that the user cannot walk through, which reads as a bug; locked-then-unlocked
+just reads as settling. `hasRegistered` is therefore `false` until the fetch
+resolves, never optimistic.
+
+Hidden was rejected: a candidate who cannot see Interview at all learns nothing
+about what is coming. Locked-with-a-reason teaches the process.
+
+### One fetch, not three
+
+Sidebar, overview, and tracker all need the same answer. `useMyApplication()`
+fetches on mount, so three consumers meant three identical requests that could
+disagree mid-flight. Lifted into `ApplicationProvider`, mounted in
+`PortalLayout`.
+
+It also gained an `enabled` flag: `/applications/mine` is candidate-only, and
+admins share this layout, so without gating every admin page load fired a
+request guaranteed to 403.
+
+### The URL is still typeable
+
+Locking a sidebar row does not lock a route. `RequiresApplication` guards the
+three gated paths and renders an explanation rather than redirecting —
+bouncing somebody who followed an emailed link to `/dashboard` with no word why
+is worse than telling them what the page is and what unlocks it.
+
+### The profile menu crash
+
+```
+Base UI: MenuGroupContext is missing.
+Menu group parts must be used within <Menu.Group> or <Menu.RadioGroup>.
+```
+
+`DropdownMenuLabel` is Base UI's `Menu.GroupLabel`, and it was used directly
+inside `DropdownMenuContent` with no group ancestor to supply the context.
+
+Wrapping it in a `DropdownMenuGroup` would have silenced it in one line. Not
+done: that block labels no group of items — it is an account header — so an
+empty labelled group would be a lie told to screen readers purely to satisfy a
+context check. It is now the plain presentational div it always was.
+`DropdownMenuLabel` stays exported for genuine group labels.
+
+Checked the sibling case too: `SelectLabel` / `SelectGroup` have the identical
+constraint but are not used anywhere in app code, so there is no second live
+instance of this bug.
+
+### ErrorBoundary
+
+New `components/shared/error-boundary.tsx`, a class component because
+`getDerivedStateFromError` and `componentDidCatch` have no hook equivalents.
+Wrapped around the portal outlet and, separately, the account menu — the one
+header control with enough moving parts to fail. The header gets a compact
+inline fallback, since dropping a card into a 4rem bar would be worse than the
+error.
+
+Reset happens by `key={location.pathname}`, so the boundary remounts on
+navigation and discards the error with the instance. The first attempt used
+`componentDidUpdate` + a `resetKey` prop; that costs a second render on every
+prop change and lint flagged it fairly.
+
+It does not catch event-handler, `setTimeout`, or promise-rejection errors —
+none of those pass through render. Async failures stay with `toErrorMessage()`.
+
+### Track application, before registering
+
+Was a bare *"No application to track yet"* dead end. Now renders the same
+stepper in demo mode, so the page explains the process instead of looking
+broken, with a secondary card saying plainly that registering is what starts it.
+
+### Result
+
+A newly signed-up user sees Overview and Track application working, and
+Application, Interview, and Documents locked with a stated reason. No candidate
+code anywhere. The Register button is untouched and still inert.
+
+The Application *summary* view and its Print/PDF export are deliberately not
+built — the registration form does not exist yet, so its fields are unknown.
+Locked state only, by decision; the summary follows once the form does.
+
+### Verified
+
+- Frontend typecheck (`tsc -b --force`), production build, and `oxlint` all clean
+- Grep confirms no `Menu.GroupLabel` usage remains outside the primitive, and
+  `useMyApplication` now has exactly one caller — the provider
+- 38/38 backend tests still pass; no backend change was needed
+
+---
+
+## 2026-08-20 (night, later) — Correction: the journey is five steps, not seven
+
+**Branch:** `waqas`
+
+The seven-stage journey built earlier the same evening was over-specified. The
+corrected flow is five visible steps:
+
+```
+Application ──> Interview ──> Physical Interview ──> Form ──> Onboarded
+```
+
+Two changes, and they are different in kind.
+
+### "Interview Scheduled" and "Interview Completed" become one node
+
+Visually. Not in the database.
+
+Collapsing them in storage as well would have been the obvious reading of the
+request, and it would have broken batching. The whole interview workflow — 300
+candidates split 50/50/25 across three slots — is a question about *who holds a
+slot but has not yet been seen*. One value cannot answer it.
+
+So `INTERVIEW_SCHEDULED` and `INTERVIEWED` both remain, and both map to the
+single "Interview" node. `JOURNEY_STEPS` in `lib/stages.ts` now carries a
+`stages: readonly ApplicationStage[]` per step, and `STEP_INDEX` is built by
+flattening it, so a node can cover any number of stored stages without any page
+knowing. Callers still pass an `ApplicationStage`; the mapping happens inside
+the stepper.
+
+The guidance panel stays keyed by stored stage, deliberately — "join at your
+slot" and "wait for the result" are opposite instructions and cannot share one
+message, even though they share one node.
+
+### "Selected" stops being a stage
+
+It was never really one. Clearing the interview is the *condition* for reaching
+the physical interview, so the transition into `PHYSICAL_INTERVIEW` already
+encodes it.
+
+What the transition cannot encode is which gate stopped somebody, because
+`REJECTED` is reachable from several places. `applications.is_selected` records
+that, tri-state:
+
+| Value | Meaning |
+|---|---|
+| `NULL` | Interview not decided yet |
+| `true` | Through to the physical interview |
+| `false` | Not selected at interview |
+
+A two-state boolean would have made every un-interviewed candidate read as
+rejected. The flag is *derived from the transition* in `advance_stage()` rather
+than accepted from the caller, so it cannot disagree with the stage it
+describes. Rejection from a later gate deliberately leaves `is_selected = true`
+standing — they *were* selected; something else stopped them.
+
+### The migration got smaller, not bigger
+
+The earlier seven-stage migration had never been applied, so it was deleted
+rather than corrected on top. Replacing it against the *live* schema turned out
+to need only two renames:
+
+```sql
+alter type public.application_stage rename value 'ASSESSMENT'   to 'PHYSICAL_INTERVIEW';
+alter type public.application_stage rename value 'FORM_PENDING' to 'FORM';
+alter table public.applications add column if not exists is_selected boolean;
+```
+
+`RENAME VALUE` keeps enum positions, so sort order, the default, and the
+`(bootcamp_id, stage)` index all survive untouched — none of the type-recreation
+dance the seven-stage version needed.
+
+Zero application rows exist, so no data was affected and no sign-off was
+required under the standing rule.
+
+### One trap worth recording
+
+Adding `is_selected` to the SQLAlchemy model made it a *blocking* migration,
+where the previous one was not. The earlier version changed only enum labels, so
+reads kept working against the old schema. This one adds a column, and
+SQLAlchemy puts it in every `SELECT` — so `/applications/mine` fails with
+`UndefinedColumn` until the migration runs, and the candidate dashboard shows
+its error state instead of its empty state.
+
+Verified by querying directly rather than assuming:
+
+```
+FAIL: ProgrammingError column applications.is_selected does not exist
+```
+
+**The migration is still not applied** — three attempts were refused by the
+environment's permission classifier. See *Blocked* in `project-status.md`.
+
+### Changed
+
+| File | Change |
+|---|---|
+| `supabase/migrations/20260820180000_candidate_journey.sql` | Replaces the deleted seven-stage migration |
+| `backend/app/models/enums.py` | `SELECTED` dropped, `FORM_SUBMITTED` → `FORM` |
+| `backend/app/models/application.py` | `is_selected` column |
+| `backend/app/schemas/application.py` | `is_selected` on `ApplicationOut` |
+| `backend/app/services/application_service.py` | Derives `is_selected` in `advance_stage()` |
+| `frontend/src/lib/stages.ts` | `JOURNEY_STEPS` with many-to-one stage mapping; `STEP_INDEX`, `TOTAL_STEPS`, `completedSteps` |
+| `frontend/src/components/shared/journey-stepper.tsx` | Keys on `step.key`; `earliestStamp()` for multi-stage nodes |
+| `frontend/src/features/applications/stage-guidance.ts` | `SELECTED` removed; steps re-cast as places you stand, not events completed |
+| `docs/phases.md`, `docs/architecture.md` | Five steps vs seven stages, and why they differ |
+
+Demo mode, real mode, the ring, the connectors, success stories, the typewriter,
+and the empty-state hero are all unchanged — only the step list they operate on.
+
+### Verified
+
+- 38/38 backend tests pass
+- Frontend typecheck, `oxlint`, and production build all clean
+- Repo-wide grep for `SELECTED`, `FORM_SUBMITTED`, `FORM_PENDING`, `ASSESSMENT`,
+  `TOTAL_STAGES`, `STAGE_INDEX`, `completedCount` returns only the historical
+  Phase 2 migration and the new migration's own rename statements
+
+---
+
+## 2026-08-20 (night) — Candidate dashboard: two states, one stepper
+
+> **Superseded in part.** The seven-stage journey described below was corrected
+> to five visible steps the same evening — see the entry above. The stepper,
+> empty state, typewriter, countdown, and success stories all survive unchanged;
+> only the step list differs.
+
+**Branch:** `waqas`
+
+### The schema was one stage short
+
+The brief called for a seven-stage journey. The enum shipped in the Phase 2
+migration had six, and it named two of them for something other than what they
+meant:
+
+| Journey stage | Was | Now |
+|---|---|---|
+| Selected | *(absent)* | `SELECTED` |
+| Physical Interview | `ASSESSMENT` | `PHYSICAL_INTERVIEW` |
+| Form Submitted | `FORM_PENDING` | `FORM_SUBMITTED` |
+
+The missing value was the real problem. An admin marking a candidate as passed
+and that candidate attending an in-person round are separate events days apart,
+and collapsing them left the tracker unable to say which had happened.
+
+The two renames came along because `FORM_PENDING` broke the rule every other
+value follows — stages record what *happened*, not what is owed — and because
+the HR round is a conversation, not a test.
+
+`20260820180000_seven_stage_journey.sql` recreates the type rather than using
+`ALTER TYPE ... ADD VALUE`, so `SELECTED` lands in pipeline position rather than
+at the end. Enum sort order is declaration order and `order by stage` depends on
+it. Confirmed with the user before writing; zero application rows existed, so
+the rewrite carried no data risk.
+
+**The migration is written but not applied** — see *Not done* below.
+
+### One stepper, two modes
+
+`components/shared/journey-stepper.tsx` is a single component. The brief asked
+for one and the geometry justifies it: node sizing, the connector trick, and
+the responsive axis flip are identical in both modes, and only each node's
+*state* differs — a single `stepState()` call.
+
+- **`demo`** plays the seven stages through once on mount, then settles with
+  every node complete and nothing still animating. The `setInterval` lives in an
+  effect whose dependencies are all stable for the life of the mount, so a
+  re-render cannot restart it; a reload can, which is the requested behaviour.
+- **`real`** never sequences. Progress comes from `STAGE_INDEX[currentStage]`,
+  and the current node keeps a persistent rotating ring.
+
+Three implementation notes worth keeping:
+
+**The ring is not a masked border.** A conic-gradient disc sits *behind* an
+opaque node and protrudes 3px. Rotating the whole element is a compositor-only
+transform; animating a conic gradient's angle would repaint every frame.
+
+**Connectors need no measurement.** Each is anchored at 50% of its own cell and
+stretched one full cell backwards, which lands exactly on the previous node's
+centre because the cells are `flex-1`. No refs, no resize observer.
+
+**Both scale axes are pinned at both breakpoints.** The layout flips from
+vertical to horizontal at `lg`, so a connector left with only `scale-y-0` would
+collapse in the other orientation.
+
+Horizontal starts at `lg`, not `md`: with a sidebar, `md` leaves roughly 100px
+per node for seven of them, which is cramped. Below `lg` it stacks vertically
+instead of scrolling sideways.
+
+### Deadlines the candidate could not read
+
+`PhaseOut` was admin-only, so a candidate had no way to know when their own
+interview or form window closed — and the tracker was asked for countdowns.
+`ApplicationDetail` now carries `phases`. It costs no extra query (the bootcamp
+was already eager-loaded) and no extra request, and exposes only windows and an
+open flag — nothing about other applicants.
+
+### Testimonials: grid, not carousel
+
+Each quote types itself out when it scrolls into view. A carousel breaks that:
+an off-screen slide never intersects, so its typewriter either never fires or
+fires unseen. A grid gives every bubble its own trigger. Reused the existing
+`TESTIMONIALS` fixture rather than adding a second set, so real content swaps in
+one place. Speakers are gradient initials-avatars, matching the marketing site.
+
+### No new dependencies
+
+Framer Motion is already present as `motion` v13 — the same library under its
+current name. The typewriter, the countdown, and the bubble tail are all a few
+lines each and were written rather than installed.
+
+### Verified
+
+- 38/38 backend tests pass
+- Frontend typecheck, `oxlint`, and production build all clean; every
+  `set-state-in-effect` warning in the new code was designed out rather than
+  suppressed, by deriving state during render instead of assigning it
+- Live server against the real database: `/api/v1/health` returns
+  `database: ok`, OpenAPI reports the eight-value enum and `ApplicationDetail`
+  carrying `phases`, and `/applications/mine` returns 401 unauthenticated
+
+### Not done
+
+**The migration has not been applied.** Both attempts to run it were refused by
+the environment's permission classifier. The backend enum, the frontend types,
+and the SQL file now agree on eight values; the live database still has the old
+seven. Writing any application row will fail until it is applied.
+
+Nothing committed or pushed — awaiting explicit permission.
+
+---
+
+## 2026-08-20 (late) — Fix: backend would not start outside one directory
+
+**Branch:** `waqas`
+
+Reported as two symptoms: `ModuleNotFoundError: No module named 'app'` when
+running `python main.py`, and the frontend showing "Cannot reach the server"
+during signup. The second was a consequence of the first — the API was never
+running.
+
+### Bug 1 — import path
+
+`app/main.py` uses absolute imports, which require `backend/` on Python's
+import path. Running `python main.py` from inside `app/` puts `backend/app/`
+there instead, so `import app` finds nothing. `main.py` also had no
+`__main__` guard, so it was never a working entry point at all.
+
+Fixed structurally rather than by documenting a workaround. `pyproject.toml`
+now declares the package, and `pip install -e .` registers it so `app`
+resolves from any working directory. Dependencies stay in `requirements.txt`
+via `dynamic = ["dependencies"]`, so the two cannot drift.
+
+`pytest.ini` was folded into `pyproject.toml` at the same time — one less
+config file.
+
+### Bug 2 — configuration path, found while investigating
+
+Not reported, but the same class of fault and it would have surfaced next:
+
+```python
+env_file=".env"          # resolved against the *current working directory*
+```
+
+Starting the server from anywhere but `backend/` silently loaded no settings
+and failed with four `Field required` errors — an error describing a symptom
+rather than the cause. Confirmed by reproducing it from the repository root.
+
+`ENV_FILE` is now absolute, derived from `config.py`'s own location.
+
+### Also addressed
+
+- **`__main__` guard added**, with host and port read from the environment.
+  Hardcoding 8000 meant a second instance could not start without editing
+  code — which showed up immediately during testing as `WinError 10013`.
+- **CORS widened to include `http://127.0.0.1:5173`.** Browsers treat that as
+  a different origin from `localhost:5173`, so serving the frontend on the IP
+  form would have been rejected. Applied to `.env` and `.env.example`.
+
+### Verified
+
+All four run commands, each from a clean slate on a free port:
+
+| Command | From | Result |
+|---------|------|--------|
+| `uvicorn app.main:app --reload` | `backend/` | starts |
+| `python -m app.main` | `backend/` | starts |
+| `python app/main.py` | `backend/` | starts |
+| `python main.py` | `backend/app/` | starts — the originally failing case |
+
+Settings now load from `backend/`, `backend/app/`, `backend/tests/`, and the
+repository root.
+
+Live server checks: `/api/v1/health` returns `"database":"ok"`, `/docs`
+returns 200, a CORS preflight from `http://localhost:5173` returns the correct
+`access-control-allow-origin`, and a real `POST /api/v1/auth/signup` with a
+browser `Origin` header returned 201 with the confirmation email sent and the
+profile provisioned as `CANDIDATE`. Test user deleted; 38 tests pass.
+
+### Documentation
+
+`README.md` gained a "How to run the backend" section with the exact
+directory, command, URLs, and a health-check verification step.
+`error-handling.md` gained a startup-failure section mapping each misleading
+symptom to its actual cause.
+
+---
+
 ## 2026-08-20 (evening) — Phase 2: registration pipeline
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Schema approved before writing the migration, per the standing validation rule.
 Three decisions were settled first: programs become a seeded database table,
@@ -385,7 +997,7 @@ work but nothing calls them yet.
 
 ## 2026-08-20 (later) — Auth UX hardening: signup, login, role foundation
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Task brief asked for a full authentication system with bcrypt hashing and
 FastAPI-issued JWTs. **Stopped and raised the conflict before building**, since
@@ -481,7 +1093,7 @@ above). Typecheck clean, production build clean, 19/19 backend tests pass.
 
 ## 2026-08-20 — Gmail API integration for backend-triggered email
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Built the second, separate email system: while Supabase's SMTP config (set up
 the previous day) only covers Supabase Auth's own emails, the recruitment
@@ -547,7 +1159,7 @@ authorized test user and no verification is actually required for that.
 
 ## 2026-08-19 (evening) — Full UI build: marketing site and three portals
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 Brief: a full-scale professional landing page with its supporting pages and
 dropdown navigation, the complete UI for all three portals and their dashboards,
@@ -629,7 +1241,7 @@ become a fetch.
 
 ## 2026-08-19 (later) — Database live, three real bugs found
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 ### Environment repair
 
@@ -716,7 +1328,7 @@ both empty again.
 
 ## 2026-08-19 — Phase 1: authentication and application shell
 
-**Branch:** `development`
+**Branch:** `waqas`
 
 ### Planning
 

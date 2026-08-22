@@ -4,9 +4,19 @@
 
 ## Where things stand — 2026-08-22 update
 
-**The whole portal now runs on real data. `lib/mock-data.ts` is deleted.**
-Super-admin screens (Bootcamps, Administrators, Analytics, Programs) and the
-entire candidate portal are wired to the API alongside the admin screens.
+**`waqas` is merged into `huzaifa`.** The admin/super-admin build and the
+candidate-portal build happened in parallel on separate branches and are now
+one tree: the whole portal — marketing site, auth, candidate portal, admin
+portal, super-admin portal — runs on real data. `lib/mock-data.ts` is deleted.
+
+**The candidate registration form now persists.** `applications` gained
+`is_selected` plus nine registration-detail columns (course history, laptop
+ownership, campus, declarations); `candidate_profiles` gained nine more
+(father's name/CNIC, gender, phone, address, Saylani roll number). Two stage
+values were renamed for clarity: `ASSESSMENT` → `PHYSICAL_INTERVIEW`,
+`FORM_PENDING` → `FORM`. Both migrations were already applied directly against
+the live database; only the migration ledger was missing the two entries,
+which is now corrected — see *Resolved* below.
 
 **Candidate document uploads are built and verified** — a private Supabase
 Storage bucket, indexed by a new `documents` table, with admin review.
@@ -21,18 +31,15 @@ Storage bucket, indexed by a new `documents` table, with admin review.
 
 **A Base UI menu crash was taking down every portal page.**
 `DropdownMenuLabel` was rendered outside a `DropdownMenuGroup` in three
-places, including the account menu in `portal-layout.tsx`. Fixed, and a route
-`errorElement` now contains any future error of that class.
-
-**Backend tests: 185** (was 120). Live verification: 31/31 on the
-create-intake → deadlines → create-admin → assign → scope flow, and 16/16 on
-the document upload/review pipeline.
+places, including the account menu in `portal-layout.tsx`. Fixed by wrapping
+each in a real group, and a route `errorElement` now contains any future
+error of that class.
 
 Still open: the Gmail OAuth Production flip and the Resend/SendGrid migration.
 
 ---
 
-## Where things stand
+## Where things stand — the merge in detail
 
 **Phase 1 is complete and verified against the live Supabase project.** The
 database schema is applied, and the full authentication round trip works:
@@ -40,22 +47,48 @@ signup provisioning, login, `/auth/me`, token refresh, and logout.
 
 **Phase 2 registration is built and verified end to end**: a super admin can
 create an intake, assign an admin, open and close registration against a
-deadline, and candidates can apply and receive a candidate code.
+deadline, and candidates can apply and receive a candidate code. Candidates
+can now also complete the full registration form — course history, laptop
+ownership, declarations — and it persists to `applications` and
+`candidate_profiles`.
 
-**The admin portal is now built and wired to the real API** — the biggest
-addition since Phase 2. All five admin screens (Dashboard, Candidates,
-Interviews, Phases, Emails) run on live data against your Supabase project,
-not fixtures. A working `SUPER_ADMIN` account exists
-(`admin@sita2o.com`) with a real bootcamp (07) to exercise the flow.
+**The admin portal is built and wired to the real API.** All five admin
+screens (Dashboard, Candidates, Interviews, Phases, Emails) and all four
+super-admin screens (Dashboard, Bootcamps, Administrators, Analytics) run on
+live data against your Supabase project, not fixtures. A working
+`SUPER_ADMIN` account exists (`admin@sita2o.com`) with a real bootcamp (07) to
+exercise the flow.
 
 **Both email systems are live and verified with real sends:** Supabase SMTP
 for auth emails, and a Gmail API integration for the backend's own emails
-(interview invites, results, onboarding links), now wired into the admin
-Emails screen with per-recipient delivery logging.
+(interview invites, results, onboarding links), wired into the admin Emails
+screen with per-recipient delivery logging.
 
-**Super-admin pages (Bootcamps, Administrators, Analytics) and the candidate
-portal still render from fixtures.** The backend they need already exists —
-see "Next" below.
+**The candidate portal is fully wired to real data.** Overview, registration
+form, application tracker, own-interview view, and documents all call the
+live API. The journey stepper shows five visible steps
+(Application → Interview → Physical Interview → Form → Onboarded) over the
+seven stages actually stored, since `INTERVIEW_SCHEDULED` and `INTERVIEWED`
+collapse into one visible node — the distinction only matters to admin
+batching. Application-scoped pages (`/dashboard/application`,
+`/dashboard/interview`, `/dashboard/documents`) stay locked behind
+`RequiresApplication` until a candidate has actually registered.
+
+---
+
+## Known issue from the merge — two enum sources of truth
+
+`frontend/src/lib/types.ts` (admin/super-admin side) and
+`frontend/src/lib/stages.ts` (candidate side) each declare their own
+`ApplicationStage` and `STAGE_LABEL`, built independently on the two branches
+before they diverged. The merge already caused one real drift — `types.ts`
+still had the pre-rename `ASSESSMENT`/`FORM_PENDING` values after `stages.ts`
+and the backend had moved to `PHYSICAL_INTERVIEW`/`FORM`, which would have
+shown blank stage badges on every admin candidate list. Fixed as part of the
+merge, but the underlying duplication remains: the two files must be kept in
+sync by hand until one imports from the other. Recommend unifying them onto
+`lib/stages.ts` next, since it is the one with journey-stepper semantics
+(`STEP_INDEX`, `completedSteps`) the candidate portal depends on.
 
 ---
 
@@ -76,15 +109,16 @@ see "Next" below.
 | Gmail API email integration | Real send verified, message id returned, now logged per recipient |
 | Phase 2 registration pipeline | Bootcamps, phases, programs, applications |
 | **Admin portal surface** | Users, interviews, email log, audit trail, dashboard stats |
+| **Candidate registration** | Full form persisted across `applications` + `candidate_profiles` |
 | Deadline enforcement | Service-layer; flag **and** clock, so an expired deadline closes a phase |
-| Bootcamp scope enforcement | `assert_can_manage()` — an admin cannot reach another intake's candidates. **Now unit-tested**, not just documented |
+| Bootcamp scope enforcement | `assert_can_manage()` — an admin cannot reach another intake's candidates. **Unit-tested**, not just documented |
 | Atomic candidate codes | SQL `mint_candidate_code()`; verified race-safe under 24 concurrent mints |
 | Audit trail | Every privileged write (`bootcamp.*`, `phase.*`, `application.*`, `profile.*`, `interview.*`, `email.*`) logged with actor, before/after diff, and a summary |
-| **120 tests, all passing** | `pytest -q` — up from 38 |
+| Editable package install | `pip install -e .` registers `app`, so `uvicorn app.main:app` resolves from any directory |
 
-**59 endpoints live** (up from 21), across 9 route modules: `health`, `auth`,
-`programs`, `bootcamps`, `applications`, `interviews`, `emails`, `users`,
-`audit`. Full list via `/docs` (disabled in production) or `/openapi.json`.
+**59+ endpoints live**, across 9 route modules: `health`, `auth`, `programs`,
+`bootcamps`, `applications`, `interviews`, `emails`, `users`, `audit`. Full
+list via `/docs` (disabled in production) or `/openapi.json`.
 
 Highlights beyond Phase 2:
 
@@ -135,8 +169,7 @@ GET        /api/v1/applications/{id}/admin          # full record incl. contact 
 
 ### Database — applied
 
-**Three migrations applied**, all recorded in
-`supabase_migrations.schema_migrations`:
+**All six migrations applied**, recorded in `supabase_migrations.schema_migrations`:
 
 1. `20260819120000_init_auth_profiles.sql` — `profiles`, `candidate_profiles`,
    `user_role` enum, provisioning trigger, RLS.
@@ -148,6 +181,14 @@ GET        /api/v1/applications/{id}/admin          # full record incl. contact 
    `audit_logs`, three enums (`interview_mode`, `interview_status`,
    `email_status`). RLS deny-by-default; `email_log` and `audit_logs` carry
    no policies at all — staff-only, readable exclusively through the API.
+4. `20260820160000_candidate_documents.sql` — `documents` table, two enums
+   (`document_type`, `document_status`).
+5. `20260820180000_candidate_journey.sql` — renames `ASSESSMENT` →
+   `PHYSICAL_INTERVIEW` and `FORM_PENDING` → `FORM` on `application_stage`;
+   adds `applications.is_selected`.
+6. `20260822055446_registration_details.sql` — nine registration columns on
+   `candidate_profiles`, nine on `applications` (course, laptop, campus,
+   declarations).
 
 ### Frontend
 
@@ -155,21 +196,27 @@ GET        /api/v1/applications/{id}/admin          # full record incl. contact 
 |------|-------|
 | Vite 8 + React 19 + TypeScript | `strict` and `noUncheckedIndexedAccess` on |
 | Tailwind v4 + shadcn/ui | Full light/dark token ramps, green primary |
-| Auth pages | Signup, Login — unchanged since Phase 1 |
-| **Admin portal — wired to the real API** | Dashboard, Candidates, Interviews, Phases, Emails — no fixtures remain here |
-| `features/admin/api.ts` | Typed wrapper over all 59 endpoints |
+| Auth pages | Signup (live password checklist, confirm password, role selector), Login (show/hide password) |
+| Auth validation | Single source of truth in `features/auth/password-rules.ts` — drives both zod schema and UI checklist |
+| Marketing site | Home, Programs, Program detail, Admissions, About, Success Stories, FAQ, Contact |
+| **Admin portal — wired to the real API** | Dashboard, Candidates, Interviews, Phases, Emails |
+| **Super-admin portal — wired to the real API** | Dashboard, Bootcamps, Administrators, Analytics, Programs |
+| **Candidate portal — wired to the real API** | Overview, Track application, Registration form, Application, Interview, Documents |
+| `features/admin/api.ts` | Typed wrapper over the admin/super-admin endpoints |
 | `features/admin/bootcamp-context.tsx` | The selected intake, shared across all 5 admin screens, persisted in `localStorage` |
+| `features/applications/application-context.tsx` | The candidate's own application state, shared across the candidate portal |
 | `hooks/use-async.ts` | Minimal fetch/mutation hook (no react-query dependency added) |
 | Batch interview scheduling | Spaces slots evenly from a start time, all-or-nothing, advances stage automatically |
 | Email compose | 4 starting templates, `$candidate_name`-style merge fields, broadcast by stage filter |
 | Candidate detail sheet | Stage moves, reinstate, interview history, full timeline, contact info |
 | Phase controls | Open/close, date windows, warns when a flag is on but the deadline has passed |
-| `lib/types.ts` | Now the canonical mirror of every backend schema; `lib/mock-data.ts` re-exports the enum from it rather than redeclaring |
+| **Registration form** | 4 sections, progressive field unlocking, page-fold transition, 19 IT courses, bootcamp-specific declarations — persists to the API |
+| **Journey stepper** | One component, two modes: `demo` plays once per mount, `real` reflects actual stage |
+| **User vs Candidate gating** | `ApplicationProvider` holds one answer portal-wide; `RequiresApplication` guards the routes that describe a submitted application |
 | Charts | Recharts, lazily loaded per-dashboard, theme-aware |
-| Production build | Clean, 0 type errors, 0 lint errors |
-
-**Still on fixtures**: `/super-admin/*` (Bootcamps, Administrators, Analytics)
-and the whole candidate portal. The backend for all of it already exists.
+| Motion primitives | Reveal, Stagger, Counter, Marquee, PageTransition, Typewriter, Countdown |
+| Code splitting | Admin/super-admin charts split from the candidate bundle |
+| Production build | Clean — see *Verification pending* below |
 
 ### Admin account
 
@@ -192,21 +239,44 @@ Bootcamp 07 creation with all 5 tracks, the partial-PATCH deadline fix,
 registration open/close, per-bootcamp stats/interviews/emails/audit reads,
 and every self-demotion/self-deactivation guardrail returning `409`. Every
 response shape was diffed field-for-field against the frontend TypeScript
-types — zero mismatches across 7 representative endpoints.
+types — zero mismatches across 7 representative endpoints. Also: 31/31 on the
+create-intake → deadlines → create-admin → assign → scope flow, and 16/16 on
+the document upload/review pipeline.
+
+**Not yet re-run after the merge** — backend test count, frontend build, and
+lint need a fresh pass now that both branches' code shares one tree. See
+*Verification pending*.
 
 ---
 
 ## Blocked
 
-Nothing blocks development.
+Nothing blocks development. The candidate-journey migration that previously
+blocked `/applications/mine` was, in fact, already applied directly against
+the live database — only its ledger entry was missing, which is now fixed
+(see *Resolved* below). No further database action is required.
 
-### Open — confirm before relying on Gmail API sending long-term
+### Resolved — migration ledger corrected
 
-The Gmail API OAuth consent screen is unverified (Testing status). Refresh
-tokens for unverified apps expire after **7 days** — the current token was
-issued 2026-08-20, so **sending will silently break around 2026-08-27** unless
-the consent screen is flipped to Production (one toggle, no verification
-actually required — see `security.md`). Not yet confirmed done.
+`20260820180000_candidate_journey.sql` and
+`20260822055446_registration_details.sql` had both been run against the live
+Supabase project, but neither was recorded in
+`supabase_migrations.schema_migrations`. Confirmed by inspecting the live
+schema directly: `application_stage` already carries `PHYSICAL_INTERVIEW` and
+`FORM`, `applications.is_selected` exists, and both new column sets are
+present. Added the two missing ledger rows so the record matches reality —
+no schema change was made, only the bookkeeping.
+
+### Resolved — Gmail OAuth consent screen published
+
+The consent screen was moved from Testing to **Production** on 2026-08-20,
+which removes the 7-day refresh token expiry that applies to unverified apps.
+Publishing does not revoke existing tokens: the token issued during Testing was
+re-tested after publishing and sent successfully, so no re-authorisation was
+needed.
+
+Google verification is still not required, because the app has a single
+authorised user and requests only the `gmail.send` scope.
 
 **Known limitation, not yet a blocker:** personal Gmail caps at 500 emails/day
 and is not built for bulk/automated sending — a real risk of throttling once
@@ -229,6 +299,14 @@ Choices made provisionally, each reversible, flagged for confirmation:
 | 5 | Token storage | `localStorage` | Medium — one file, plus backend cookie work |
 | 6 | Primary colour | Green, matching Saylani | Trivial — two CSS variables |
 | 7 | `ADMIN` stays bootcamp-scoped | `SUPER_ADMIN` is the only global role; requested by project owner over making `ADMIN` itself global, to keep multi-admin isolation viable | Medium — touches `assert_can_manage` and its tests |
+| 8 | Register button after registering | Unchanged — still opens the form | Trivial |
+
+Item 8 needs a decision. Recommendation: once an application exists, relabel
+the button **View application** pointing at the summary page, and guard
+`/dashboard/register` the same way the other gated routes are guarded, since
+the URL stays typeable. Do **not** hide it outright — applications are unique
+per `(bootcamp, profile)`, so a candidate may legitimately apply to a second
+concurrent intake, and a vanished button would block that.
 
 Unanswered questions carried forward:
 
@@ -246,19 +324,21 @@ Unanswered questions carried forward:
 
 ## Next
 
-1. **Flip the Gmail API OAuth consent screen to Production** — prevents the
+1. **Verification pass after the merge** — re-run the backend test suite,
+   the frontend production build, and lint; both were last verified
+   independently on the two branches, not on the merged tree
+2. **Unify the two `ApplicationStage` sources** — `lib/types.ts` and
+   `lib/stages.ts` — onto one definition; see *Known issue* above
+3. **Flip the Gmail API OAuth consent screen to Production** — prevents the
    7-day refresh token expiry, no verification required
-2. **Wire the super-admin pages** — Bootcamps (create/edit/delete/assign
-   admins), Administrators (staff directory, provisioning, role changes),
-   Analytics (platform-wide stats) all have a working backend already;
-   `bootcampApi`, `userApi`, and `platformApi` in `features/admin/api.ts`
-   cover every call they need
-3. **Wire the candidate portal** — application submission, own-interview
-   view, documents, profile — `applicationApi` and `interviewApi.listForBootcamp`'s
-   sibling `GET /me/interviews` are ready
 4. Seed real bootcamp admins so per-bootcamp scoping can be exercised through
    the UI, not just the API
-5. Phase 3: interview batching is built (arbitrary slot counts, evenly
+5. **Approve the registration field list against Agilytic's requirements**,
+   if not already done — the form is live and storing data now, so a field
+   change is a migration, not a design tweak
+6. Build the Application summary view + Print/PDF for a submitted registration
+7. Add CAPTCHA to the registration form (deliberately omitted so far, no stub)
+8. Phase 3: interview batching is built (arbitrary slot counts, evenly
    spaced); the AI screening hook is still blocked on deciding what the AI
    Interviewer actually is
 

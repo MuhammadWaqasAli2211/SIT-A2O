@@ -33,11 +33,30 @@ class PhaseType(StrEnum):
 
 
 class ApplicationStage(StrEnum):
+    """Where an application stands, in pipeline order, plus a terminal REJECTED.
+
+    Declaration order matches the Postgres enum, so `order by stage` sorts
+    candidates by how far they have progressed.
+
+    Seven values behind five visible steps. The candidate's stepper shows
+
+        Application -> Interview -> Physical Interview -> Form -> Onboarded
+
+    with INTERVIEW_SCHEDULED and INTERVIEWED both rendering as the single
+    "Interview" node. They stay separate here because batching depends on the
+    difference: an admin has to be able to list who holds a slot but has not
+    yet been seen.
+
+    Selection is not a stage. Clearing the interview is what moves a candidate
+    to PHYSICAL_INTERVIEW; the decision itself is recorded on
+    `applications.is_selected`.
+    """
+
     APPLIED = "APPLIED"
     INTERVIEW_SCHEDULED = "INTERVIEW_SCHEDULED"
     INTERVIEWED = "INTERVIEWED"
-    ASSESSMENT = "ASSESSMENT"
-    FORM_PENDING = "FORM_PENDING"
+    PHYSICAL_INTERVIEW = "PHYSICAL_INTERVIEW"
+    FORM = "FORM"
     ONBOARDED = "ONBOARDED"
     REJECTED = "REJECTED"
 

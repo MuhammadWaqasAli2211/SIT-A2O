@@ -1,4 +1,4 @@
-> **Branch:** `development` — last updated 2026-08-19
+> **Branch:** `waqas` — last updated 2026-08-19
 
 # Error Handling
 
@@ -113,6 +113,47 @@ Validation happens twice, on purpose:
 
 Field errors render under their input. Request-level failures render in an alert
 above the form. A form never silently fails.
+
+## Startup failures
+
+Errors that happen before the app is serving cannot use the envelope above —
+there is no request to respond to. Two classes are worth calling out because
+both produce misleading symptoms.
+
+### Import path
+
+`app/main.py` uses absolute imports (`from app.core.config import ...`), which
+require `backend/` on Python's import path. Running `python main.py` from
+inside `app/` puts `backend/app/` there instead, and the app dies with
+`ModuleNotFoundError: No module named 'app'`.
+
+Resolved structurally rather than by documenting a workaround: `pyproject.toml`
+declares the package and `pip install -e .` registers it, so `app` resolves
+from any working directory.
+
+### Configuration path
+
+`env_file` was a bare `".env"`, which pydantic-settings resolves against the
+**current working directory**, not the application. Starting the server from
+anywhere but `backend/` therefore loaded no settings at all and failed with
+four `Field required` errors — pointing at missing environment variables when
+the real fault was a path.
+
+`ENV_FILE` is now an absolute path derived from `config.py`'s own location.
+
+**The general rule:** anything resolved relative to the working directory is a
+latent bug. It works until someone runs the process from somewhere else, and
+then fails with an error that describes a symptom rather than the cause.
+
+### Reading these failures
+
+| Symptom | Actual cause |
+|---------|--------------|
+| `ModuleNotFoundError: No module named 'app'` | Started from the wrong directory, or `pip install -e .` never run |
+| Several `Field required` validation errors at boot | `.env` not found — a path problem, not missing variables |
+| `WinError 10013` / `Address already in use` | Port 8000 already held by another instance |
+| Frontend: "Cannot reach the server" | Backend is not running, or `VITE_API_BASE_URL` points elsewhere |
+| Browser console shows a CORS error | Origin missing from `CORS_ORIGINS`; `localhost` and `127.0.0.1` are distinct origins |
 
 ## Conventions
 

@@ -58,8 +58,8 @@ export const ApplicationStage = {
   APPLIED: 'APPLIED',
   INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
   INTERVIEWED: 'INTERVIEWED',
-  ASSESSMENT: 'ASSESSMENT',
-  FORM_PENDING: 'FORM_PENDING',
+  PHYSICAL_INTERVIEW: 'PHYSICAL_INTERVIEW',
+  FORM: 'FORM',
   ONBOARDED: 'ONBOARDED',
   REJECTED: 'REJECTED',
 } as const
@@ -69,8 +69,8 @@ export const STAGE_LABEL: Record<ApplicationStage, string> = {
   APPLIED: 'Applied',
   INTERVIEW_SCHEDULED: 'Interview scheduled',
   INTERVIEWED: 'Interviewed',
-  ASSESSMENT: 'Assessment',
-  FORM_PENDING: 'Form pending',
+  PHYSICAL_INTERVIEW: 'Physical interview',
+  FORM: 'Form',
   ONBOARDED: 'Onboarded',
   REJECTED: 'Rejected',
 }

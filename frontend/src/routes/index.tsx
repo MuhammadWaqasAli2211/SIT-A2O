@@ -9,7 +9,7 @@ import SignupPage from '@/pages/auth/signup-page'
 import NotFoundPage from '@/pages/not-found-page'
 import { AdminBootcampLayout } from '@/routes/admin-layout'
 import { RouteErrorBoundary } from '@/routes/error-boundary'
-import { GuestRoute, ProtectedRoute, RoleRoute } from '@/routes/guards'
+import { GuestRoute, ProtectedRoute, RequiresApplication, RoleRoute } from '@/routes/guards'
 import { UserRole } from '@/lib/types'
 
 /**
@@ -28,6 +28,8 @@ const FaqPage = lazy(() => import('@/pages/public/faq-page'))
 const ContactPage = lazy(() => import('@/pages/public/contact-page'))
 
 const CandidateDashboardPage = lazy(() => import('@/pages/candidate/dashboard-page'))
+const CandidateTrackPage = lazy(() => import('@/pages/candidate/track-page'))
+const CandidateRegisterPage = lazy(() => import('@/pages/candidate/register-page'))
 const CandidateApplicationPage = lazy(() => import('@/pages/candidate/application-page'))
 const CandidateInterviewPage = lazy(() => import('@/pages/candidate/interview-page'))
 const CandidateDocumentsPage = lazy(() => import('@/pages/candidate/documents-page'))
@@ -96,12 +98,27 @@ export const router = createBrowserRouter([
             element: <RoleRoute allow={[UserRole.CANDIDATE]} />,
             ...onError,
             children: [
+              // Open to any signed-in candidate: the overview explains what to
+              // do next, the tracker explains the process in demo mode, and
+              // the profile belongs to the account rather than to any intake.
               { path: '/dashboard', element: <CandidateDashboardPage /> },
-              { path: '/dashboard/application', element: <CandidateApplicationPage /> },
-              { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
-              { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
+              { path: '/dashboard/track', element: <CandidateTrackPage /> },
+              // The registration form itself: open to any signed-in candidate,
+              // since completing it is what creates an application.
+              { path: '/dashboard/register', element: <CandidateRegisterPage /> },
               // Kept so old links and bookmarks still land somewhere real.
               { path: '/dashboard/profile', element: <Navigate to="/account" replace /> },
+
+              // Everything here describes a submitted application, so it stays
+              // shut until one exists. Signing up is not registering.
+              {
+                element: <RequiresApplication />,
+                children: [
+                  { path: '/dashboard/application', element: <CandidateApplicationPage /> },
+                  { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
+                  { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
+                ],
+              },
             ],
           },
 

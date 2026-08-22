@@ -36,19 +36,108 @@ cp frontend/.env.example frontend/.env
 # 2. Database
 supabase link --project-ref <ref>
 supabase db push
+```
 
-# 3. Backend
+---
+
+## How to run the backend
+
+**Run from the `backend/` directory** — not from `backend/app/`, and not from
+the repository root.
+
+### First-time setup
+
+```bash
 cd backend
 python -m venv .venv
-./.venv/Scripts/python.exe -m pip install -r requirements.txt
-./.venv/Scripts/python.exe -m uvicorn app.main:app --reload    # :8000
-# ...or, from any directory: ./backend/dev.ps1
 
-# 4. Frontend
+# Windows
+.\.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
+pip install -e .          # registers the `app` package; see note below
+```
+
+### Start the server
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+| | |
+|---|---|
+| **Run from** | `backend/` |
+| **Command** | `uvicorn app.main:app --reload` |
+| **URL** | http://localhost:8000 |
+| **API base** | http://localhost:8000/api/v1 |
+| **Swagger UI** | http://localhost:8000/docs |
+
+### Verify it is working
+
+```bash
+curl http://localhost:8000/api/v1/health
+# {"status":"ok","environment":"development","database":"ok"}
+```
+
+`"database":"ok"` confirms `.env` loaded and the Supabase connection is live.
+If it reads `"not_configured"`, `DATABASE_URL` is missing from `backend/.env`.
+
+Or open http://localhost:8000/docs for the interactive Swagger UI.
+
+### Alternative commands
+
+Both work identically once `pip install -e .` has been run:
+
+```bash
+python -m app.main        # from backend/
+python app/main.py        # from backend/
+python main.py            # from backend/app/
+```
+
+> **Why `pip install -e .`?**
+> `app/main.py` uses absolute imports (`from app.core.config import ...`), which
+> require `backend/` to be on Python's import path. Running `python main.py`
+> from inside `app/` puts `backend/app/` on the path instead, so `import app`
+> fails with `ModuleNotFoundError: No module named 'app'`. The editable install
+> registers the package once, so it resolves from any directory.
+
+`backend/dev.ps1` wraps the same start command from a fixed working directory,
+as a shortcut that needs no editable install: `./backend/dev.ps1` from
+anywhere.
+
+### Run the tests
+
+```bash
+cd backend
+pytest -q
+```
+
+---
+
+## How to run the frontend
+
+```bash
 cd frontend
 npm install
-npm run dev                                                     # :5173
+npm run dev
 ```
+
+| | |
+|---|---|
+| **Run from** | `frontend/` |
+| **Command** | `npm run dev` |
+| **URL** | http://localhost:5173 |
+
+The frontend expects the API at the URL in `frontend/.env`
+(`VITE_API_BASE_URL`, default `http://localhost:8000/api/v1`). **Start the
+backend first** — otherwise forms fail with "Cannot reach the server."
+
+`CORS_ORIGINS` in `backend/.env` must include the frontend's origin. Both
+`localhost:5173` and `127.0.0.1:5173` are whitelisted by default, because
+browsers treat those as different origins.
 
 API docs at `http://localhost:8000/docs` outside production.
 

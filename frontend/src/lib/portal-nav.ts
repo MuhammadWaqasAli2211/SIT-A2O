@@ -6,6 +6,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Mail,
+  Radar,
   ShieldCheck,
   UserCircle,
   Users,
@@ -20,7 +21,19 @@ export interface PortalNavItem {
   icon: LucideIcon
   /** Shown as a count chip on the right of the nav row. */
   badge?: string
+  /**
+   * Gate this item behind having registered for a bootcamp.
+   *
+   * Signing up creates a User; registering creates an Application. These pages
+   * describe an Application, so before one exists there is nothing for them to
+   * show — they render locked rather than as empty shells implying a pipeline
+   * the user has not entered.
+   */
+  requires?: 'application'
 }
+
+/** Shown on locked items, in the tooltip and to screen readers. */
+export const LOCKED_HINT = 'Available after you register'
 
 export interface PortalNavGroup {
   heading: string
@@ -31,10 +44,30 @@ const CANDIDATE_NAV: PortalNavGroup[] = [
   {
     heading: 'My application',
     items: [
+      // Open to anyone with an account: the overview explains what to do next,
+      // and the tracker explains the process in demo mode.
       { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
-      { label: 'Application', href: '/dashboard/application', icon: FileText },
-      { label: 'Interview', href: '/dashboard/interview', icon: CalendarClock },
-      { label: 'Documents', href: '/dashboard/documents', icon: GraduationCap },
+      { label: 'Track application', href: '/dashboard/track', icon: Radar },
+
+      // Everything below describes a submitted application.
+      {
+        label: 'Application',
+        href: '/dashboard/application',
+        icon: FileText,
+        requires: 'application',
+      },
+      {
+        label: 'Interview',
+        href: '/dashboard/interview',
+        icon: CalendarClock,
+        requires: 'application',
+      },
+      {
+        label: 'Documents',
+        href: '/dashboard/documents',
+        icon: GraduationCap,
+        requires: 'application',
+      },
     ],
   },
   {

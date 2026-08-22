@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sit-a2o-backend"
+version = "0.1.0"
+description = "Saylani Bootcamp Recruitment & Onboarding Platform — API"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+# Only the application package ships; tests are not part of the distribution.
+packages = ["app"]
+
+[tool.setuptools.dynamic]
+# requirements.txt stays the single source of truth for dependencies, so
+# `pip install -r requirements.txt` and `pip install -e .` cannot drift.
+dependencies = { file = ["requirements.txt"] }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

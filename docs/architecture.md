@@ -1,4 +1,4 @@
-> **Branch:** `huzaifa` — last updated 2026-08-20
+> **Branch:** `huzaifa` — last updated 2026-08-22
 
 # Architecture
 
@@ -87,14 +87,51 @@ authorization code.
 
 ## Data flow: the pipeline
 
+Five steps, as the candidate sees them:
+
 ```
-Application ──> Interview ──> Physical assessment ──> Form ──> Onboarding
-   (email)      (AI filter,      (HR, 1-to-1)        (IBAN,   (Agilytic)
-                 batched)                             CNIC)
+Application ──> Interview ──> Physical Interview ──> Form ──> Onboarded
+   (email)     (AI filter,       (HR, 1-to-1,        (IBAN,   (Agilytic)
+                 batched)        non-technical)       CNIC)
+                     │
+                     └── not selected ──> Rejected (terminal)
 ```
 
 Each arrow is an admin-triggered, deadline-gated transition. No stage advances on
 its own.
+
+### Five steps, seven stored stages
+
+The stepper shows five nodes. `application_stage` holds seven values, and the
+extra granularity is deliberate:
+
+| Step | Stored stage(s) |
+|---|---|
+| Application | `APPLIED` |
+| Interview | `INTERVIEW_SCHEDULED`, `INTERVIEWED` |
+| Physical Interview | `PHYSICAL_INTERVIEW` |
+| Form | `FORM` |
+| Onboarded | `ONBOARDED` |
+| *(terminal)* | `REJECTED` |
+
+**Why Interview keeps two stages.** Batching is a question about who has a slot
+but has not yet been seen. Collapsing the two would make the 300 → 50/50/25
+split unqueryable. The candidate is shown one node; the admin keeps the detail.
+
+**Why selection is not a stage.** Clearing the interview is the condition for
+reaching the next step, so the transition already encodes it. What the
+transition cannot encode is *which gate* stopped somebody, since `REJECTED` is
+reachable from several places — hence `applications.is_selected`, tri-state so
+that "not yet decided" stays distinct from a recorded "no".
+
+**Enum order is pipeline order.** Postgres sorts enums by declaration order, so
+`order by stage` sorts by progress. Adding a value in the middle therefore means
+recreating the type, not `ALTER TYPE ... ADD VALUE`, which appends.
+
+The mapping lives in exactly one place per side — `JOURNEY_STEPS` in
+`frontend/src/lib/stages.ts` and `ApplicationStage` in
+`backend/app/models/enums.py` — and both mirror the Postgres enum by hand. All
+three change together.
 
 ## Frontend structure
 

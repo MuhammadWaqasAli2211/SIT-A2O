@@ -12,7 +12,7 @@ from app.schemas.application import (
     StageAdvance,
     StageTransitionOut,
 )
-from app.schemas.bootcamp import ProgramOut
+from app.schemas.bootcamp import PhaseOut, ProgramOut
 from app.services import application_service
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -24,6 +24,7 @@ def _to_detail(application) -> ApplicationDetail:
         program=ProgramOut.model_validate(application.program),
         bootcamp_name=application.bootcamp.name,
         timeline=[StageTransitionOut.model_validate(t) for t in application.transitions],
+        phases=[PhaseOut.model_validate(p) for p in application.bootcamp.phases],
     )
 
 
