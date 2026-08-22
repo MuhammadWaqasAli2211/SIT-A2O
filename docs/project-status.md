@@ -1,4 +1,4 @@
-> **Branch:** `waqas` — last updated 2026-08-20
+> **Branch:** `waqas` — last updated 2026-08-22
 
 # Project Status
 
@@ -23,11 +23,16 @@ deadline enforcement are both proven with live tests.
 result: an explainer for candidates who have not applied, a live tracker for
 those who have. The remaining portal screens still render from fixtures.
 
+**The registration form is built, UI-only.** Four sections, one at a time, with
+progressive field unlocking, a page-fold transition, and full validation. It is
+reachable from the **Register** button in the portal header and **persists
+nothing** — the database layer for it is a separate, not-yet-started task.
+
 **Signing up and registering are now distinct in the UI, as they always were in
 the data.** A User is created at signup; an Application only when somebody
 registers for a bootcamp. Application, Interview, and Documents stay locked
 until an Application exists — in the sidebar *and* at the route, since a URL is
-typeable. The Register button remains frozen by instruction; the summary view
+typeable. The Register button now opens the registration form; the summary view
 behind "Application" is deliberately unbuilt until the registration form's
 fields are known.
 
@@ -125,6 +130,7 @@ Applied over the pooler connection rather than the CLI, and recorded in
 | Typewriter, Countdown | Written in-house — no `typewriter-effect`, no carousel library |
 | **User vs Candidate gating** | `ApplicationProvider` holds one answer portal-wide; `requires: 'application'` locks nav rows, `RequiresApplication` guards the routes |
 | **ErrorBoundary** | Class component around the portal outlet and the account menu; resets by `key` on navigation |
+| **Registration form** | 4 sections, progressive field unlocking, page-fold transition, 19 IT courses, bootcamp-specific declarations. `features/registration/` — UI + local state only |
 | Admin portal | Dashboard, Candidates, Interviews, Phases, Emails |
 | Super-admin portal | Dashboard, Bootcamps, Administrators, Analytics |
 | Navigation | Animated mega-menu dropdowns, spring-driven mobile drawer |
@@ -244,6 +250,15 @@ scoop is the working route.
 
 Choices made provisionally, each reversible, flagged for confirmation:
 
+| 7 | Register button after registering | Unchanged — still opens the form | Trivial |
+
+Item 7 needs a decision. Recommendation: once an application exists, relabel
+the button **View application** pointing at the summary page, and guard
+`/dashboard/register` the same way the other gated routes are guarded, since
+the URL stays typeable. Do **not** hide it outright — applications are unique
+per `(bootcamp, profile)`, so a candidate may legitimately apply to a second
+concurrent intake, and a vanished button would block that.
+
 | # | Decision | Taken | Reversal cost |
 |---|----------|-------|---------------|
 | 1 | Role source | `profiles` lookup per request | Low |
@@ -273,12 +288,13 @@ Unanswered questions carried forward:
 2. Provision the first real `SUPER_ADMIN` (test accounts were deleted)
 3. Seed a real Bootcamp 07 so the tracker can be exercised with a real
    application rather than only its empty state
-4. Build the registration form behind the (currently frozen) Register button —
-   it is what creates an Application and unlocks the gated pages
-5. Build the Application summary view + Print/PDF, once that form's fields exist
-6. Wire the remaining portal screens to the API — admin and super-admin still
+4. **Approve the registration field list**, then design its schema — the form
+   is reachable and validates, but stores nothing
+5. Add CAPTCHA to the registration form (deliberately omitted, no stub)
+6. Build the Application summary view + Print/PDF, once the form's fields are final
+7. Wire the remaining portal screens to the API — admin and super-admin still
    read `lib/mock-data.ts`
-7. Phase 3: interview batching (50/50/25 slots) and the AI screening hook —
+8. Phase 3: interview batching (50/50/25 slots) and the AI screening hook —
    still blocked on deciding what the AI Interviewer actually is
 
 ## Running it
