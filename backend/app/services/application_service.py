@@ -1,6 +1,8 @@
 """Applications: submission, listing, and stage transitions."""
 
+import logging
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, selectinload
@@ -9,9 +11,11 @@ from app.core.exceptions import ConflictError, NotFoundError, PermissionDeniedEr
 from app.models.application import Application, StageTransition
 from app.models.bootcamp import Bootcamp, BootcampProgram, Program
 from app.models.enums import ApplicationStage, ApplicationStatus, PhaseType
-from app.models.user import Profile
+from app.models.user import CandidateProfile, Profile
 from app.schemas.application import ApplicantRow, ApplicationCreate
-from app.services import bootcamp_service
+from app.services import bootcamp_service, email_service
+
+logger = logging.getLogger(__name__)
 
 
 # The two stored stages that render as the single "Interview" node.
@@ -56,6 +60,8 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
     if offered is None:
         raise ConflictError("That program is not offered in this bootcamp.")
 
+    _upsert_candidate_profile(db, applicant, payload)
+
     application = Application(
         bootcamp_id=payload.bootcamp_id,
         profile_id=applicant.id,
@@ -64,6 +70,17 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
         stage=ApplicationStage.APPLIED,
         status=ApplicationStatus.ACTIVE,
         statement=payload.statement,
+        prior_course=payload.prior_course,
+        prior_course_status=payload.prior_course_status,
+        campus=payload.campus,
+        computer_proficiency=payload.computer_proficiency,
+        last_qualification=payload.last_qualification,
+        referral_source=payload.referral_source,
+        has_laptop=payload.has_laptop,
+        # Stamped server-side. A client-supplied timestamp is a claim, not a
+        # record.
+        terms_accepted_at=datetime.now(timezone.utc),
+        terms_version=payload.terms_version,
     )
     db.add(application)
     db.flush()
@@ -91,6 +108,43 @@ _DETAIL_LOADS = (
     selectinload(Application.bootcamp).selectinload(Bootcamp.phases),
     selectinload(Application.transitions),
 )
+
+
+def _upsert_candidate_profile(
+    db: Session, applicant: Profile, payload: ApplicationCreate
+) -> CandidateProfile:
+    """Write the person-level half of the registration.
+
+    Upsert rather than insert: a candidate applying to a second intake already
+    has a row, and their details may have changed since. Runs in the caller's
+    transaction, so a failure here rolls the application back with it — a
+    half-written registration is worse than none.
+    """
+    profile = db.get(CandidateProfile, applicant.id)
+    if profile is None:
+        profile = CandidateProfile(profile_id=applicant.id)
+        db.add(profile)
+
+    profile.full_name = payload.full_name
+    profile.father_name = payload.father_name
+    profile.gender = payload.gender
+    profile.date_of_birth = payload.date_of_birth
+    profile.city = payload.city
+    profile.phone = payload.phone
+    profile.father_phone = payload.father_phone
+    profile.cnic = payload.cnic
+    profile.father_cnic = payload.father_cnic
+    profile.address = payload.address
+    profile.saylani_roll_number = payload.saylani_roll_number
+    profile.education = payload.last_qualification
+
+    # Keep the account's own name and phone in step, so the portal header and
+    # /auth/me stop showing a blank or stale name after registering.
+    applicant.full_name = payload.full_name
+    applicant.phone = payload.phone
+
+    db.flush()
+    return profile
 
 
 def get_detail(db: Session, application_id: uuid.UUID) -> Application:
