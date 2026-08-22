@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { motion } from 'motion/react'
-import { ArrowLeft, CheckCircle2, GraduationCap, Loader2 } from 'lucide-react'
+import { Loader2, Lock, Mail, Phone, User } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -8,14 +7,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PasswordInput } from '@/components/shared/password-input'
 import { PasswordStrength } from '@/components/shared/password-strength'
 import { authApi } from '@/features/auth/api'
+import { AuthDivider, AuthField, AuthLayout } from '@/features/auth/auth-layout'
+import { OAuthButtons } from '@/features/auth/oauth-buttons'
 import { RoleSelector, type AccountTypeOption } from '@/features/auth/role-selector'
 import { signupSchema, type SignupValues } from '@/features/auth/schemas'
 import { toErrorMessage } from '@/lib/api-client'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 
 export default function SignupPage() {
   const navigate = useNavigate()
@@ -65,135 +64,116 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-10">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-lg"
-      >
-        <Link
-          to="/"
-          className="mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+    <AuthLayout title="Sign Up" subtitle="Start your Saylani bootcamp application — it's free">
+      <OAuthButtons />
+      <AuthDivider />
+
+      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+        {formError && (
+          <Alert variant="destructive">
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        )}
+
+        <RoleSelector value={accountType} onChange={setAccountType} />
+
+        <AuthField
+          id="full_name"
+          label="Full name"
+          icon={User}
+          required
+          error={errors.full_name?.message}
         >
-          <ArrowLeft className="size-4" />
-          Back to site
-        </Link>
+          <Input
+            id="full_name"
+            autoComplete="name"
+            placeholder="e.g. Ayesha Siddiqui"
+            className="h-11 rounded-xl pl-10"
+            aria-invalid={!!errors.full_name}
+            {...register('full_name')}
+          />
+        </AuthField>
 
-        <Card>
-          <CardHeader className="space-y-2 text-center">
-            <span className="mx-auto grid size-11 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <GraduationCap className="size-6" />
-            </span>
-            <CardTitle className="text-2xl">Create your account</CardTitle>
-            <CardDescription>Start your Saylani bootcamp application — it's free</CardDescription>
-          </CardHeader>
+        <AuthField id="email" label="Email" icon={Mail} required error={errors.email?.message}>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            className="h-11 rounded-xl pl-10"
+            aria-invalid={!!errors.email}
+            {...register('email')}
+          />
+        </AuthField>
 
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5" noValidate>
-              {formError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{formError}</AlertDescription>
-                </Alert>
-              )}
+        <AuthField
+          id="phone"
+          label="Phone"
+          icon={Phone}
+          error={errors.phone?.message}
+          hint={<span className="ml-1 font-normal text-muted-foreground">(optional)</span>}
+        >
+          <Input
+            id="phone"
+            type="tel"
+            autoComplete="tel"
+            placeholder="0300 1234567"
+            className="h-11 rounded-xl pl-10"
+            aria-invalid={!!errors.phone}
+            {...register('phone')}
+          />
+        </AuthField>
 
-              <RoleSelector value={accountType} onChange={setAccountType} />
+        <AuthField id="password" label="Password" icon={Lock} required>
+          <PasswordInput
+            id="password"
+            autoComplete="new-password"
+            className="h-11 rounded-xl pl-10"
+            aria-invalid={!!errors.password}
+            {...register('password')}
+          />
+        </AuthField>
+        <PasswordStrength value={password ?? ''} className="-mt-1.5" />
 
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full name</Label>
-                <Input
-                  id="full_name"
-                  autoComplete="name"
-                  placeholder="e.g. Ayesha Siddiqui"
-                  aria-invalid={!!errors.full_name}
-                  {...register('full_name')}
-                />
-                {errors.full_name && (
-                  <p className="text-sm text-destructive">{errors.full_name.message}</p>
-                )}
-              </div>
+        <AuthField
+          id="confirm_password"
+          label="Confirm password"
+          icon={Lock}
+          required
+          error={errors.confirm_password?.message}
+        >
+          <PasswordInput
+            id="confirm_password"
+            autoComplete="new-password"
+            className="h-11 rounded-xl pl-10"
+            aria-invalid={!!errors.confirm_password}
+            {...register('confirm_password')}
+          />
+        </AuthField>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  aria-invalid={!!errors.email}
-                  {...register('email')}
-                />
-                {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-              </div>
+        <Button
+          type="submit"
+          size="lg"
+          className="mt-1 h-11 w-full rounded-full"
+          disabled={!isValid || isSubmitting}
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Creating account...
+            </>
+          ) : (
+            'Sign Up'
+          )}
+        </Button>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone">
-                  Phone <span className="font-normal text-muted-foreground">(optional)</span>
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="0300 1234567"
-                  aria-invalid={!!errors.phone}
-                  {...register('phone')}
-                />
-                {errors.phone && <p className="text-sm text-destructive">{errors.phone.message}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <PasswordInput
-                  id="password"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.password}
-                  {...register('password')}
-                />
-                <PasswordStrength value={password ?? ''} className="pt-1" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirm_password">Confirm password</Label>
-                <PasswordInput
-                  id="confirm_password"
-                  autoComplete="new-password"
-                  aria-invalid={!!errors.confirm_password}
-                  {...register('confirm_password')}
-                />
-                {errors.confirm_password && (
-                  <p className="text-sm text-destructive">{errors.confirm_password.message}</p>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                className="h-11 w-full"
-                disabled={!isValid || isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Creating account...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="size-4" />
-                    Create account
-                  </>
-                )}
-              </Button>
-
-              <p className="text-center text-sm text-muted-foreground">
-                Already have an account?{' '}
-                <Link to="/login" className="font-medium text-primary hover:underline">
-                  Sign in
-                </Link>
-              </p>
-            </form>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
+        <p className="text-center text-sm text-muted-foreground">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Sign In
+          </Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }
