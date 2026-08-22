@@ -2,7 +2,42 @@
 
 # Project Status
 
-## Where things stand — 2026-08-22 update
+## Where things stand — 2026-08-22 update (second merge)
+
+**`waqas` moved 19 commits past the first merge and was merged in again.**
+Registration now actually submits — `POST /applications` writes both halves
+(`candidate_profiles` and `applications`) in one transaction, returns the
+candidate code, and queues a confirmation email that never blocks the
+response on failure. Candidates can upload a profile picture to a second
+private Storage bucket (`candidate-pictures`) ahead of or during
+registration, read back with a short-lived signed URL. A new `/profile`
+router carries the picture endpoints; `/auth/me` now returns the candidate's
+full profile instead of a placeholder.
+
+Two conflicts were real design collisions, not just textual overlap:
+
+- **`app/integrations/supabase_storage.py`** — both branches independently
+  created a module at this exact path, one for documents, one for pictures.
+  Combined into one file; the picture side's `signed_url`/`BUCKET`/
+  `MAX_BYTES`/`ALLOWED_TYPES` were renamed to `picture_signed_url`/
+  `PICTURE_BUCKET`/`PICTURE_MAX_BYTES`/`PICTURE_ALLOWED_TYPES` since the
+  document side already held the unprefixed names and the two intentionally
+  behave differently — a failed document sign is a real error (raises); a
+  failed picture sign degrades to a missing avatar (returns `None`).
+- **`app/schemas/user.py`** and **`frontend/src/lib/types.ts`** — both branches
+  added a `CandidateProfileOut`/`CandidateProfile` type. waqas's fuller one
+  (with `picture_path`, `father_cnic`, etc.) now sits on the base
+  `ProfileOut`/`Profile`, so `/auth/me` returns everything. Huzaifa's narrower
+  admin-directory one (just `cnic`/`date_of_birth`/`city`/`education`) was
+  renamed to `CandidateProfileSummary` on both sides so the two do not
+  collide. On the frontend this also required switching `UserDetail` from
+  `extends Profile` to `Omit<Profile, 'candidate_profile'> & {...}` —
+  TypeScript does not allow a subtype to narrow an inherited property, which
+  the old code was unknowingly relying on being absent.
+
+Verified after resolving: 185/185 backend tests, clean production build, 0
+lint errors, server boots against the live database with `/profile/picture`
+registered.
 
 **`waqas` is merged into `huzaifa`.** The admin/super-admin build and the
 candidate-portal build happened in parallel on separate branches and are now
