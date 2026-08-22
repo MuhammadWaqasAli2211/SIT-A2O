@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { toast } from 'sonner'
 
 import { PageTransition } from '@/components/motion/page-transition'
 import { ThemeToggle } from '@/components/shared/theme-toggle'
@@ -145,17 +144,12 @@ function PortalShell() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {/* Registration opens in Phase 2; present but inert for now. */}
+            {/* Opens the bootcamp application form. Rendered through `Link`
+                rather than a click handler calling navigate(), so it stays a
+                real anchor: middle-click, ctrl-click and "open in new tab" all
+                work, and it is announced as a link rather than a button. */}
             {profile.role === UserRole.CANDIDATE && (
-              <Button
-                size="sm"
-                onClick={() =>
-                  toast('Registration opens soon', {
-                    description:
-                      'Bootcamp applications are not open yet. You will be emailed when registration begins.',
-                  })
-                }
-              >
+              <Button render={<Link to="/dashboard/register" />} size="sm">
                 <ClipboardPen className="size-4" />
                 Register
               </Button>
