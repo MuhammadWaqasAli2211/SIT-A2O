@@ -7,7 +7,7 @@ profile lookup, role resolution, and consistent responses.
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.integrations import supabase_auth
@@ -30,7 +30,14 @@ def _tokens_from(payload: dict) -> TokenPair:
 
 
 def get_profile(db: Session, user_id: uuid.UUID) -> Profile:
-    profile = db.scalar(select(Profile).where(Profile.id == user_id))
+    # candidate_profile is eager-loaded because /auth/me serialises it and
+    # this runs on every authenticated request; lazy-loading it would add a
+    # second round trip per call.
+    profile = db.scalar(
+        select(Profile)
+        .where(Profile.id == user_id)
+        .options(selectinload(Profile.candidate_profile))
+    )
     if profile is None:
         # The auth.users row exists but the trigger has not produced a profile.
         raise NotFoundError("Profile not found for this account.", code="profile_missing")
