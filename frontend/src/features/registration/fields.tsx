@@ -25,14 +25,72 @@ import {
 import { SECTION_FIELDS, SECTION_SCHEMAS, type SectionKey } from '@/features/registration/schema'
 import { cn } from '@/lib/utils'
 
+/**
+ * Whether the applicant is 18 or older on the day they apply.
+ *
+ * One definition, used by the CNIC requirement in three places: the unlock
+ * gate, the submit-time schema, and the asterisk on the label. Calendar-correct
+ * rather than `days / 365.25`, which drifts a day either side of a birthday.
+ */
+export function isAdult(dateOfBirth: unknown): boolean {
+  if (typeof dateOfBirth !== 'string' || !dateOfBirth) return false
+  const dob = new Date(dateOfBirth)
+  if (Number.isNaN(dob.getTime())) return false
+
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const monthDelta = today.getMonth() - dob.getMonth()
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < dob.getDate())) age -= 1
+  return age >= 18
+}
+
+/** Pakistani mobile numbers are 11 digits: 0300-1234567. */
+const PHONE_DIGITS = 11
+const PHONE_DASH_AFTER = 4
+
+/**
+ * Formats as the user types, and refuses the twelfth digit.
+ *
+ * Non-digits are discarded first, then a `+92` / `92` country code is
+ * rewritten to the local `0` form — otherwise pasting "+92 300 123 4567"
+ * yields "9230-0123456", which is what a first attempt at this actually did.
+ */
+export function formatPhone(raw: string): string {
+  let digits = raw.replace(/\D/g, '')
+
+  // 92 3xx xxxxxxx -> 0 3xx xxxxxxx. Guarded on the 3 so a local number that
+  // merely happens to start "92" is left alone; PK mobiles are all 03xx.
+  if (digits.startsWith('92') && digits[2] === '3') digits = `0${digits.slice(2)}`
+
+  digits = digits.slice(0, PHONE_DIGITS)
+  if (digits.length <= PHONE_DASH_AFTER) return digits
+  return `${digits.slice(0, PHONE_DASH_AFTER)}-${digits.slice(PHONE_DASH_AFTER)}`
+}
+
+/** Digits only, hard-capped. Used by the Saylani roll number. */
+export function digitsOnly(raw: string, max: number): string {
+  return raw.replace(/\D/g, '').slice(0, max)
+}
+
 /** Index of the first field in the section that does not yet validate. */
-export function unlockedCount(section: SectionKey, values: Record<string, unknown>): number {
+export function unlockedCount(
+  section: SectionKey,
+  values: Record<string, unknown>,
+  /**
+   * Swap in a different schema for named fields.
+   *
+   * The CNIC rule depends on a date entered in an earlier section, so the
+   * static section schema cannot express it. Without this the gate would let
+   * an adult walk past an empty CNIC that the submit-time check then rejects.
+   */
+  overrides?: Record<string, z.ZodTypeAny>,
+): number {
   const shape = SECTION_SCHEMAS[section].shape as Record<string, z.ZodTypeAny>
   const order = SECTION_FIELDS[section] as readonly string[]
 
   for (let i = 0; i < order.length; i += 1) {
     const key = order[i]
-    const fieldSchema = key ? shape[key] : undefined
+    const fieldSchema = key ? (overrides?.[key] ?? shape[key]) : undefined
     if (!fieldSchema) continue
     if (!fieldSchema.safeParse(values[key as string]).success) return i
   }
@@ -107,6 +165,8 @@ export function TextField({
   maxLength,
   inputMode,
   className,
+  transform,
+  readOnly = false,
 }: {
   name: string
   label: string
@@ -118,11 +178,27 @@ export function TextField({
   maxLength?: number
   inputMode?: 'text' | 'numeric' | 'tel' | 'email'
   className?: string
+  /**
+   * Rewrites the value on every keystroke. Returning a shorter string is what
+   * makes a limit a *hard stop* — the character is dropped before it reaches
+   * form state, so there is nothing to show an error about.
+   */
+  transform?: (raw: string) => string
+  /** Render disabled and non-editable without dimming it as "locked". */
+  readOnly?: boolean
 }) {
-  const { register } = useFormContext()
+  const { register, setValue } = useFormContext()
+  const field = register(name)
 
   return (
-    <GatedField name={name} label={label} locked={locked} optional={optional} hint={hint} className={className}>
+    <GatedField
+      name={name}
+      label={label}
+      locked={locked}
+      optional={optional}
+      hint={hint}
+      className={className}
+    >
       <Input
         id={name}
         type={type}
@@ -130,10 +206,33 @@ export function TextField({
         maxLength={maxLength}
         placeholder={placeholder}
         disabled={locked}
-        aria-invalid={undefined}
-        {...register(name)}
+        readOnly={readOnly}
+        {...field}
+        onChange={
+          transform
+            ? (event) => {
+                const next = transform(event.target.value)
+                setValue(name, next, { shouldValidate: true, shouldDirty: true })
+              }
+            : field.onChange
+        }
+        className={readOnly ? 'cursor-not-allowed bg-muted/50' : undefined}
       />
     </GatedField>
+  )
+}
+
+/** A choice whose stored value differs from what the user reads. */
+export interface SelectOption {
+  value: string
+  label: string
+}
+
+export type SelectOptions = readonly string[] | readonly SelectOption[]
+
+function normalise(options: SelectOptions): readonly SelectOption[] {
+  return options.map((option) =>
+    typeof option === 'string' ? { value: option, label: option } : option,
   )
 }
 
@@ -149,12 +248,14 @@ export function SelectField({
   name: string
   label: string
   locked: boolean
-  options: readonly string[]
+  /** Plain strings when the value *is* the label, or explicit value/label pairs. */
+  options: SelectOptions
   placeholder?: string
   hint?: string
   className?: string
 }) {
   const { control } = useFormContext()
+  const items = normalise(options)
 
   return (
     <GatedField name={name} label={label} locked={locked} hint={hint} className={className}>
@@ -163,6 +264,11 @@ export function SelectField({
         name={name}
         render={({ field }) => (
           <Select
+            // `items` is what makes the trigger show the *label* after
+            // selection. Without it Base UI renders the raw value, which is
+            // invisible for string options (value === label) and showed a bare
+            // UUID for the bootcamp track.
+            items={items}
             // null, not '': Base UI reads an empty string as a *selected*
             // empty value and suppresses the placeholder. The form state keeps
             // '' so the zod enums report "required" rather than "expected
@@ -175,9 +281,9 @@ export function SelectField({
               <SelectValue placeholder={placeholder} />
             </SelectTrigger>
             <SelectContent>
-              {options.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+              {items.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
