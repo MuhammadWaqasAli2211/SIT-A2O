@@ -28,7 +28,7 @@ async def upload_picture(
     path = profile_service.store_picture(
         db, user, data=data, content_type=file.content_type or ""
     )
-    return PictureOut(picture_path=path, url=supabase_storage.signed_url(path))
+    return PictureOut(picture_path=path, url=supabase_storage.picture_signed_url(path))
 
 
 @router.get("/picture", response_model=PictureOut)
@@ -37,4 +37,4 @@ def get_picture(user: CandidateUser, db: DbSession) -> PictureOut:
     path = profile_service.picture_path(db, user)
     if path is None:
         return PictureOut(picture_path=None, url=None)
-    return PictureOut(picture_path=path, url=supabase_storage.signed_url(path))
+    return PictureOut(picture_path=path, url=supabase_storage.picture_signed_url(path))
