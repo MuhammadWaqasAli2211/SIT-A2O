@@ -9,12 +9,19 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  const headers = AxiosHeaders.from(config.headers)
+
   const token = tokenStore.access
-  if (token) {
-    const headers = AxiosHeaders.from(config.headers)
-    headers.set('Authorization', `Bearer ${token}`)
-    config.headers = headers
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  // The instance defaults to application/json, which would override the
+  // multipart type *and* drop the boundary the server needs to split the
+  // parts. Deleting it lets the browser set both.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    headers.delete('Content-Type')
   }
+
+  config.headers = headers
   return config
 })
 
