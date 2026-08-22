@@ -28,9 +28,9 @@ def store_picture(db: Session, user: Profile, *, data: bytes, content_type: str)
     """
     if not data:
         raise ConflictError("The uploaded file is empty.")
-    if len(data) > supabase_storage.MAX_BYTES:
+    if len(data) > supabase_storage.PICTURE_MAX_BYTES:
         raise ConflictError("Picture must be under 1 MB.")
-    if content_type not in supabase_storage.ALLOWED_TYPES:
+    if content_type not in supabase_storage.PICTURE_ALLOWED_TYPES:
         raise ConflictError("Picture must be a JPG, JPEG or PNG.")
 
     path = supabase_storage.object_path(user.id, content_type)
