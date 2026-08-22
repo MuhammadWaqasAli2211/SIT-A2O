@@ -8,55 +8,34 @@ import {
   COURSE_STATUSES,
   GENDERS,
 } from '@/features/registration/constants'
-import { GatedField, SelectField, unlockedCount } from '@/features/registration/fields'
+import { SelectField, unlockedCount } from '@/features/registration/fields'
 import type { Program } from '@/features/applications/api'
-import { Controller } from 'react-hook-form'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 export function LocationSection({ programs }: { programs: readonly Program[] }) {
-  const { watch, control } = useFormContext()
+  const { watch } = useFormContext()
   const values = watch()
   const open = unlockedCount('location', values)
 
+  // The only field whose stored value differs from its label — the API needs
+  // the program's id, the candidate needs its title.
+  const trackOptions = programs.map((program) => ({
+    value: program.id,
+    label: program.title,
+  }))
+
   return (
     <div className="grid gap-5 sm:grid-cols-2">
-      {/* Which track they are applying for. Sourced from the open intake, so
-          a candidate can never pick a program it does not offer. */}
-      <GatedField
+      {/* Sourced from the open intake, so a candidate can never pick a
+          program it does not offer. */}
+      <SelectField
         name="program_id"
         label="Applying for — which bootcamp track?"
         locked={false}
-        className="sm:col-span-2"
+        options={trackOptions}
+        placeholder="Select a bootcamp track"
         hint="The track you want to join in this intake."
-      >
-        <Controller
-          control={control}
-          name="program_id"
-          render={({ field }) => (
-            <Select
-              value={field.value ? field.value : null}
-              onValueChange={(v) => field.onChange(v ?? '')}
-            >
-              <SelectTrigger id="program_id" className="w-full">
-                <SelectValue placeholder="Select a bootcamp track" />
-              </SelectTrigger>
-              <SelectContent>
-                {programs.map((program) => (
-                  <SelectItem key={program.id} value={program.id}>
-                    {program.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
-      </GatedField>
+        className="sm:col-span-2"
+      />
 
       <SelectField
         name="country"
