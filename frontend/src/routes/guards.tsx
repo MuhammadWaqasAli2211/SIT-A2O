@@ -1,4 +1,5 @@
 import { ArrowRight, ClipboardPen, Loader2 } from 'lucide-react'
+import { Suspense } from 'react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
@@ -87,5 +88,12 @@ export function GuestRoute() {
 
   if (isLoading) return <FullPageSpinner />
   if (profile) return <Navigate to={HOME_BY_ROLE[profile.role]} replace />
-  return <Outlet />
+  // The auth pages are lazy, and this is the only route branch that renders
+  // them — the portal and marketing outlets get their Suspense from
+  // PageTransition, which this branch deliberately does not use.
+  return (
+    <Suspense fallback={<FullPageSpinner />}>
+      <Outlet />
+    </Suspense>
+  )
 }
