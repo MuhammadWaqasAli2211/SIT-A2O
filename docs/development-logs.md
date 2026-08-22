@@ -1,8 +1,170 @@
-> **Branch:** `waqas` — last updated 2026-08-20
+> **Branch:** `waqas` — last updated 2026-08-22
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-22 (later) — Fix: Register button never left the frozen state
+
+**Branch:** `waqas`
+
+The registration form shipped reachable at `/dashboard/register`, but the
+Register button in the portal header still ran the placeholder from the auth
+task — a toast reading "Registration opens soon" and no navigation. The form
+was only findable by typing the URL.
+
+The freeze was correct when it was written: there was no form to open. It
+simply outlived its reason, and nothing connected the two facts.
+
+```
+- <Button size="sm" onClick={() => toast('Registration opens soon', ...)}>
++ <Button render={<Link to="/dashboard/register" />} size="sm">
+```
+
+`Link` rather than an `onClick` calling `navigate()`. Both route client-side,
+but only the anchor supports middle-click, ctrl-click and "open in new tab",
+and only the anchor is announced as a link. The `render` prop is how this
+codebase composes Base UI buttons with router links — the "Website" button two
+lines below already does exactly this.
+
+The `toast` import became dead and was removed with it.
+
+### Left alone, pending a decision
+
+The button behaves identically for somebody who has already registered. That
+case has not been agreed yet, so it was not changed — the recommendation is
+recorded in `project-status.md` under *Awaiting decisions*.
+
+Worth noting the backend already refuses a duplicate: `application_service.
+submit()` raises `ConflictError` with the existing candidate code, and the
+`unique (bootcamp_id, profile_id)` constraint backs it. The gap is only that
+the UI still invites the attempt.
+
+### Verified
+
+- Typecheck, production build and `oxlint` clean
+- Route path confirmed from the router config rather than assumed
+- **Not** click-tested in a browser — no frontend test runner is configured.
+  The pattern is the one already shipping on the adjacent "Website" button.
+
+---
+
+## 2026-08-22 — Multi-step bootcamp registration form
+
+**Branch:** `waqas`
+
+The form behind the Register button: four sections, one on screen at a time,
+each field unlocking only after the one above it validates. UI and local state
+only — **no database work**, by instruction. The field list was approved before
+any code was written.
+
+### Not the general enrolment form
+
+Adapted from Saylani's public enrolment form rather than copied. The
+differences are the point:
+
+| Change | Why |
+|---|---|
+| Class Preference removed | Bootcamp intake has no class options |
+| Course Status added | Replaces it; only meaningful once a course is named, so it is not rendered before then |
+| Saylani Roll Number added | Bootcamp applicants are existing students |
+| Country locked to Pakistan | One country runs bootcamps |
+| Campus locked to Zaitoon Ashraf IT Park | One campus runs bootcamps |
+| Course list filtered to 19 IT tracks | Six non-IT vocational courses on the public list are not preparation for an IT bootcamp |
+| Laptop callout added | A personal machine is mandatory; worth saying out loud, not burying in a Yes/No |
+| CAPTCHA omitted | Deferred to a later task. No stub either — a fake "not a robot" box implies protection that does not exist |
+
+**Only the applicant's CNIC is optional.** An applicant under 18 may not hold
+one yet; a guardian always does, so `father_cnic` is required. An earlier draft
+had both optional and was corrected.
+
+### Declarations written for this platform
+
+The reference form's declarations were not reused. A bootcamp applicant is
+entering a competitive, deadline-gated process with an interview, a physical
+interview and a capacity limit — none of which apply to open enrolment, and all
+of which they should be told about before agreeing to anything. Five
+declarations now cover accuracy, conduct, attendance and commitment, project
+completion, and the dress code, plus a separate policy consent.
+
+Each is its own checkbox. Bundling them into one "I agree to everything" makes
+consent unfalsifiable and leaves no record of which term was actually shown.
+
+### Progressive unlocking is derived, never stored
+
+`unlockedCount()` walks a section's field order and returns the index of the
+first field that does not parse against its own schema. Field `i` is enabled
+when `i <= unlockedCount`. Clearing a field re-locks everything after it for
+free, with no state to keep in step and no way for the gate to disagree with
+validation.
+
+This is why the schemas are split per section rather than kept as one flat
+object: the gate needs each field's schema reachable through `.shape`.
+
+### A separate stepper, on purpose
+
+`JourneyStepper` was not reused. It is typed to recruitment concepts —
+`ApplicationStage`, stage-to-step mapping, timestamps, a halted flag — none of
+which mean anything to a form, and its demo mode advances on a timer, which is
+exactly wrong for something that must move only when the user says so. Sharing
+it would have meant a third mode and a generic step type, making a component
+that does one job well do two badly.
+
+The *design language* is shared: node sizing, checkmark on completion, rotating
+ring on the active node, connectors filled by transform. A third consumer would
+be the moment to extract a primitive; two is not.
+
+Completed steps are clickable to go back. Forward jumps are not, because that
+would skip the validation each Next enforces.
+
+### Page fold
+
+CSS 3D transforms driven by Motion, no new dependency. The outgoing section
+pivots on its Y axis about the leading edge while a gradient darkens across it
+— the light-catch is what makes it read as paper rather than a rotating
+rectangle. The incoming section settles in from a shallower angle.
+
+Only `transform` and `opacity` animate, so it stays on the compositor.
+`AnimatePresence mode="wait"` sequences the two: overlapping them needs
+absolute positioning and a measured container height, which fights sections of
+different lengths. Reduced motion gets a plain crossfade.
+
+### Two bugs found while building
+
+**Base UI Select treats `''` as a selected value**, not as empty, which
+suppresses the placeholder. The controller now passes `null` for empty while
+form state keeps `''`, so the zod enums still report "required" rather than
+"expected string, received null".
+
+**Object URLs leak.** The picture preview revokes the previous URL on every
+re-pick and on unmount; without that, each change would strand an image for the
+life of the page.
+
+### No new libraries
+
+`react-hook-form`, `@hookform/resolvers`, `zod` and `motion` were all already
+installed. The project has no checkbox primitive, so the declaration checkboxes
+are buttons with `role="checkbox"` and `aria-checked` — real buttons, so
+keyboard operation comes free and the whole row is the hit target.
+
+### Not wired to the Register button
+
+The button in the portal header stays frozen, as previously instructed, and
+submitting persists nothing. The form is reachable at `/dashboard/register` for
+review. Activating the button is a one-line change once the database layer
+exists.
+
+### Verified
+
+- Typecheck (`tsc -b --force`), production build, and `oxlint` all clean
+- Register page code-splits to its own 54 kB chunk, so the rest of the portal
+  does not pay for it
+- Base UI Select and SelectValue props confirmed against their type
+  definitions rather than assumed
+- **Not** click-tested in a browser — no frontend test runner is configured,
+  and adding one would be a new dependency
 
 ---
 
