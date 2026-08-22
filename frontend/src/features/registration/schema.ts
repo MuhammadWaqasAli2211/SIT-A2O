@@ -58,6 +58,9 @@ function phone(label: string) {
 /* ------------------------------------------- 1. location and course -- */
 
 export const locationSchema = z.object({
+  // Which track they are applying FOR — distinct from `course`, which is what
+  // they already completed. The API cannot create an application without it.
+  program_id: z.string().uuid({ message: 'Select the track you are applying for' }),
   country: z.enum(COUNTRIES, { message: 'Select your country' }),
   gender: z.enum(GENDERS, { message: 'Select your gender' }),
   city: z.enum(CITIES, { message: 'Select your city' }),
@@ -169,7 +172,7 @@ export type RegistrationValues = z.infer<typeof registrationSchema>
 
 /** Field order per section — drives progressive unlocking and Next validation. */
 export const SECTION_FIELDS = {
-  location: ['country', 'gender', 'city', 'course', 'course_status', 'campus'],
+  location: ['program_id', 'country', 'gender', 'city', 'course', 'course_status', 'campus'],
   identity: ['full_name', 'father_name', 'date_of_birth', 'saylani_roll_number'],
   contact: ['email', 'phone', 'father_phone', 'cnic', 'father_cnic', 'address'],
   education: [
