@@ -42,6 +42,7 @@ cd backend
 python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt
 ./.venv/Scripts/python.exe -m uvicorn app.main:app --reload    # :8000
+# ...or, from any directory: ./backend/dev.ps1
 
 # 4. Frontend
 cd frontend
