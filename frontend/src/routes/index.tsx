@@ -4,8 +4,6 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { PortalLayout } from '@/components/layout/portal-layout'
 import { PublicLayout } from '@/components/layout/public-layout'
 import HomePage from '@/pages/public/home-page'
-import LoginPage from '@/pages/auth/login-page'
-import SignupPage from '@/pages/auth/signup-page'
 import NotFoundPage from '@/pages/not-found-page'
 import { AdminBootcampLayout } from '@/routes/admin-layout'
 import { RouteErrorBoundary } from '@/routes/error-boundary'
@@ -13,12 +11,20 @@ import { GuestRoute, ProtectedRoute, RequiresApplication, RoleRoute } from '@/ro
 import { UserRole } from '@/lib/types'
 
 /**
- * Everything except the landing page and auth is lazy-loaded.
+ * Everything except the landing page is lazy-loaded.
  *
  * Recharts alone is a few hundred kilobytes and is only ever used by the admin
  * and super-admin dashboards — a candidate should never download it. Splitting
  * here keeps the first paint small for the page most visitors actually land on.
+ *
+ * The auth pages used to be eager alongside the landing page. They are not any
+ * more: nothing on the landing page needs them, so bundling them into the main
+ * chunk only made the most-visited route heavier. They carry their own
+ * illustration and alumni dial now, which made that cost visible.
  */
+const LoginPage = lazy(() => import('@/pages/auth/login-page'))
+const SignupPage = lazy(() => import('@/pages/auth/signup-page'))
+
 const ProgramsPage = lazy(() => import('@/pages/public/programs-page'))
 const ProgramDetailPage = lazy(() => import('@/pages/public/program-detail-page'))
 const AdmissionsPage = lazy(() => import('@/pages/public/admissions-page'))
