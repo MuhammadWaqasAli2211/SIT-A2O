@@ -27,6 +27,7 @@ const ContactPage = lazy(() => import('@/pages/public/contact-page'))
 
 const CandidateDashboardPage = lazy(() => import('@/pages/candidate/dashboard-page'))
 const CandidateTrackPage = lazy(() => import('@/pages/candidate/track-page'))
+const CandidateRegisterPage = lazy(() => import('@/pages/candidate/register-page'))
 const CandidateApplicationPage = lazy(() => import('@/pages/candidate/application-page'))
 const CandidateInterviewPage = lazy(() => import('@/pages/candidate/interview-page'))
 const CandidateDocumentsPage = lazy(() => import('@/pages/candidate/documents-page'))
@@ -83,6 +84,9 @@ export const router = createBrowserRouter([
               // the profile belongs to the account rather than to any intake.
               { path: '/dashboard', element: <CandidateDashboardPage /> },
               { path: '/dashboard/track', element: <CandidateTrackPage /> },
+              // The registration form itself: open to any signed-in candidate,
+              // since completing it is what creates an application.
+              { path: '/dashboard/register', element: <CandidateRegisterPage /> },
               { path: '/dashboard/profile', element: <CandidateProfilePage /> },
 
               // Everything here describes a submitted application, so it stays
