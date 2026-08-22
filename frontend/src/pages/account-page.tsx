@@ -22,7 +22,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { authApi } from '@/features/auth/api'
 import { candidateApi } from '@/features/candidate/api'
+import { RegistrationDetails } from '@/features/candidate/registration-details'
+import { applicationsApi } from '@/features/applications/api'
+import { pictureApi } from '@/features/registration/picture-api'
 import { AsyncSection } from '@/features/admin/components'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
@@ -32,6 +36,36 @@ import { UserRole, type UserDetail } from '@/lib/types'
 export default function AccountPage() {
   const { profile, logout } = useAuth()
   const { data, error, initialLoading, refetch } = useAsync(() => candidateApi.myDetail(), [])
+
+  const isCandidate = profile?.role === UserRole.CANDIDATE
+
+  // Both are candidate-only and non-essential: staff have neither, and a
+  // failure in either should leave the rest of the page working. `useAsync`
+  // surfaces its own error, which is why neither is folded into `myDetail`.
+  const { data: picture } = useAsync(
+    () => (isCandidate ? pictureApi.current() : Promise.resolve(null)),
+    [isCandidate],
+  )
+  const { data: applications } = useAsync(
+    () => (isCandidate ? applicationsApi.mine() : Promise.resolve([])),
+    [isCandidate],
+  )
+
+  // The full profile, which `/auth/me/detail` deliberately does not carry:
+  // its `CandidateProfileSummary` is narrowed so the admin user directory —
+  // which shares that response shape — cannot see a candidate's father's CNIC
+  // or picture path. Widening it there would leak those to every admin, so
+  // the wide shape is fetched from `/auth/me` instead, which is only ever
+  // about the caller themselves.
+  const { data: fullProfile } = useAsync(
+    () => (isCandidate ? authApi.me() : Promise.resolve(null)),
+    [isCandidate],
+  )
+
+  // The live application if there is one, else the most recent — the same
+  // rule the dashboard uses, so the code shown here matches the one there.
+  const application =
+    applications?.find((a) => a.status === 'ACTIVE') ?? applications?.[0] ?? null
 
   return (
     <>
@@ -48,15 +82,27 @@ export default function AccountPage() {
       >
         {data && (
           <div className="grid gap-5 lg:grid-cols-3">
-            <IdentityCard detail={data} onSignOut={() => void logout()} />
+            <IdentityCard
+              detail={data}
+              pictureUrl={picture?.url ?? null}
+              onSignOut={() => void logout()}
+            />
             {/* Keyed on the server's own values so a save remounts the form
                 with the saved copy, rather than syncing it through an effect. */}
             <DetailsForm
               key={`${data.full_name}:${data.phone}:${data.candidate_profile?.cnic}`}
               detail={data}
-              isCandidate={profile?.role === UserRole.CANDIDATE}
+              isCandidate={isCandidate}
               onSaved={refetch}
             />
+
+            {isCandidate && (
+              <RegistrationDetails
+                candidate={fullProfile?.candidate_profile ?? null}
+                candidateCode={application?.candidate_code}
+                bootcampName={application?.bootcamp_name}
+              />
+            )}
           </div>
         )}
       </AsyncSection>
@@ -64,7 +110,16 @@ export default function AccountPage() {
   )
 }
 
-function IdentityCard({ detail, onSignOut }: { detail: UserDetail; onSignOut: () => void }) {
+function IdentityCard({
+  detail,
+  pictureUrl,
+  onSignOut,
+}: {
+  detail: UserDetail
+  /** Signed and short-lived; null until it loads, or if none was uploaded. */
+  pictureUrl: string | null
+  onSignOut: () => void
+}) {
   const initials = (detail.full_name ?? detail.email)
     .split(' ')
     .map((part) => part[0])
@@ -76,9 +131,19 @@ function IdentityCard({ detail, onSignOut }: { detail: UserDetail; onSignOut: ()
   return (
     <Card className="lg:col-span-1">
       <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-        <span className="grid size-20 place-items-center rounded-2xl bg-primary text-2xl font-semibold text-primary-foreground">
-          {initials}
-        </span>
+        {/* Initials remain the fallback: the URL is signed and expires, and
+            staff never upload a picture at all. */}
+        {pictureUrl ? (
+          <img
+            src={pictureUrl}
+            alt=""
+            className="size-20 rounded-2xl border border-border object-cover"
+          />
+        ) : (
+          <span className="grid size-20 place-items-center rounded-2xl bg-primary text-2xl font-semibold text-primary-foreground">
+            {initials}
+          </span>
+        )}
 
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold">{detail.full_name ?? 'Your name'}</h2>
