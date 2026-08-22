@@ -13,12 +13,11 @@
 import { useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, ArrowRight, CheckCircle2, RotateCcw, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Send } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { FormStepper, type FormStep } from '@/features/registration/form-stepper'
 import { PageFold, type FoldDirection } from '@/features/registration/page-fold'
 import {
@@ -32,7 +31,11 @@ import { EducationSection } from '@/features/registration/sections/education-sec
 import { IdentitySection } from '@/features/registration/sections/identity-section'
 import { LocationSection } from '@/features/registration/sections/location-section'
 import { TermsSection } from '@/features/registration/sections/terms-section'
-import { DECLARATIONS, POLICY_CONSENT } from '@/features/registration/terms'
+import { DECLARATIONS, POLICY_CONSENT, TERMS_VERSION } from '@/features/registration/terms'
+import { applicationsApi, type RegistrationResult } from '@/features/applications/api'
+import { useApplication } from '@/features/applications/application-context'
+import { RegistrationSuccess } from '@/features/registration/registration-success'
+import { toErrorMessage } from '@/lib/api-client'
 
 /**
  * Five steps, not four. "Personal information" was one ten-field step that ran
@@ -50,6 +53,7 @@ const STEPS: readonly (FormStep & { key: SectionKey })[] = [
 
 /** Every field starts empty so the unlock gate opens from the first one. */
 const EMPTY: Record<string, unknown> = {
+  program_id: '',
   country: '',
   gender: '',
   city: '',
@@ -80,7 +84,13 @@ export function RegistrationForm() {
   const [step, setStep] = useState(0)
   const [furthest, setFurthest] = useState(0)
   const [direction, setDirection] = useState<FoldDirection>(1)
-  const [submitted, setSubmitted] = useState<RegistrationValues | null>(null)
+  const [result, setResult] = useState<RegistrationResult | null>(null)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { openBootcamps, reload } = useApplication()
+  // One open intake at a time in practice; the first is the one being applied to.
+  const bootcamp = openBootcamps[0]
 
   const form = useForm<RegistrationValues>({
     resolver: zodResolver(registrationSchema),
@@ -99,7 +109,7 @@ export function RegistrationForm() {
     if (!valid) return
 
     if (isLast) {
-      setSubmitted(form.getValues())
+      await sendRegistration()
       return
     }
 
@@ -107,6 +117,53 @@ export function RegistrationForm() {
     const next = step + 1
     setStep(next)
     setFurthest((f) => Math.max(f, next))
+  }
+
+  async function sendRegistration() {
+    if (!bootcamp) {
+      setError('Registration is not open for any bootcamp right now.')
+      return
+    }
+    const v = form.getValues() as Record<string, string | boolean>
+
+    setSending(true)
+    setError(null)
+    try {
+      const created = await applicationsApi.register({
+        bootcamp_id: bootcamp.id,
+        program_id: v.program_id as string,
+        full_name: v.full_name as string,
+        father_name: v.father_name as string,
+        gender: v.gender as string,
+        date_of_birth: v.date_of_birth as string,
+        city: v.city as string,
+        email: v.email as string,
+        phone: v.phone as string,
+        father_phone: v.father_phone as string,
+        // '' means "I do not have one"; the column is unique, so it must be
+        // null rather than an empty string that a second applicant collides on.
+        cnic: (v.cnic as string) || null,
+        father_cnic: v.father_cnic as string,
+        address: v.address as string,
+        saylani_roll_number: v.saylani_roll_number as string,
+        prior_course: v.course as string,
+        prior_course_status: v.course_status as string,
+        campus: v.campus as string,
+        computer_proficiency: v.computer_proficiency as string,
+        last_qualification: v.last_qualification as string,
+        referral_source: v.referral_source as string,
+        has_laptop: v.has_laptop === 'Yes',
+        terms_version: TERMS_VERSION,
+      })
+      setResult(created)
+      // The portal locks Application/Interview/Documents behind having an
+      // application; refetch so they unlock without a page reload.
+      reload()
+    } catch (e) {
+      setError(toErrorMessage(e, 'Could not submit your registration.'))
+    } finally {
+      setSending(false)
+    }
   }
 
   function goBack() {
@@ -120,15 +177,7 @@ export function RegistrationForm() {
     setStep(index)
   }
 
-  function restart() {
-    form.reset(EMPTY as never)
-    setSubmitted(null)
-    setStep(0)
-    setFurthest(0)
-    setDirection(1)
-  }
-
-  if (submitted) return <ReviewPanel values={submitted} onRestart={restart} />
+  if (result) return <RegistrationSuccess result={result} />
 
   return (
     <FormProvider {...form}>
@@ -149,7 +198,9 @@ export function RegistrationForm() {
               <CardDescription>{current.hint}</CardDescription>
             </CardHeader>
             <CardContent className="pb-7">
-              {current.key === 'location' && <LocationSection />}
+              {current.key === 'location' && (
+                <LocationSection programs={bootcamp?.programs ?? []} />
+              )}
               {current.key === 'identity' && <IdentitySection />}
               {current.key === 'contact' && <ContactSection />}
               {current.key === 'education' && <EducationSection />}
@@ -158,14 +209,31 @@ export function RegistrationForm() {
           </Card>
         </PageFold>
 
+        {error && (
+          <Alert variant="destructive">
+            <AlertTitle>Could not submit</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="outline" onClick={goBack} disabled={step === 0}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={goBack}
+            disabled={step === 0 || sending}
+          >
             <ArrowLeft className="size-4" />
             Previous
           </Button>
 
-          <Button type="button" onClick={goNext}>
-            {isLast ? (
+          <Button type="button" onClick={goNext} disabled={sending}>
+            {sending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Submitting
+              </>
+            ) : isLast ? (
               <>
                 <Send className="size-4" />
                 Submit registration
@@ -181,67 +249,4 @@ export function RegistrationForm() {
       </div>
     </FormProvider>
   )
-}
-
-/* ---------------------------------------------------------------- review -- */
-
-function ReviewPanel({
-  values,
-  onRestart,
-}: {
-  values: RegistrationValues
-  onRestart: () => void
-}) {
-  // Widened to unknown: the value union spans strings, booleans and a File,
-  // so comparing against each empty form narrows to a dead branch otherwise.
-  const entries = (Object.entries(values) as [string, unknown][]).filter(
-    ([, value]) => value !== undefined && value !== '' && value !== false,
-  )
-
-  return (
-    <div className="flex flex-col gap-6">
-      <Alert>
-        <CheckCircle2 className="size-4" />
-        <AlertTitle>Form completed — not yet saved</AlertTitle>
-        <AlertDescription>
-          Every section passed validation. Nothing has been submitted or stored:
-          this form is not connected to the database yet, so no application has
-          been created and no candidate code issued.
-        </AlertDescription>
-      </Alert>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">What you entered</CardTitle>
-          <CardDescription>
-            The shape this data will take once persistence is added.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <dl className="flex flex-col">
-            {entries.map(([key, value], index) => (
-              <div key={key}>
-                {index > 0 && <Separator />}
-                <div className="flex flex-wrap items-baseline justify-between gap-3 py-2.5">
-                  <dt className="font-mono text-xs text-muted-foreground">{key}</dt>
-                  <dd className="text-sm font-medium">{formatValue(value)}</dd>
-                </div>
-              </div>
-            ))}
-          </dl>
-        </CardContent>
-      </Card>
-
-      <Button variant="outline" onClick={onRestart} className="w-fit">
-        <RotateCcw className="size-4" />
-        Start over
-      </Button>
-    </div>
-  )
-}
-
-function formatValue(value: unknown): string {
-  if (value instanceof File) return `${value.name} (${Math.round(value.size / 1024)} KB)`
-  if (value === true) return 'Accepted'
-  return String(value)
 }
