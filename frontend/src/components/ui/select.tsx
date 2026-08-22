@@ -61,7 +61,13 @@ function SelectContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  // Base UI defaults this on, which is the macOS behaviour of overlaying the
+  // trigger and shifting the popup so the *selected* item lands on top of it.
+  // In a long list that makes the popup jump position depending on what is
+  // selected, and it suppresses the open animation
+  // (`data-[align-trigger=true]:animate-none`). A conventional dropdown below
+  // the trigger is what the rest of this UI behaves like.
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
