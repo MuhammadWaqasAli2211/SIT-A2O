@@ -48,9 +48,13 @@ export function RoleRoute({ allow }: { allow: UserRole[] }) {
  * page is and what unlocks it.
  */
 export function RequiresApplication() {
-  const { hasRegistered, loading } = useApplication()
+  const { hasRegistered, initialLoading } = useApplication()
 
-  if (loading) {
+  // `initialLoading`, not `loading`: a refetch must not unmount the page this
+  // guard wraps. Doing so would discard whatever state it holds — a
+  // half-filled form, an upload in progress — for a request that was only ever
+  // going to confirm what the guard already knew.
+  if (initialLoading) {
     return (
       <>
         <PageHeader title="Loading" />
