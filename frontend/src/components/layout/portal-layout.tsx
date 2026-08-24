@@ -8,6 +8,7 @@ import {
   LogOut,
   Lock,
   Menu,
+  Radar,
   Search,
   TriangleAlert,
   UserCircle,
@@ -42,6 +43,7 @@ import {
   ApplicationProvider,
   useApplication,
 } from '@/features/applications/application-context'
+import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { LOCKED_HINT, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
 import { UserRole } from '@/lib/types'
@@ -145,16 +147,7 @@ function PortalShell() {
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {/* Opens the bootcamp application form. Rendered through `Link`
-                rather than a click handler calling navigate(), so it stays a
-                real anchor: middle-click, ctrl-click and "open in new tab" all
-                work, and it is announced as a link rather than a button. */}
-            {profile.role === UserRole.CANDIDATE && (
-              <Button render={<Link to="/dashboard/register" />} size="sm">
-                <ClipboardPen className="size-4" />
-                Register
-              </Button>
-            )}
+            {profile.role === UserRole.CANDIDATE && <RegisterAction />}
 
             <Button render={<Link to="/" />} variant="ghost" size="sm" className="hidden sm:inline-flex">
               <Home className="size-4" />
@@ -246,6 +239,72 @@ function PortalShell() {
         </main>
       </div>
     </div>
+  )
+}
+
+/* ------------------------------------------------------ register action -- */
+
+/**
+ * The header's primary candidate action, which is three different things
+ * depending on state:
+ *
+ *   already applied            -> "View application", to the tracker
+ *   no application, window shut -> "Register", opens the closed notice
+ *   no application, window open -> "Register", to the form
+ *
+ * The two navigating cases render through `Link` so they stay real anchors —
+ * middle-click and "open in new tab" work, and they are announced as links.
+ * Only the case that opens a dialog is a button, because only that one has no
+ * destination.
+ *
+ * Kept out of `PortalShell` so the dialog's open state lives beside the thing
+ * that opens it rather than in the layout's own state.
+ */
+function RegisterAction() {
+  const { openBootcamps, application, initialLoading } = useApplication()
+  const [closedNotice, setClosedNotice] = useState(false)
+
+  // Nothing is known until the *first* fetch settles; a disabled button for a
+  // moment beats offering an action that turns out to be the wrong one. A
+  // later refetch leaves the label alone rather than flickering it.
+  if (initialLoading) {
+    return (
+      <Button size="sm" disabled>
+        <ClipboardPen className="size-4" />
+        Register
+      </Button>
+    )
+  }
+
+  // Re-registering for the same intake is refused server-side anyway
+  // (`unique (bootcamp_id, profile_id)`), so pointing back at the form would
+  // only walk them into a 409.
+  if (application) {
+    return (
+      <Button render={<Link to="/dashboard/track" />} size="sm">
+        <Radar className="size-4" />
+        View application
+      </Button>
+    )
+  }
+
+  if (openBootcamps.length === 0) {
+    return (
+      <>
+        <Button size="sm" onClick={() => setClosedNotice(true)}>
+          <ClipboardPen className="size-4" />
+          Register
+        </Button>
+        <RegistrationClosedDialog open={closedNotice} onOpenChange={setClosedNotice} />
+      </>
+    )
+  }
+
+  return (
+    <Button render={<Link to="/dashboard/register" />} size="sm">
+      <ClipboardPen className="size-4" />
+      Register
+    </Button>
   )
 }
 
