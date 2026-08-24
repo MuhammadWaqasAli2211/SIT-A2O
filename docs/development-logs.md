@@ -1,12 +1,281 @@
-<<<<<<< HEAD
-> **Branch:** `huzaifa` — last updated 2026-08-22
-=======
-> **Branch:** `waqas` — last updated 2026-08-22
->>>>>>> origin/waqas
+> **Branch:** `waqas` — last updated 2026-08-24
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-24 (night) — A success modal that rendered for zero frames
+
+**Branch:** `waqas`
+
+Reported as "the form just submitted with no visible confirmation at all".
+The registration had in fact succeeded — `B08-003` was in the database with
+the candidate profile written — so the fault was entirely in the frontend.
+
+### Cause
+
+Introduced by the registration-window guard added earlier the same day. On a
+successful submit:
+
+```
+setResult(created)   // the child would now render <RegistrationSuccess>
+reload()             // -> setLoading(true)
+```
+
+React batches both into one render pass, and **the parent renders before the
+child**. The parent was the new guard:
+
+```tsx
+if (loading) return <Skeleton />   // RegistrationForm unmounts here
+```
+
+Unmounting the form destroyed the `result` state holding the candidate's code.
+When the refetch settled the guard mounted a *fresh* form, back at step one.
+The modal existed for no frames at all.
+
+Two individually correct pieces, broken at the seam: `reload()` deliberately
+raises a flag, and the guard deliberately watches it.
+
+### Fix: one flag was doing two jobs
+
+`useMyApplication` now returns both:
+
+| Flag | True when | Use for |
+|---|---|---|
+| `initialLoading` | until the first settle, never re-raised | **gating what mounts** |
+| `loading` | any fetch, refetches included | spinners |
+
+Guarding a mount on "we are fetching" is the bug in general form — a refetch
+throws away whatever the guard wraps. Guarding on "we do not know yet" cannot.
+The distinction already existed in `useAsync` on the admin side; this brings
+the candidate hook into line.
+
+`reload()` also moved out of the submit path into the modal's dismiss, firing
+on all three exits. Nothing behind the modal needs unlocking while the modal
+covers it, and deferring it removes the race rather than merely surviving it.
+
+### Three more instances of the same defect
+
+Found by sweeping every consumer, not by waiting for the next report:
+
+| File | Consequence of the old `loading` gate |
+|---|---|
+| `routes/guards.tsx` | **Unmounted the entire gated page** on any refetch — an in-progress document upload would have been discarded |
+| `dashboard-page.tsx` | Live dashboard flashed back to a skeleton |
+| `track-page.tsx` | Same |
+
+The `guards.tsx` one was the worse bug, waiting on a different trigger.
+
+`NavRow` deliberately still uses `loading`: a small "refreshing" dot there
+unmounts nothing, which is exactly what that flag is for.
+
+---
+
+## 2026-08-24 (evening) — Registration window enforced before the form loads
+
+**Branch:** `waqas`
+
+With registration closed, the Register button still opened the full form — it
+simply had no track to select. Five steps a candidate could walk through and
+never submit.
+
+### Source of truth, not a new check
+
+`is_phase_open()` weighs the registration flag **and** the clock against
+`opens_at`/`deadline_at`. It already backed both `open_for_registration()`
+(behind `/bootcamps/open`) and `assert_phase_open()` (enforced on submit), so
+the frontend gate reads the same answer a submission would get. Nothing new
+was introduced to decide "closed".
+
+Verified in both directions against the live database inside rolled-back
+transactions: closing the phase emptied `open_for_registration()`, reopening
+it returned Bootcamp 07 with its five programs.
+
+### Gated twice, deliberately
+
+The button checks before navigating, so nobody watches a page load only to be
+turned away. The route checks too, because a URL stays typeable. Only the
+button case is a `<button>` — the two navigating cases render through `Link`
+so middle-click and "open in new tab" keep working.
+
+`RegistrationClosedDialog` is compact, red, and **not** framed as an error: a
+closed intake is the normal state for most of the year. The icon scales in on
+a spring via Motion, already installed.
+
+### The button now has three states
+
+| State | Label | Destination |
+|---|---|---|
+| First load | Register *(disabled)* | — |
+| Has an application | **View application** | `/dashboard/track` |
+| No application, window shut | Register | Closed dialog |
+| No application, window open | Register | `/dashboard/register` |
+
+Pointing an existing applicant back at the form would only walk them into the
+409 that `unique (bootcamp_id, profile_id)` already produces.
+
+Extracted as `RegisterAction`, so the dialog's state lives beside the thing
+that opens it rather than in the layout.
+
+---
+
+## 2026-08-24 (afternoon) — Registration form, round two
+
+**Branch:** `waqas`
+
+Nine fixes from a review pass. Two were the same symptom with different
+causes, which is why they were diagnosed before either was touched.
+
+### The dropdown showing a UUID
+
+Only the *track* dropdown. Its value is a `program.id`, and Base UI's
+`SelectValue` renders the raw value rather than the item's children — every
+other select uses the label *as* the value, so they worked by accident.
+
+Fixed by removing the second code path rather than patching it: `SelectField`
+now takes either plain strings or `{value, label}` pairs and passes `items` to
+`Select.Root`. The track field had its own hand-rolled `Controller`; it now
+uses the shared component, so a value-unequal-label select cannot display raw
+again.
+
+### The dropdown feeling broken
+
+`alignItemWithTrigger` defaults to `true` in Base UI — the macOS behaviour of
+overlaying the trigger and shifting the popup so the *selected* item lands on
+it. With 19 courses the popup jumps position depending on selection, and the
+flag suppresses the open animation outright
+(`data-[align-trigger=true]:animate-none`). Hence "unpolished" rather than
+obviously broken. Now `false` in the shared wrapper, which changes every
+select in the app including the admin screens — no call site overrides it.
+
+### Input limits that are limits
+
+Roll number and phone numbers are **transformed on every keystroke**, not
+validated after the fact. The seventh roll-number digit and the twelfth phone
+digit are dropped before reaching form state, so there is nothing to show an
+error about.
+
+A first attempt at the phone formatter turned a pasted `+92 300 123 4567` into
+`9230-0123456` — caught by testing the function rather than trusting the
+comment above it. It now rewrites a `92` country code to the local `0` form,
+guarded on the following `3` so a local number starting "92" is left alone.
+
+### CNIC required from eighteen
+
+The rule spans two sections — date of birth in step two, CNIC in step three —
+so it cannot live in either section's schema. It is applied in three places
+from one calendar-correct `isAdult()`:
+
+1. `registrationSchema.superRefine` with `path: ['cnic']` — submit-time
+2. `unlockedCount()` gained a per-field schema override — so the unlock gate
+   agrees with the submit rule, instead of letting an adult past an empty CNIC
+   only to reject them at the last step
+3. `optional={!cnicRequired}` — the asterisk appears and disappears on its own
+
+### Declarations and policies
+
+Three one-line declarations, no headings, and the dress code rewritten
+gender-neutral: *"I agree to maintain formal attire while attending classes
+and any on-campus session."* `TERMS_VERSION` bumped to `2026-08-22b` — which
+is what that column exists for, so anyone who accepted the earlier wording has
+that recorded rather than the new one.
+
+Privacy Policy and Terms of Service open in a dialog rather than navigating:
+nothing is saved until submit, so leaving the page would cost five steps of
+answers. **The text is placeholder** and says so on screen. Real legal wording
+has to come from the project owner.
+
+Email is filled from the session and read-only — it is the account's address,
+not a new value to enter.
+
+---
+
+## 2026-08-24 (morning) — Registration writes to the database
+
+**Branch:** `waqas`
+
+The form stopped being a demo. One transaction now creates the application,
+mints the candidate code, and writes the person-level answers to the profile.
+
+### Two destinations, one payload
+
+Person-level answers (name, parentage, contact, CNIC, address) go to
+`candidate_profiles`; intake-specific ones (prior course, proficiency, laptop,
+declarations) go to `applications`. Splitting the *request* would let half a
+registration succeed; splitting the *storage* stops a candidate retyping their
+father's CNIC for every intake, and is what lets registration populate a
+profile at all.
+
+`profiles.full_name` and `profiles.phone` are synced too, so the portal header
+stops showing a blank name the moment somebody registers.
+
+### What was already right
+
+Checked before building, not assumed:
+
+- `mint_candidate_code()` was already race-safe — `UPDATE ... RETURNING` takes
+  a row lock, previously load-tested at 24 concurrent mints with zero
+  duplicates. No sequence or counter table was needed.
+- `unique (bootcamp_id, profile_id)` already prevented duplicate registration.
+
+So the migration only added columns. It also added `terms_version` alongside
+`terms_accepted_at`, a deliberate deviation from "store a flag": a bare
+timestamp records *that* somebody agreed but not to what, and the wording has
+since been rewritten once already.
+
+### Email cannot fail a registration
+
+Queued through FastAPI's `BackgroundTasks`, which run *after* the session
+dependency commits — so the registration is durable before the send is
+attempted — and `send_registration_confirmation()` catches everything and logs
+the candidate code for a manual resend. A Gmail outage cannot turn a
+successful registration into a 500.
+
+### Pictures
+
+Uploaded browser → FastAPI → Supabase Storage with the service role. The
+bucket is private with **no client-facing policies at all**, which is stricter
+than the RLS-per-user alternative and keeps the project's rule that the
+frontend never talks to Supabase directly. Reads are 1-hour signed URLs;
+filenames are random, since user-supplied ones carry path separators and
+surprise extensions.
+
+The upload happens on file selection, and the form field is only set once it
+succeeds — so the unlock gate doubles as proof the picture is stored.
+
+Round-trip verified against the real bucket: upload, sign, fetch back 200,
+ownership check correctly rejecting another user's path. Test object deleted.
+
+### The account page caught up
+
+`/account` rendered five of the fourteen profile fields, because it was built
+against the original four-column `candidate_profiles`. It now shows the
+registration answers read-only, the profile picture, and the candidate code
+(fetched from `/applications/mine`, since the code lives on the application,
+not the profile).
+
+Wiring that surfaced a **deliberate privacy boundary**: `UserDetail` is shared
+by `/auth/me/detail` and the admin user directory, and its
+`CandidateProfileSummary` is narrowed so an admin cannot see a candidate's
+father's CNIC or picture path. Widening it would have leaked those to every
+admin. The wide shape is fetched from `/auth/me` instead, which is only ever
+about the caller.
+
+### Verified
+
+Service-level, against the live database inside a rolled-back transaction:
+
+```
+CODE MINTED     : B07-001
+PROFILE WRITTEN : Test Candidate | Test Father | Karachi | cnic None
+profiles synced : Test Candidate | 0300-1234567
+ROLLED BACK
+```
+
+Later confirmed by real use: `B08-002` and `B08-003` were created through the
+browser with profiles populated.
 
 ---
 
