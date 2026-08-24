@@ -22,7 +22,18 @@ import {
 import type { RegistrationResult } from '@/features/applications/api'
 import { cn } from '@/lib/utils'
 
-export function RegistrationSuccess({ result }: { result: RegistrationResult }) {
+export function RegistrationSuccess({
+  result,
+  onDone,
+}: {
+  result: RegistrationResult
+  /**
+   * Refreshes the portal's application state. Called when the candidate
+   * leaves this modal by any route, so the newly unlocked navigation is
+   * correct by the time they arrive wherever they are going.
+   */
+  onDone?: () => void
+}) {
   const [copied, setCopied] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const navigate = useNavigate()
@@ -100,6 +111,7 @@ export function RegistrationSuccess({ result }: { result: RegistrationResult }) 
                 <Button
                   render={<Link to="/dashboard/track" />}
                   variant="outline"
+                  onClick={() => onDone?.()}
                   className="flex-1"
                 >
                   <Radar className="size-4" />
@@ -108,6 +120,7 @@ export function RegistrationSuccess({ result }: { result: RegistrationResult }) 
                 <Button
                   render={<Link to="/dashboard" />}
                   variant="outline"
+                  onClick={() => onDone?.()}
                   className="flex-1"
                 >
                   Go to dashboard
@@ -143,7 +156,13 @@ export function RegistrationSuccess({ result }: { result: RegistrationResult }) 
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row-reverse">
-              <Button onClick={() => navigate('/account')} className="flex-1">
+              <Button
+                onClick={() => {
+                  onDone?.()
+                  navigate('/account')
+                }}
+                className="flex-1"
+              >
                 View profile
               </Button>
               <Button
