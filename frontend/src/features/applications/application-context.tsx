@@ -44,7 +44,13 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
 
   return (
     <ApplicationContext
-      value={{ ...state, hasRegistered: !state.loading && state.application !== null }}
+      value={{
+        // Keyed on `initialLoading`: once the first fetch has settled the
+        // answer is known, and a later refetch must not momentarily re-lock
+        // navigation the candidate is already using.
+        ...state,
+        hasRegistered: !state.initialLoading && state.application !== null,
+      }}
     >
       {children}
     </ApplicationContext>
