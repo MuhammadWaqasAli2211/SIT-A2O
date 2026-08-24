@@ -89,6 +89,7 @@ export function RegistrationForm() {
   const [error, setError] = useState<string | null>(null)
 
   const { openBootcamps, reload } = useApplication()
+
   // One open intake at a time in practice; the first is the one being applied to.
   const bootcamp = openBootcamps[0]
 
@@ -156,9 +157,6 @@ export function RegistrationForm() {
         terms_version: TERMS_VERSION,
       })
       setResult(created)
-      // The portal locks Application/Interview/Documents behind having an
-      // application; refetch so they unlock without a page reload.
-      reload()
     } catch (e) {
       setError(toErrorMessage(e, 'Could not submit your registration.'))
     } finally {
@@ -177,7 +175,16 @@ export function RegistrationForm() {
     setStep(index)
   }
 
-  if (result) return <RegistrationSuccess result={result} />
+  // `reload()` is handed to the modal rather than fired on submit.
+  //
+  // The portal locks Application/Interview/Documents behind having an
+  // application, so the refetch has to happen — but it also raises a loading
+  // flag that this page's guard watches. Firing it in the same batch as
+  // `setResult` unmounted this component before the modal could paint, taking
+  // the candidate's code with it. Deferring it to dismissal removes the race
+  // rather than merely surviving it, and nothing behind the modal needs
+  // unlocking while the modal is covering it.
+  if (result) return <RegistrationSuccess result={result} onDone={reload} />
 
   return (
     <FormProvider {...form}>

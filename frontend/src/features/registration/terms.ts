@@ -17,7 +17,7 @@
  * acceptance timestamp, so a record says which text was agreed to rather than
  * merely when. Bump this whenever a declaration changes.
  */
-export const TERMS_VERSION = '2026-08-22'
+export const TERMS_VERSION = '2026-08-22b'
 
 export interface Declaration {
   /** Field name in the form schema, and the column suffix when persisted. */
@@ -43,7 +43,7 @@ export const DECLARATIONS: readonly Declaration[] = [
     id: 'dress_code',
     title: 'Dress code',
     body:
-      'I understand that female students are required to wear an abaya or hijab while attending classes on campus.',
+      'I agree to maintain formal attire while attending classes and any on-campus session.',
   },
 ]
 

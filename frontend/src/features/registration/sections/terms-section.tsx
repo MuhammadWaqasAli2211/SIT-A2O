@@ -1,8 +1,8 @@
 import { Controller, useFormContext } from 'react-hook-form'
 import { Check } from 'lucide-react'
-import { Link } from 'react-router-dom'
 
 import { unlockedCount } from '@/features/registration/fields'
+import { PolicyLink } from '@/features/registration/policy-dialog'
 import { DECLARATIONS, POLICY_CONSENT } from '@/features/registration/terms'
 import { cn } from '@/lib/utils'
 
@@ -21,27 +21,21 @@ export function TermsSection() {
         <Declaration
           key={declaration.id}
           name={declaration.id}
-          title={declaration.title}
           body={declaration.body}
           locked={open < index}
         />
       ))}
 
+      {/* Opens in a dialog rather than navigating: nothing is saved until
+          submit, so leaving the page would cost five steps of answers. */}
       <Declaration
         name={POLICY_CONSENT.id}
-        title={POLICY_CONSENT.title}
         locked={open < DECLARATIONS.length}
         body={
           <>
             I have read and accept the{' '}
-            <Link to="/privacy" className="font-medium text-primary underline underline-offset-2">
-              Privacy Policy
-            </Link>{' '}
-            and the{' '}
-            <Link to="/terms" className="font-medium text-primary underline underline-offset-2">
-              Terms of Service
-            </Link>
-            .
+            <PolicyLink kind="privacy">Privacy Policy</PolicyLink> and the{' '}
+            <PolicyLink kind="terms">Terms of Service</PolicyLink>.
           </>
         }
       />
@@ -59,12 +53,10 @@ export function TermsSection() {
  */
 function Declaration({
   name,
-  title,
   body,
   locked,
 }: {
   name: string
-  title: string
   body: React.ReactNode
   locked: boolean
 }) {
@@ -92,7 +84,7 @@ function Declaration({
               type="button"
               role="checkbox"
               aria-checked={checked}
-              aria-labelledby={`${name}-title`}
+              aria-labelledby={`${name}-body`}
               disabled={locked}
               onClick={() => field.onChange(!checked)}
               className={cn(
@@ -115,11 +107,8 @@ function Declaration({
                 {checked && <Check className="size-3.5" strokeWidth={3} />}
               </span>
 
-              <span className="flex flex-col gap-1">
-                <span id={`${name}-title`} className="text-sm font-medium">
-                  {title}
-                </span>
-                <span className="text-sm leading-relaxed text-muted-foreground">{body}</span>
+              <span id={`${name}-body`} className="text-sm leading-relaxed">
+                {body}
               </span>
             </button>
 

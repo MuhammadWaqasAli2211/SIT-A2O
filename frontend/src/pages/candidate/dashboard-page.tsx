@@ -26,11 +26,12 @@ import { completedSteps, isRejected, STAGE_LABEL, TOTAL_STEPS } from '@/lib/stag
 
 export default function CandidateDashboardPage() {
   const { profile } = useAuth()
-  const { application, loading, error, openBootcamps, reload } = useApplication()
+  const { application, initialLoading, error, openBootcamps, reload } = useApplication()
 
   const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
 
-  if (loading) return <DashboardSkeleton />
+  // Only the first load blanks the page; a refetch leaves it on screen.
+  if (initialLoading) return <DashboardSkeleton />
 
   if (error) {
     return (

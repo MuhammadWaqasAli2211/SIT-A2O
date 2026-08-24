@@ -22,6 +22,13 @@ export interface MyApplicationState {
   /** Every application, newest first — a candidate may apply to several intakes. */
   applications: ApplicationDetail[]
   openBootcamps: OpenBootcamp[]
+  /**
+   * True only until the first settle. Guard *mounting* on this, never on
+   * `loading` — a refetch would otherwise unmount whatever the guard wraps
+   * and take its state with it.
+   */
+  initialLoading: boolean
+  /** True during any fetch, including refetches. For spinners, not for gates. */
   loading: boolean
   error: string | null
   reload: () => void
@@ -52,12 +59,15 @@ export function useMyApplication({
   const [applications, setApplications] = useState<ApplicationDetail[]>([])
   const [openBootcamps, setOpenBootcamps] = useState<OpenBootcamp[]>([])
   const [loading, setLoading] = useState(enabled)
+  const [settledOnce, setSettledOnce] = useState(!enabled)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
-  // Both flags move here rather than at the top of the effect: `loading`
-  // already starts true, so the only moment it needs re-raising is the one
-  // that triggers a refetch.
+  // `loading` moves here rather than to the top of the effect: it already
+  // starts true, so the only moment it needs re-raising is the one that
+  // triggers a refetch. `settledOnce` is deliberately not reset — a refetch is
+  // not a first load, and treating it as one is what unmounted the success
+  // modal mid-render.
   const reload = useCallback(() => {
     setLoading(true)
     setNonce((n) => n + 1)
@@ -88,6 +98,7 @@ export function useMyApplication({
             : null,
         )
         setLoading(false)
+        setSettledOnce(true)
       },
     )
 
@@ -100,6 +111,7 @@ export function useMyApplication({
     application: pickPrimary(applications),
     applications,
     openBootcamps,
+    initialLoading: !settledOnce,
     loading,
     error,
     reload,

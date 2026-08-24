@@ -1,6 +1,59 @@
-> **Branch:** `huzaifa` — last updated 2026-08-22
+> **Branch:** `huzaifa` — last updated 2026-08-24
 
 # Project Status
+
+## Where things stand — 2026-08-24 (third merge)
+
+**Login and signup were rebuilt on a split-pane layout** — form on the left,
+a rotating alumni quote over an original inline-SVG illustration on the
+right, both restyled from theme tokens rather than new hardcoded colours.
+Google/Apple buttons show a "coming soon" toast; no OAuth is wired. The
+alumni quotes reuse the copy already on the public Success Stories page but
+attribute it by programme and cohort instead of by employer, since the
+original data pairs invented names with real companies (Careem, Telenor,
+etc.) — accurate for the quotes, not for who is saying them.
+
+Caught two bugs building it: `bg-primary` inverts for dark mode, which is
+right for a button and wrong for a full-height panel — glared badly next to
+the near-black form pane, fixed with a dedicated `--auth-pane` token that
+stays deep in both themes. And the auth pages were never actually
+route-split despite a comment above them claiming otherwise, adding roughly
+27 kB gzip to the landing page's chunk for a page most visitors never open;
+`GuestRoute` was missing the `Suspense` boundary it needed. Both pages are
+lazy-loaded now.
+
+Merged cleanly with `waqas`'s next batch below — no conflicts.
+
+**The registration flow is complete and in real use.** Three applications
+exist in the live database, created through the browser, with candidate
+profiles populated: `B07-004`, `B08-002`, `B08-003`. Codes mint sequentially
+per intake, confirmation email is queued without blocking the response, and
+the account page shows the submitted details, the profile picture, and the
+candidate code.
+
+**The registration window is now enforced in the UI as well as the API.** A
+closed intake shows a compact notice instead of mounting a form with no track
+to select. The header button reads **View application** for anyone who has
+already applied, pointing at the tracker rather than back into a form that
+would 409.
+
+**One frontend bug class was found and swept.** A guard added for the closed
+window watched the wrong loading flag and unmounted the registration form on
+its own success refetch, destroying the modal that shows the candidate code.
+`useMyApplication` now distinguishes `initialLoading` (first settle) from
+`loading` (any fetch); mount-gates use the former. Three other components had
+the same defect, including `RequiresApplication`, which would have discarded
+an in-progress document upload on any refetch.
+
+**Verified on the merged tree**, which the previous status entry listed as
+outstanding: 185 backend tests pass, frontend typecheck, production build and
+`oxlint` all clean.
+
+Still outstanding before this is production-ready: the Privacy Policy and
+Terms of Service dialogs carry **placeholder text**, clearly marked as such on
+screen, and need real legal wording from the project owner.
+
+---
 
 ## Where things stand — 2026-08-22 update (second merge)
 
@@ -334,14 +387,13 @@ Choices made provisionally, each reversible, flagged for confirmation:
 | 5 | Token storage | `localStorage` | Medium — one file, plus backend cookie work |
 | 6 | Primary colour | Green, matching Saylani | Trivial — two CSS variables |
 | 7 | `ADMIN` stays bootcamp-scoped | `SUPER_ADMIN` is the only global role; requested by project owner over making `ADMIN` itself global, to keep multi-admin isolation viable | Medium — touches `assert_can_manage` and its tests |
-| 8 | Register button after registering | Unchanged — still opens the form | Trivial |
+| 8 | ~~Register button after registering~~ | **Decided 2026-08-24** — relabels to *View application*, pointing at the tracker | Done |
 
-Item 8 needs a decision. Recommendation: once an application exists, relabel
-the button **View application** pointing at the summary page, and guard
-`/dashboard/register` the same way the other gated routes are guarded, since
-the URL stays typeable. Do **not** hide it outright — applications are unique
-per `(bootcamp, profile)`, so a candidate may legitimately apply to a second
-concurrent intake, and a vanished button would block that.
+Item 8 is settled and built. The button is not hidden when an application
+exists: applications are unique per `(bootcamp, profile)`, so a candidate may
+legitimately apply to a second concurrent intake, and a vanished button would
+block that. It relabels instead, and `/dashboard/register` is guarded
+separately because the URL stays typeable.
 
 Unanswered questions carried forward:
 
@@ -359,9 +411,9 @@ Unanswered questions carried forward:
 
 ## Next
 
-1. **Verification pass after the merge** — re-run the backend test suite,
-   the frontend production build, and lint; both were last verified
-   independently on the two branches, not on the merged tree
+1. **Supply the real Privacy Policy and Terms of Service text** — the
+   dialogs shown at registration are placeholders and say so; this is the one
+   item that blocks a public launch rather than merely improving it
 2. **Unify the two `ApplicationStage` sources** — `lib/types.ts` and
    `lib/stages.ts` — onto one definition; see *Known issue* above
 3. **Flip the Gmail API OAuth consent screen to Production** — prevents the

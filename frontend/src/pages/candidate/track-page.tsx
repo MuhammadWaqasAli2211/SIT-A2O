@@ -32,9 +32,10 @@ import { completedSteps, isRejected, STAGE_LABEL, TOTAL_STEPS } from '@/lib/stag
 import { cn } from '@/lib/utils'
 
 export default function CandidateTrackPage() {
-  const { application, loading, error } = useApplication()
+  const { application, initialLoading, error } = useApplication()
 
-  if (loading) return <TrackSkeleton />
+  // Only the first load blanks the page; a refetch leaves it on screen.
+  if (initialLoading) return <TrackSkeleton />
 
   if (error) {
     return (
