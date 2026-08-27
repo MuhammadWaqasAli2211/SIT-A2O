@@ -1,5 +1,5 @@
 import { api } from '@/lib/api-client'
-import type { AuthResponse, Profile, SignupResponse } from '@/lib/types'
+import type { AuthResponse, MessageResponse, Profile, SignupResponse } from '@/lib/types'
 
 export interface SignupPayload {
   email: string
@@ -11,6 +11,10 @@ export interface SignupPayload {
 export const authApi = {
   async signup(payload: SignupPayload) {
     const { data } = await api.post<SignupResponse>('/auth/signup', payload)
+    return data
+  },
+  async resendConfirmation(email: string) {
+    const { data } = await api.post<MessageResponse>('/auth/resend-confirmation', { email })
     return data
   },
   async login(email: string, password: string) {
