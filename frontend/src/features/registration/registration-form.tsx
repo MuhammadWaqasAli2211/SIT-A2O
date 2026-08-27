@@ -74,6 +74,10 @@ const EMPTY: Record<string, unknown> = {
   last_qualification: '',
   referral_source: '',
   has_laptop: '',
+  is_university_student: '',
+  university_semester: '',
+  university_name: '',
+  university_timing: '',
   picture: undefined,
   ...Object.fromEntries(
     [...DECLARATIONS.map((d) => d.id), POLICY_CONSENT.id].map((id) => [id, false]),
@@ -154,6 +158,12 @@ export function RegistrationForm() {
         last_qualification: v.last_qualification as string,
         referral_source: v.referral_source as string,
         has_laptop: v.has_laptop === 'Yes',
+        is_university_student: v.is_university_student === 'Yes',
+        // Sent as null rather than '' when the answer is No: the columns are
+        // nullable, and an empty string would read as "answered, blankly".
+        university_semester: (v.university_semester as string) || null,
+        university_name: (v.university_name as string) || null,
+        university_timing: (v.university_timing as string) || null,
         terms_version: TERMS_VERSION,
       })
       setResult(created)
