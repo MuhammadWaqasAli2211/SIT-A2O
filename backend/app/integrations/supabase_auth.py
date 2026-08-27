@@ -25,7 +25,7 @@ from app.core.exceptions import (
 
 _TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
-Operation = Literal["signup", "token"]
+Operation = Literal["signup", "token", "resend"]
 
 # GoTrue's `error_code` is stable and specific; prefer it over status code or
 # message text, both of which vary between Supabase releases.
@@ -130,6 +130,20 @@ def sign_in(email: str, password: str) -> dict:
         operation="token",
         params={"grant_type": "password"},
         json={"email": email, "password": password},
+    )
+
+
+def resend_confirmation(email: str) -> dict:
+    """Ask GoTrue to send the signup confirmation email again.
+
+    Uses the anon key, not service_role: this is reachable by an anonymous
+    caller, and GoTrue's own per-address and per-IP send limits are the
+    rate limiting. Handing it a privileged key would remove them.
+    """
+    return _post(
+        "/resend",
+        operation="resend",
+        json={"type": "signup", "email": email},
     )
 
 
