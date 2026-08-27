@@ -52,6 +52,11 @@ class CandidateProfile(Base, TimestampMixin):
         primary_key=True,
     )
     cnic: Mapped[str | None] = mapped_column(String(20), unique=True)
+
+    # Which document `cnic` holds: CNIC at 18 and over, B_FORM for a minor.
+    # Both are 13 digits and share the column, so without this the number is
+    # ambiguous once the applicant is no longer a minor.
+    id_document_type: Mapped[str | None] = mapped_column(String(10))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     city: Mapped[str | None] = mapped_column(String(80))
     education: Mapped[str | None] = mapped_column(String(120))
