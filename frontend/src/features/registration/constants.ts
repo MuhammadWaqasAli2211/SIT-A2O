@@ -77,6 +77,27 @@ export const REFERRAL_SOURCES = [
 
 export const LAPTOP_ANSWERS = ['Yes', 'No'] as const
 
+export const UNIVERSITY_ANSWERS = ['Yes', 'No'] as const
+
+/**
+ * Eight covers a standard Pakistani bachelor's degree. "Other" catches
+ * associate degrees, MPhil, and anyone on a programme that counts differently,
+ * without inviting free text that nobody can group later.
+ */
+export const SEMESTERS = [
+  '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', 'Other',
+] as const
+
+/**
+ * A fixed set rather than free text.
+ *
+ * The reason this is asked at all is to avoid timetabling a bootcamp session
+ * against a candidate's classes, which is a question about which half of the
+ * day is taken. Free text ("9-2", "9 AM - 2 PM", "morning shift") answers the
+ * same question in a dozen unqueryable spellings.
+ */
+export const UNIVERSITY_TIMINGS = ['Morning', 'Evening', 'Weekend'] as const
+
 /* ------------------------------------------------------------- picture -- */
 
 export const PICTURE_MAX_BYTES = 1024 * 1024
