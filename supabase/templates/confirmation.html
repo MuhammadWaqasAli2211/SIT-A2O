@@ -1,0 +1,46 @@
+<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;
+            color:#1f2937;max-width:600px">
+
+  <p style="font-size:16px">Hi {{ .Data.full_name }},</p>
+
+  <p>
+    Thanks for creating your account at Saylani Mass IT Training. One step is
+    left: confirm this email address so we know it reaches you.
+  </p>
+
+  <p style="margin:28px 0">
+    <a href="{{ .ConfirmationURL }}"
+       style="display:inline-block;padding:13px 28px;background:#16a34a;color:#ffffff;
+              font-size:15px;font-weight:600;text-decoration:none;border-radius:6px">
+      Confirm my email address
+    </a>
+  </p>
+
+  <p style="color:#6b7280;font-size:14px">
+    If the button does not work, copy this link into your browser:<br>
+    <a href="{{ .ConfirmationURL }}" style="color:#15803d;word-break:break-all">
+      {{ .ConfirmationURL }}
+    </a>
+  </p>
+
+  <div style="margin:28px 0;padding:18px 20px;background:#f0fdf4;
+              border-left:4px solid #16a34a;border-radius:6px">
+    <p style="margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:0.5px;
+              text-transform:uppercase;color:#15803d">What happens next</p>
+    <p style="margin:0;color:#166534">
+      Confirming your email creates your account. It does not enter you into a
+      bootcamp. To apply, sign in and complete the registration form, which is
+      when you receive your candidate code.
+    </p>
+  </div>
+
+  <p style="color:#6b7280;font-size:14px">
+    If you did not create this account, you can ignore this email and nothing
+    further will happen.
+  </p>
+
+  <p style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;
+            color:#9ca3af;font-size:13px">
+    Saylani Mass IT Training
+  </p>
+</div>

@@ -74,6 +74,13 @@ api.interceptors.response.use(
   },
 )
 
+/** The API's own error code, when the failure came from the API at all.
+ *  Callers branch on this; `toErrorMessage` is for what the user reads. */
+export function toErrorCode(error: unknown): string | null {
+  if (axios.isAxiosError<ApiError>(error)) return error.response?.data?.code ?? null
+  return null
+}
+
 /** Normalise any thrown value into a message safe to show a user. */
 export function toErrorMessage(error: unknown, fallback = 'Something went wrong.'): string {
   if (axios.isAxiosError<ApiError>(error)) {

@@ -4,20 +4,38 @@ Supabase owns credentials; this layer owns what the product needs around them:
 profile lookup, role resolution, and consistent responses.
 """
 
+import logging
 import uuid
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.exceptions import NotFoundError, PermissionDeniedError
+from app.core.exceptions import (
+    AppError,
+    NotFoundError,
+    PermissionDeniedError,
+    RateLimitedError,
+    UpstreamError,
+)
 from app.integrations import supabase_auth
 from app.models.user import Profile
 from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
+    ResendConfirmationRequest,
     SignupRequest,
     SignupResponse,
     TokenPair,
+)
+from app.schemas.common import MessageResponse
+
+logger = logging.getLogger(__name__)
+
+# Said whatever actually happened, so the endpoint cannot be used to test
+# whether an address has an account. See resend_confirmation().
+_RESEND_MESSAGE = (
+    "If that address has an unconfirmed account, a new confirmation email "
+    "is on its way. Remember to check your spam folder."
 )
 
 
@@ -70,6 +88,32 @@ def signup(payload: SignupRequest) -> SignupResponse:
         email=payload.email,
         email_confirmation_required=confirmation_required,
     )
+
+
+def resend_confirmation(payload: ResendConfirmationRequest) -> MessageResponse:
+    """Send the signup confirmation email again.
+
+    Without this a candidate who never received the first email is stuck for
+    good: they cannot sign in until the address is confirmed, and nothing else
+    in the product re-triggers that mail.
+
+    The reply is identical whether the address is unknown, already confirmed,
+    or genuinely resent, because this endpoint needs no authentication and a
+    truthful answer would turn it into a way to test which addresses have
+    accounts. Rate limiting and upstream failures are the exceptions: both are
+    things the caller has to act on, and neither reveals anything about a
+    particular address.
+    """
+    try:
+        supabase_auth.resend_confirmation(payload.email)
+    except (RateLimitedError, UpstreamError):
+        raise
+    except AppError:
+        # Unknown address, already confirmed, or rejected by GoTrue. Logged so
+        # a support question can still be answered, but not reflected back.
+        logger.info("Confirmation resend not actioned for %s", payload.email)
+
+    return MessageResponse(message=_RESEND_MESSAGE)
 
 
 def login(db: Session, payload: LoginRequest) -> AuthResponse:

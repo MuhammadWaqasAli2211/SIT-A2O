@@ -8,7 +8,7 @@ import {
   isAdult,
   unlockedCount,
 } from '@/features/registration/fields'
-import { optionalCnic, requiredCnic } from '@/features/registration/schema'
+import { bFormSchema, cnicSchema } from '@/features/registration/schema'
 import { useAuth } from '@/hooks/use-auth'
 
 export function ContactSection() {
@@ -23,11 +23,12 @@ export function ContactSection() {
     if (accountEmail) setValue('email', accountEmail, { shouldValidate: true })
   }, [accountEmail, setValue])
 
-  // Required from 18. The gate has to agree with the submit-time rule, or an
-  // adult could walk past an empty CNIC and be rejected at the last step.
-  const cnicRequired = isAdult(values.date_of_birth)
+  // One field, two documents. An adult gives a CNIC; a minor gives the B-Form
+  // they hold instead. Neither is skippable — an earlier version let a minor
+  // past with nothing, which left the record with no way to identify them.
+  const adult = isAdult(values.date_of_birth)
   const open = unlockedCount('contact', values, {
-    cnic: cnicRequired ? requiredCnic : optionalCnic,
+    cnic: adult ? cnicSchema : bFormSchema,
   })
 
   return (
@@ -59,18 +60,17 @@ export function ContactSection() {
         transform={formatPhone}
       />
 
-      {/* Optional under 18, required from 18 — driven by the date of birth
-          entered in the previous step, so the asterisk appears on its own. */}
+      {/* Label and validation swap on the date of birth entered in the
+          previous step. Both are mandatory. */}
       <TextField
         name="cnic"
-        label="Your CNIC"
+        label={adult ? 'Your CNIC' : 'Your B-Form number'}
         locked={open < 3}
-        optional={!cnicRequired}
         placeholder="42101-1234567-1"
         hint={
-          cnicRequired
-            ? 'Required, because you are 18 or older.'
-            : 'Optional — leave blank if you have not been issued one yet.'
+          adult
+            ? 'The CNIC issued in your own name.'
+            : 'Under 18, so give your B-Form number instead of a CNIC.'
         }
       />
       <TextField

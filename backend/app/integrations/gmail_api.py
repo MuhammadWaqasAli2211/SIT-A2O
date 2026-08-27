@@ -16,11 +16,18 @@ import base64
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 import httpx
 
 from app.core.config import settings
 from app.core.exceptions import EmailNotConfiguredError, UpstreamError
+
+# Display name for the From header. Not an env var: every other piece of
+# copy this integration sends (subjects, bodies) is a constant in
+# email_service.py, not per-environment configuration, and this is the same
+# kind of thing — brand text, not a credential.
+_SENDER_DISPLAY_NAME = "Saylani IT - A2O"
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
@@ -74,7 +81,7 @@ def _get_access_token() -> str:
 def _build_raw_message(*, to: str, subject: str, html_body: str, text_body: str) -> str:
     message = MIMEMultipart("alternative")
     message["To"] = to
-    message["From"] = settings.GMAIL_SENDER_EMAIL
+    message["From"] = formataddr((_SENDER_DISPLAY_NAME, settings.GMAIL_SENDER_EMAIL))
     message["Subject"] = subject
     message.attach(MIMEText(text_body, "plain"))
     message.attach(MIMEText(html_body, "html"))

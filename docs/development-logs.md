@@ -1,8 +1,439 @@
-> **Branch:** `waqas` — last updated 2026-08-24
+> **Branch:** `waqas` — last updated 2026-08-27
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-27 — Cached settings outlived the fix, and a raw address as sender
+
+**Branch:** `waqas`
+
+### The token worked in isolation and still failed for real
+
+The rotated Gmail refresh token (previous entry) passed an isolated exchange
+test, and a registration submitted through this session's own test server
+sent successfully. A real registration through the actual running dev server
+still produced no email, with no error visible to the candidate — the same
+symptom as the original bug, from a completely different cause.
+
+Traced to `@lru_cache` on `get_settings()` in `app/core/config.py`: the
+`Settings` object — including `GMAIL_REFRESH_TOKEN` — is read from `.env`
+once, on a process's first call, and reused for that process's entire
+lifetime. `.env`'s timestamp (12:59) postdated every backend process still
+running (all started 12:32 or earlier), confirmed via `Get-Process` start
+times cross-checked against `netstat`. No code watches `.env` for changes;
+only editing a `.py` file triggers `--reload`. The fix was a process
+restart, not a code change — flagging this here because it will recur for
+any future `.env`-only edit made while the server keeps running.
+
+### The sender showed a raw address, not a name
+
+Registration confirmation mail displayed `thewaqasali59` as the sender,
+while the signup email (Supabase SMTP, a separate system) already showed
+"Saylani IT - A2O" via its own sender-name field. `gmail_api.py` was setting
+`message["From"]` to the bare address.
+
+Fixed with `email.utils.formataddr()` rather than string-formatting the
+header by hand — it produces correctly quoted RFC 2822 output rather than
+something that merely looks right for this one name. The display name is a
+module constant, not a new environment variable: every other piece of copy
+this integration sends (subjects, bodies) is already a constant in
+`email_service.py`, and a brand name is the same kind of thing, not
+per-environment configuration. It's a single choke point
+(`_build_raw_message`), so this covers every email the Gmail integration
+sends now and later — interview invitations and onboarding mail included,
+once those are built.
+
+### Verified
+
+- Decoded the actual MIME message `_build_raw_message()` produces:
+  `From: Saylani IT - A2O <thewaqasali59@gmail.com>`
+- **192 backend tests pass**
+- A real registration through the real `POST /applications` endpoint
+  (candidate + admin-confirm + login + submit, no mocks) produced
+  `candidate_code = B08-010` and a `200` from
+  `gmail.googleapis.com/.../messages/send`
+- Test account deleted afterward; `auth.users`, `profiles`, and
+  `applications` confirmed at 0 rows for that id
+
+**Not verifiable from here:** reading the delivered message back through
+Gmail's API to double-check the header survived intact — the integration
+holds `gmail.send` only, deliberately, and cannot read mail. The visual
+check is the inbox itself.
+
+**Still open, unaffected by anything in this entry:** whether the rotated
+token itself survives past 7 days. See the previous entry. Check back
+**2026-09-03**.
+
+---
+
+## 2026-08-27 — The registration confirmation email stopped sending, and why is still open
+
+**Branch:** `waqas`
+
+### The report, and what it wasn't
+
+Reported as "the confirmation email with the candidate code has stopped
+arriving," with the DB write and the success modal both confirmed working —
+which correctly pointed away from `application_service.submit()` and toward
+the fire-and-forget `BackgroundTask` that follows it.
+
+A separate report bundled with it — sign-in broken after signup — turned out
+to be user error (retrying against an email that already had an account, not
+a bug) and needed no fix. Recorded here only so the earlier investigation of
+it in this log is not mistaken for an unresolved issue.
+
+### Root cause, reproduced directly
+
+Called `email_service.send_registration_confirmation()` — the exact function
+`POST /applications` schedules as a background task — with placeholder
+arguments, and captured the real failure rather than inferring it:
+
+```
+POST https://oauth2.googleapis.com/token "HTTP/1.1 400 Bad Request"
+UpstreamError: Failed to refresh the Gmail access token.
+details: {"error": "invalid_grant", "error_description": "Token has been
+           expired or revoked."}
+```
+
+The Gmail refresh token was dead. The application write, the candidate code,
+and the modal were all fine, exactly as reported, because the whole design
+point of running this as a `BackgroundTask` is that a mail failure must never
+surface as a failed registration.
+
+### A wrong diagnosis, caught and corrected
+
+First explanation offered: the OAuth consent screen was still in Testing
+status, where Google expires refresh tokens after 7 days. This was wrong,
+and checkable as wrong from files already in this repository — `security.md`
+and this file's own earlier entry both record the consent screen moving to
+**Production on 2026-08-20**, a full week before this investigation. The
+"Next" list in `project-status.md` had not been updated to match its own
+"Resolved" section a few hundred lines above it, which is what produced the
+wrong lead.
+
+### What actually explains a Production app's token expiring
+
+Not settled with certainty — this section states what is verified separately
+from what is inferred.
+
+**Verified:**
+- The consent screen has been in Production since 2026-08-20 (two files,
+  consistent, plus `git log` shows the commit recording it)
+- `backend/.env`'s filesystem timestamp is 2026-08-20, 13:02, unchanged since
+- 2026-08-27 (today) is exactly 7 days after that timestamp
+- Six months of disuse is ruled out by the timeline alone
+- No working-tree changes to `gmail_api.py` or `core/config.py` from the
+  unrelated Supabase/SMTP work done earlier this week — the two systems use
+  entirely separate credentials and neither code path touches the other
+
+**Inferred, not proven:** the token that just failed was minted earlier on
+2026-08-20, while the app was still in Testing, hours before that same day's
+flip to Production. The doc's original claim that "existing tokens survive
+the transition" was checked with a same-day re-test — which shows the token
+wasn't immediately revoked by publishing, not that its expiry policy
+changed. A token's lifetime plausibly gets fixed at the moment it is issued,
+based on the app's status *then* — in which case publishing later that day
+would not have rescued a token already stamped for 7-day expiry.
+
+No API available here can confirm or rule this out: a Cloud project's OAuth
+consent-screen history isn't reachable through the Gmail API's `gmail.send`
+scope or anything else this backend holds a credential for.
+
+### New token, tested for real, not assumed
+
+A new refresh token was generated 2026-08-27 — after Production had already
+been active for a full week — and placed in `.env` directly, not by hand
+here.
+
+Verified in two steps, both against the live Google/Gmail APIs:
+
+1. **Isolated token exchange** — `gmail_api._get_access_token()` called on
+   its own: succeeded, fresh access token returned.
+2. **A real registration, through the real endpoint** — a candidate account
+   was created, admin-confirmed (`email_confirm: true`, no inbox click
+   needed), logged in for a real access token, and used to `POST
+   /applications` against the live "Bootcamp 8" intake with a full,
+   schema-valid 27-field payload. Produced `candidate_code = B08-007`, `201`.
+   The backend log for that request shows:
+
+   ```
+   POST https://oauth2.googleapis.com/token         "HTTP/1.1 200 OK"
+   POST https://gmail.googleapis.com/.../messages/send "HTTP/1.1 200 OK"
+   INFO app.services.email_service: Registration confirmation sent
+   ```
+
+That confirms the new token works **today**. It does not confirm the
+"why" above — only time will. **The open question — does a token minted
+after Production survive past 7 days — is deliberately left open here.**
+Check back around **2026-09-03**. If sending is still working then, the
+mechanism above is confirmed and this can be closed. If it has failed again
+on the same 7-day cycle, Production publishing is not what protects this
+integration and the real fix is elsewhere — most likely accelerating the
+already-planned move off personal-Gmail OAuth to Resend or SendGrid.
+
+### A structural gap noticed along the way, not fixed
+
+Registration-confirmation failures write only a Python log line — never a
+row in `email_log`. That table is only ever written by the separate,
+admin-triggered bulk-send path (`send_to_applications` → `_send_and_log` in
+`email_service.py`). There was no database trail to check for the original
+failure; it was only found by re-triggering the send directly. Not addressed
+here — flagged for whoever picks up `email_log` coverage next.
+
+### Verified
+
+- New refresh token authenticates in isolation (`_get_access_token()`
+  succeeds)
+- A real, end-to-end registration through `POST /applications` produces a
+  real `200` from `gmail.googleapis.com` and a real Gmail message send —
+  not mocked, not assumed
+- The test candidate account and its application were deleted afterward via
+  the admin API; `auth.users`, `profiles`, and `applications` all confirmed
+  at 0 rows for that id post-delete
+
+**Not verified, and cannot be from inside this repository:** the Google
+Cloud OAuth consent-screen status itself, the cause of the *previous*
+token's death beyond the circumstantial timing evidence above, and whether
+this new token actually survives past 7 days — that last one is the whole
+reason 2026-09-03 is called out explicitly, above and in `project-status.md`.
+
+---
+
+## 2026-08-27 — Signup confirmation could not be recovered from, and could not be verified
+
+**Branch:** `waqas`
+
+### Two bugs, reported together, that turned out to be independent
+
+A signed-up account could not sign in: GoTrue rejects the password grant
+with `email_not_confirmed` until the address is confirmed, which is correct
+and present since the first backend commit, not a regression. But nothing in
+the product could re-send that confirmation email if the first one was
+missed, which meant an account could be permanently stuck with no self-service
+way out. Separately, the confirmation email itself was still Supabase's
+unstyled default, because the rewritten template committed at
+`docs/email-templates/signup-confirmation.html` had never been applied
+anywhere outside the repository — writing a file does not configure a
+project.
+
+### A resend endpoint, deliberately unable to say what it did
+
+`POST /auth/resend-confirmation` wraps GoTrue's own `/resend`, using the anon
+key rather than service_role so GoTrue's per-address and per-project send
+limits still apply — a resend button is exactly the kind of thing that
+invites abuse if it can bypass them.
+
+The endpoint returns the identical message for an unknown address, an
+already-confirmed one, and a genuinely resent one:
+
+```
+"If that address has an unconfirmed account, a new confirmation email
+ is on its way. Remember to check your spam folder."
+```
+
+It is reachable without authentication, because the caller cannot sign in
+yet — that is the whole reason they are here — and a truthful answer would
+turn the endpoint into a way to test which addresses have accounts. Rate-limit
+and upstream failures are the exception: both need the caller to act, and
+neither reveals anything about a specific address.
+
+On the frontend, the login page now reads the error *code* rather than only
+its message (`toErrorCode()`, added to `lib/api-client.ts`, next to the
+existing `toErrorMessage()`), because `email_not_verified` is the one failure
+with something to offer beyond an error string: a **Resend confirmation
+email** button, shown only on that code.
+
+### Why the fix was not `supabase config push`
+
+The templates now live at `supabase/templates/confirmation.html`, matching
+Supabase's config-as-code layout, and there is a `supabase config push`
+command that reads `config.toml` and applies it. It was not used: generating
+a default `config.toml` locally to check it showed `enable_confirmations =
+false` and `site_url = "http://127.0.0.1:3000"` as the values it would send
+for anything not explicitly set — pushing it would have disabled the email
+confirmation this project depends on and pointed every confirmation link at
+localhost, as a side effect of deploying a template.
+
+The Supabase Management API's `PATCH /v1/projects/{ref}/config/auth` does not
+have this problem: its request schema has 234 fields, and confirmed directly
+against the OpenAPI spec, every one of them is optional, so a request naming
+only `mailer_templates_confirmation_content` and `mailer_subjects_confirmation`
+changes only those two. `supabase/scripts/push_email_templates.py` does this,
+diffing live against `supabase/templates/*.html` and only writing with
+`--apply`. It was written and is committed but **has not been run** — the
+template was applied by hand in the Supabase dashboard instead, so the script
+is currently reference/backup for the next template change, not the deploy
+path this one took.
+
+One Management API field was checked and does not exist: there is no
+`smtp_pass` in that schema, so the SMTP password itself cannot be set through
+this API and Custom SMTP has to be configured once, by hand, in
+Authentication → Emails → SMTP Settings. It already was, independently of
+this work.
+
+### Verified against the live project, not assumed
+
+- **A genuinely new, unconfirmed signup** (`confirmation_sent_at` populated,
+  `email_confirmed_at` null) was created and used for every test below,
+  rather than reusing an already-confirmed account, which would have let a
+  broken resend look like it worked.
+- **The resend endpoint returns byte-identical `200` responses** for an
+  address with an unconfirmed account and one with no account at all —
+  checked side by side against the same running server.
+- **A resend against the fresh account was rejected `429` twice** before it
+  was accepted: first by GoTrue's per-address cooldown (`x-sb-error-code:
+  over_email_send_rate_limit`, `"...after 27 seconds"`, read directly off a
+  raw GoTrue call since the endpoint deliberately does not pass that detail
+  through), then once more a few seconds later, apparently reset by that same
+  diagnostic call. `confirmation_sent_at` was read after each `429` and
+  confirmed unchanged — the rejection was clean, not a silent duplicate send.
+- **The real success path**, only reachable once the cooldown cleared:
+  `confirmation_sent_at` moved from `07:19:07` to `07:20:19` on the third
+  attempt, a genuine second dispatch through Gmail's now-configured SMTP.
+- **192 backend tests pass** (185 before this work), including 7 new ones in
+  `tests/unit/test_resend_confirmation.py` covering the masking behaviour,
+  the two failure types that must still surface, and that the call goes out
+  on the anon key rather than service_role.
+- Frontend production build and `oxlint` clean on the touched files.
+- Both test accounts created for this work
+  (`...+e2e1787814167@...`, `...+smtp1787815146@...`) were deleted afterward
+  via the admin API; each owned one `profiles` row and no application, and
+  both tables confirmed empty post-delete.
+
+**Not verified by this work:** the actual rendered appearance of either email
+in an inbox — that was confirmed separately, by eye, outside this repository.
+
+---
+
+## 2026-08-27 — University status, B-Form for minors, and both emails rewritten
+
+**Branch:** `waqas`
+
+### A minor with no identity number at all
+
+The previous rule made the applicant's own CNIC optional under 18, on the
+reasoning that a minor may not hold one. That was half right: they hold a
+**B-Form** instead, and making the field skippable left those records with no
+way to identify the person at all.
+
+One field, two documents, both mandatory:
+
+| Age | Label | Validation |
+|---|---|---|
+| 18 and over | Your CNIC | 13 digits |
+| Under 18 | Your B-Form number | 13 digits |
+
+The label, the hint and the schema all swap on the date of birth entered in
+the previous step. Nothing is skippable either way.
+
+Because both numbers share one column, `candidate_profiles.id_document_type`
+now records which document it is. Without it the column is ambiguous the
+moment the applicant turns 18 and the age can no longer be inferred from the
+row. It is **derived server-side** from `date_of_birth` rather than sent by
+the client: a client-supplied answer could disagree with the date beside it,
+and the date is the one that can be checked.
+
+### University status
+
+Four fields in the education section, the last three revealed only for a
+university student: semester, university name, and class timing.
+
+Class timing is a fixed set (Morning / Evening / Weekend) rather than free
+text. The question exists so a bootcamp session is not timetabled against a
+candidate's classes, which is a question about which half of the day is taken
+— free text answers that in a dozen unqueryable spellings.
+
+They live on `applications`, not `candidate_profiles`: a semester advances
+between intakes, so this describes the applicant at the moment they applied
+rather than a durable fact about them.
+
+**The same rule is stated in three places, deliberately**, because each guards
+a different failure:
+
+1. `registrationSchema.superRefine` rejects a partial block at submit
+2. `ApplicationCreate` re-checks it, turning a database CHECK violation into a
+   422 that names the missing field
+3. `applications_university_details_complete` is the CHECK itself, so nothing
+   that bypasses the API can write a half-answered block
+
+### A gate that would have let students through
+
+Caught while reasoning about the unlock logic, not by a failing test.
+
+The three university fields are `.optional()` in the section schema, because
+they genuinely are optional for most applicants. The first version of the gate
+passed `undefined` as its override when the answer *was* yes, which fell
+through to that optional schema and advanced past three empty fields, failing
+only at submit.
+
+Both branches are now stated explicitly: required for a student, optional for
+everybody else. Verified by simulating the gate over the field order.
+
+```
+student, university blank  -> blocked at semester
+student, university filled -> reaches picture
+non-student, blank         -> reaches picture, block skipped
+```
+
+### The registration email
+
+Rewritten. The old closing line said nothing was required until interview
+scheduling, which was reassuring and wrong: a missed interview ends the
+application. It is replaced by a red callout carrying the exact wording the
+project owner supplied.
+
+Added a documents section covering the seven items needed at later stages,
+numbered with a hint under each rather than as a bare list, plus a separate
+amber block for applicants under 18 (B-Form in place of CNIC, Easypaisa or
+JazzCash in place of a bank account).
+
+Framed as informational throughout. A list of required paperwork with no
+context reads as a demand and generates support mail, so the section opens by
+saying nothing needs sending yet.
+
+The greeting now uses the full name as submitted. Every em-dash and en-dash
+was removed from both the HTML and plain-text parts, and both parts carry the
+same content rather than the text half being a summary.
+
+### The signup email is not ours to change
+
+Worth recording, because it is not obvious from the code: **the backend sends
+no signup email.** Supabase Auth (GoTrue) sends it from a template stored in
+the Supabase dashboard, so it cannot be edited from this repository.
+
+The rewritten markup was version-controlled at
+`docs/email-templates/signup-confirmation.html` (superseded — see the entry
+above; the deployable copy now lives at `supabase/templates/confirmation.html`)
+and had to be pasted into Supabase → Authentication → Emails → Confirm signup
+by hand. It is matched to the registration email's font stack, green accent,
+greeting form and footer rule, and kept deliberately shorter: it has one job,
+and text around a button lowers the chance the button is pressed.
+
+The on-screen notice after signup now names the address the mail went to and
+mentions the spam folder, those being the two most common reasons a
+confirmation never arrives.
+
+### Verified
+
+- **185 backend tests pass**, unchanged from before this work
+- Registration email rendered and asserted against **20 content checks**:
+  full-name greeting, the old line gone, the callout wording and its styling,
+  all seven documents, the mandatory note, the under-18 block, and the same
+  content in the plain-text part
+- Identity logic exercised directly: born 2000 gives `CNIC`, born 2012 gives
+  `B_FORM`, and an empty number is rejected for a minor where it used to pass
+- Full write path against the live database inside a rolled-back transaction:
+  a minor university student produced `B08-005` with all four university
+  columns and `id_document_type = B_FORM`
+- All three new CHECK constraints rejected bad values by name
+- Frontend typecheck, production build and `oxlint` clean, 0 errors
+
+**Not verified:** neither email was actually sent to an inbox, and the form
+was not click-tested in a browser. There is no frontend test runner, and
+sending live mail was not requested.
 
 ---
 

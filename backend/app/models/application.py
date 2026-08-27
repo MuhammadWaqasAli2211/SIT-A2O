@@ -64,6 +64,14 @@ class Application(Base, TimestampMixin):
     referral_source: Mapped[str | None] = mapped_column(String(40))
     has_laptop: Mapped[bool | None] = mapped_column(Boolean)
 
+    # Asked so bootcamp sessions are not timetabled against a candidate's
+    # classes. The three detail columns are populated only when the answer is
+    # yes, which a CHECK constraint enforces.
+    is_university_student: Mapped[bool | None] = mapped_column(Boolean)
+    university_name: Mapped[str | None] = mapped_column(String(150))
+    university_semester: Mapped[str | None] = mapped_column(String(20))
+    university_timing: Mapped[str | None] = mapped_column(String(20))
+
     # Paired by a CHECK constraint: a timestamp without the version cannot say
     # which wording was accepted.
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
