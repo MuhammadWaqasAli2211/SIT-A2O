@@ -44,6 +44,9 @@ import {
   PICTURE_TYPES,
   QUALIFICATIONS,
   REFERRAL_SOURCES,
+  SEMESTERS,
+  UNIVERSITY_ANSWERS,
+  UNIVERSITY_TIMINGS,
 } from '@/features/registration/constants'
 import { DECLARATIONS, POLICY_CONSENT } from '@/features/registration/terms'
 
@@ -59,20 +62,26 @@ const PK_PHONE = /^(\+92|0)?3\d{2}[\s-]?\d{7}$/
 /** 13 digits, hyphens optional. */
 const CNIC = /^\d{5}-?\d{7}-?\d$/
 
-/** Present-and-valid, or absent. */
-export const optionalCnic = z
+/**
+ * The applicant's own identity number. Always required — only *which*
+ * document it is changes with age.
+ *
+ * An earlier version made this optional for minors, which left the record with
+ * no way to identify them at all. Under 18 the answer is a B-Form rather than
+ * nothing: every Pakistani child has one, and it carries the same 13-digit
+ * format as a CNIC.
+ */
+export const cnicSchema = z
   .string()
   .trim()
+  .min(1, 'Your CNIC is required')
   .regex(CNIC, 'Enter a valid CNIC, e.g. 42101-1234567-1')
-  .optional()
-  .or(z.literal(''))
 
-/** Required and valid — swapped in once the applicant is 18 or older. */
-export const requiredCnic = z
+export const bFormSchema = z
   .string()
   .trim()
-  .min(1, 'Your CNIC is required from age 18')
-  .regex(CNIC, 'Enter a valid CNIC, e.g. 42101-1234567-1')
+  .min(1, 'Your B-Form number is required')
+  .regex(CNIC, 'Enter a valid B-Form number, e.g. 42101-1234567-1')
 
 function personName(label: string) {
   return z
@@ -135,10 +144,11 @@ export const contactSchema = z.object({
   phone: phone('Phone number'),
   father_phone: phone("Father's phone number"),
 
-  // Optional *here*, because whether it is required depends on a date entered
-  // in the previous section. The age rule is applied by `registrationSchema`
-  // below and by the unlock gate; this shape only says "if present, be valid".
-  cnic: optionalCnic,
+  // Required either way. The section schema carries the CNIC wording as the
+  // default; the unlock gate swaps in the B-Form variant for a minor, and
+  // `registrationSchema` re-checks below so the message matches the label the
+  // applicant was actually shown.
+  cnic: cnicSchema,
 
   // Required — a guardian's CNIC is always available even when the
   // applicant's is not.
@@ -164,6 +174,17 @@ export const educationSchema = z.object({
   last_qualification: z.enum(QUALIFICATIONS, { message: 'Select your last qualification' }),
   referral_source: z.enum(REFERRAL_SOURCES, { message: 'Tell us how you heard about us' }),
   has_laptop: z.enum(LAPTOP_ANSWERS, { message: 'Let us know if you have a laptop' }),
+
+  is_university_student: z.enum(UNIVERSITY_ANSWERS, {
+    message: 'Let us know if you are currently at university',
+  }),
+
+  // Only asked of university students, so they cannot be required outright.
+  // `registrationSchema` requires them when the answer is Yes, and the unlock
+  // gate is given the same rule so the two agree.
+  university_semester: z.enum(SEMESTERS).optional().or(z.literal('')),
+  university_name: z.string().trim().max(150, 'University name is too long').optional().or(z.literal('')),
+  university_timing: z.enum(UNIVERSITY_TIMINGS).optional().or(z.literal('')),
 
   // A File rather than a data URL: nothing is uploaded yet, and holding a
   // megabyte of base64 in form state would be paid for on every keystroke.
@@ -206,12 +227,37 @@ export const registrationSchema = locationSchema
   .extend(educationSchema.shape)
   .extend(termsSchema.shape)
   .superRefine((values, ctx) => {
-    if (!isEighteenOrOlder(values.date_of_birth) || values.cnic) return
-    ctx.addIssue({
-      code: 'custom',
-      path: ['cnic'],
-      message: 'Your CNIC is required from age 18',
-    })
+    // `termsSchema` is built from `Object.fromEntries` and so carries an index
+    // signature, which widens every sibling key to its value type once
+    // extended in. Reading through an explicit record restores the real
+    // shapes rather than fighting the inference.
+    const v = values as Record<string, unknown>
+
+    // The identity field is required either way; only the wording differs, so
+    // an empty one is reported in the terms the applicant was shown.
+    if (!v.cnic) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cnic'],
+        message: isEighteenOrOlder(v.date_of_birth)
+          ? 'Your CNIC is required'
+          : 'Your B-Form number is required',
+      })
+    }
+
+    // University details are asked only of university students, and are then
+    // all required — a half-answered block is worse than none.
+    if (v.is_university_student === 'Yes') {
+      for (const [field, message] of [
+        ['university_semester', 'Select your current semester'],
+        ['university_name', 'Enter your university name'],
+        ['university_timing', 'Select when your classes run'],
+      ] as const) {
+        if (!v[field]) {
+          ctx.addIssue({ code: 'custom', path: [field], message })
+        }
+      }
+    }
   })
 
 export type LocationValues = z.infer<typeof locationSchema>
@@ -227,7 +273,8 @@ export const SECTION_FIELDS = {
   contact: ['email', 'phone', 'father_phone', 'cnic', 'father_cnic', 'address'],
   education: [
     'computer_proficiency', 'last_qualification', 'referral_source',
-    'has_laptop', 'picture',
+    'has_laptop', 'is_university_student', 'university_semester',
+    'university_name', 'university_timing', 'picture',
   ],
   terms: [...DECLARATIONS.map((d) => d.id), POLICY_CONSENT.id],
 } as const satisfies Record<string, readonly string[]>
