@@ -11,20 +11,53 @@ import {
   PICTURE_RULES,
   QUALIFICATIONS,
   REFERRAL_SOURCES,
+  SEMESTERS,
+  UNIVERSITY_ANSWERS,
+  UNIVERSITY_TIMINGS,
 } from '@/features/registration/constants'
 import {
   GatedField,
   RadioField,
   SelectField,
+  TextField,
   unlockedCount,
 } from '@/features/registration/fields'
+import { z } from 'zod'
+
 import { pictureApi } from '@/features/registration/picture-api'
 import { toErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 
 export function EducationSection() {
   const { watch } = useFormContext()
-  const open = unlockedCount('education', watch())
+  const values = watch()
+
+  const atUniversity = values.is_university_student === 'Yes'
+
+  /**
+   * Both branches are stated explicitly, and neither may be left to the
+   * section schema.
+   *
+   * There the three fields are `.optional()`, because they are genuinely
+   * optional for most applicants. Falling through to that for a student would
+   * let the gate advance past three empty fields and only fail at submit,
+   * which is the same class of mismatch the CNIC rule had to avoid.
+   */
+  const required = z.string().trim().min(1)
+  const optional = z.string().optional()
+  const universityGate = atUniversity
+    ? {
+        university_semester: required,
+        university_name: required,
+        university_timing: required,
+      }
+    : {
+        university_semester: optional,
+        university_name: optional,
+        university_timing: optional,
+      }
+
+  const open = unlockedCount('education', values, universityGate)
 
   return (
     <div className="flex flex-col gap-5">
@@ -73,7 +106,45 @@ export function EducationSection() {
         />
       </div>
 
-      <PictureField locked={open < 4} />
+      {/* Asked because bootcamp sessions must not clash with a candidate's
+          classes. Only a university student is asked the follow-ups. */}
+      <div className="flex flex-col gap-5 rounded-xl border border-border/70 bg-muted/20 p-5">
+        <RadioField
+          name="is_university_student"
+          label="Are you currently a university student?"
+          locked={open < 4}
+          options={UNIVERSITY_ANSWERS}
+        />
+
+        {atUniversity && (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <SelectField
+              name="university_semester"
+              label="Current semester"
+              locked={open < 5}
+              options={SEMESTERS}
+              placeholder="Select semester"
+            />
+            <SelectField
+              name="university_timing"
+              label="Class timing"
+              locked={open < 7}
+              options={UNIVERSITY_TIMINGS}
+              placeholder="Select timing"
+              hint="Which half of the day your classes run."
+            />
+            <TextField
+              name="university_name"
+              label="University name"
+              locked={open < 6}
+              placeholder="e.g. NED University of Engineering & Technology"
+              className="sm:col-span-2"
+            />
+          </div>
+        )}
+      </div>
+
+      <PictureField locked={open < 8} />
     </div>
   )
 }
