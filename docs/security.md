@@ -260,6 +260,19 @@ explicit revocation, or roughly six months of disuse. None of those apply
 routinely, but a send failing with an auth error is the signal to re-run the
 OAuth Playground step in `development-logs.md`.
 
+**Update, 2026-08-27 — that last paragraph was tested and found incomplete.**
+The token in use since 2026-08-20 died on 2026-08-27 — exactly 7 days later,
+none of the causes above — despite Production having been active the whole
+time. The re-test cited above only proved the token survived publishing by a
+few hours; it did not prove its expiry policy changed, and the token had
+been minted earlier that same day while still in Testing. **Open question,
+not yet settled:** does a token minted *after* Production survive past 7
+days, or does this integration need a different fix regardless of publishing
+status? A new token was generated 2026-08-27 specifically to test this. See
+the dated entry in `development-logs.md` and the "Next" list in
+`project-status.md` (item on checking back 2026-09-03) for the resolution
+once observed.
+
 ### Access granted by the refresh token
 
 `GMAIL_REFRESH_TOKEN` grants indefinite send-as access to the configured
