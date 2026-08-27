@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import ApplicationStage, ApplicationStatus
 from app.schemas.bootcamp import PhaseOut, ProgramOut
@@ -14,6 +14,8 @@ from app.schemas.bootcamp import PhaseOut, ProgramOut
 Gender = Literal["Male", "Female"]
 CourseStatus = Literal["Completed", "In Progress"]
 Proficiency = Literal["Beginner", "Intermediate", "Advanced"]
+Semester = Literal["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "Other"]
+ClassTiming = Literal["Morning", "Evening", "Weekend"]
 
 CNIC_PATTERN = r"^\d{5}-?\d{7}-?\d$"
 PK_PHONE_PATTERN = r"^(\+92|0)?3\d{2}[\s-]?\d{7}$"
@@ -41,8 +43,11 @@ class ApplicationCreate(BaseModel):
     phone: str = Field(pattern=PK_PHONE_PATTERN)
     father_phone: str = Field(pattern=PK_PHONE_PATTERN)
 
-    # Optional: candidates under 18 may not hold a CNIC yet.
-    cnic: str | None = Field(default=None, pattern=CNIC_PATTERN)
+    # The applicant's own identity number, always required. Which document it
+    # is depends on age: a CNIC at 18 and over, a B-Form below that. Both are
+    # 13 digits, so one pattern covers them and `date_of_birth` decides which
+    # it is — see the validator below.
+    cnic: str = Field(pattern=CNIC_PATTERN)
     # Required: a guardian always has one.
     father_cnic: str = Field(pattern=CNIC_PATTERN)
 
@@ -58,17 +63,58 @@ class ApplicationCreate(BaseModel):
     referral_source: str = Field(min_length=2, max_length=40)
     has_laptop: bool
 
+    is_university_student: bool
+    university_semester: Semester | None = None
+    university_name: str | None = Field(default=None, max_length=150)
+    university_timing: ClassTiming | None = None
+
     # Which wording was accepted. Sent by the client and re-checked against
     # the server's current version, so a stale tab cannot record consent to
     # text it never showed.
     terms_version: str = Field(max_length=20)
 
-    @field_validator("cnic")
-    @classmethod
-    def _blank_cnic_is_none(cls, v: str | None) -> str | None:
-        # The form submits '' for "I do not have one"; the column is nullable
-        # and unique, so '' would collide on the second such applicant.
-        return v or None
+    @model_validator(mode="after")
+    def _university_details_complete(self) -> "ApplicationCreate":
+        """All three university fields, or none.
+
+        Mirrors the CHECK constraint on `applications`. Catching it here turns
+        a 500 from the database into a 422 naming the missing field.
+        """
+        if not self.is_university_student:
+            # Ignore anything sent alongside a "no" rather than rejecting it —
+            # a user who answers yes, fills the fields, then switches to no
+            # should not have to clear them by hand.
+            self.university_semester = None
+            self.university_name = None
+            self.university_timing = None
+            return self
+
+        missing = [
+            name
+            for name, value in (
+                ("university_semester", self.university_semester),
+                ("university_name", self.university_name),
+                ("university_timing", self.university_timing),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "University students must provide " + ", ".join(missing)
+            )
+        return self
+
+    @property
+    def id_document_type(self) -> str:
+        """Which document `cnic` holds, derived from age at submission.
+
+        Derived rather than sent: a client-supplied answer could disagree with
+        the date of birth beside it, and the date is the one we can check.
+        """
+        today = date.today()
+        born = self.date_of_birth
+        age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        return "CNIC" if age >= 18 else "B_FORM"
 
 
 class StageTransitionOut(BaseModel):
