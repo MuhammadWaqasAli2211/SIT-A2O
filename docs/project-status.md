@@ -1,6 +1,134 @@
-> **Branch:** `huzaifa` — last updated 2026-08-24
+> **Branch:** `waqas` — last updated 2026-08-27
 
 # Project Status
+
+## Where things stand — 2026-08-27 (Gmail token, resolved for now)
+
+**The restart step in the entry below was the last piece.** A new refresh
+token authenticating in isolation was not enough — the running backend
+process had cached the old, dead one at startup (`@lru_cache` on
+`get_settings()`), so it kept failing even after `.env` was updated, until
+the process was restarted. After that, a real registration submitted through
+the actual UI produced the confirmation email successfully.
+
+**Sender display name fixed in the same pass.** The registration
+confirmation email was showing the raw address (`thewaqasali59`) instead of
+a name, while the signup email already showed "Saylani IT - A2O" via
+Supabase's SMTP sender-name field. `gmail_api.py` now sets the same display
+name on every email this integration sends, via `email.utils.formataddr()`
+rather than a raw address string. Verified by decoding the actual MIME
+message built and by a real send (`200` from `gmail.googleapis.com`) through
+a real registration.
+
+**Today's full set of fixes, verified working, dated 2026-08-27:**
+
+| Fix | Verified |
+|---|---|
+| University status fields (semester, university, class timing) | Live DB write, 3-layer validation |
+| CNIC/B-Form split by age for the applicant's own ID | Identity logic + CHECK constraints |
+| Registration + signup email content rewritten | 20 content assertions, dashboard template applied |
+| `POST /auth/resend-confirmation` | Real resend, masking verified, rate-limit passthrough verified |
+| Custom SMTP (Gmail) for Supabase auth emails | Confirmed as the active sender |
+| Gmail OAuth refresh token rotated | Real send through real registration endpoint |
+| Sender display name ("Saylani IT - A2O") on Gmail-integration mail | Real send, header decoded and confirmed |
+
+**Still open:** whether a token minted after Production publishing survives
+past 7 days is not settled by any of the above — only time settles it. See
+`development-logs.md` and the **Next** list's item on checking back
+**2026-09-03**.
+
+---
+
+## Where things stand — 2026-08-27 (Gmail token)
+
+**The registration confirmation email — the one carrying the candidate
+code — stopped sending.** Not the DB write: the success modal and the code
+were always correct, because `send_registration_confirmation()` runs as a
+`BackgroundTask` after the transaction commits and is designed to never
+surface a mail failure to the candidate. Traced by calling that exact
+function directly: `gmail_api._get_access_token()` failed with Google's
+`invalid_grant: Token has been expired or revoked.`
+
+**Open question, not yet settled: why.** The OAuth consent screen has been in
+Production since 2026-08-20 — confirmed in this file and in `security.md`,
+both predating this investigation — so "still in Testing" is not the
+explanation. The likely mechanism: the *specific* refresh token in use was
+minted earlier the same day, while the app was still in Testing, and a
+same-day Production re-test only proved it wasn't immediately revoked, not
+that its expiry policy had changed. `backend/.env`'s file timestamp (Aug 20,
+unchanged since) lines up with that token, and today — Aug 27 — is exactly
+7 days later.
+
+A new refresh token was generated 2026-08-27, after Production has been
+active for a week, and placed in `.env`. Verified working immediately:
+token exchange returned a fresh access token, and a real registration
+submitted through the actual `POST /applications` endpoint produced a `200`
+from `gmail.googleapis.com/.../messages/send` and `Registration confirmation
+sent` in the log. **That only proves the new token works today — it does
+not yet prove Production actually stops the 7-day expiry for a token issued
+after the flip.** That requires waiting past 7 days without touching the
+token. **Check back around 2026-09-03**: if sending is still failing then,
+Production publishing is not the fix it was assumed to be and this needs a
+different answer (possibly moving off personal-Gmail OAuth entirely, given
+the existing plan to migrate to Resend/SendGrid).
+
+---
+
+## Where things stand — 2026-08-27 (auth)
+
+**A signed-up account that never confirmed its email had no way back in.**
+GoTrue correctly refuses sign-in until the address is confirmed — that has
+always been true, not a regression — but nothing re-sent the confirmation
+email if the first one was missed, so the account was stuck for good.
+`POST /auth/resend-confirmation` now wraps GoTrue's own resend, and the login
+page shows a **Resend confirmation email** button specifically when sign-in
+fails with `email_not_verified`. The endpoint answers identically for a known
+and an unknown address, so it cannot be used to test which addresses have
+accounts.
+
+**The signup email template is applied and verified**, not just written to a
+file. The markup now lives at `supabase/templates/confirmation.html` and was
+applied by hand in the Supabase dashboard (Authentication → Emails → Confirm
+signup); `supabase/scripts/push_email_templates.py` exists as the
+config-as-code path for the *next* change, using the Management API rather
+than `supabase config push` — the latter would push `config.toml`'s implicit
+defaults for anything not set, which include `enable_confirmations = false`.
+
+Verified end-to-end against the live project: a fresh unconfirmed signup, a
+real resend that bumped `confirmation_sent_at` after clearing GoTrue's
+per-address cooldown, and confirmation that Custom SMTP (Gmail, configured
+separately in the dashboard) is what's now sending it rather than Supabase's
+low-quota built-in mailer. Both test accounts were deleted afterward. Full
+detail in `development-logs.md`.
+
+---
+
+## Where things stand — 2026-08-27 (registration)
+
+**The registration form asks two more things, and one old rule was wrong.**
+University status (with semester, university and class timing for students)
+is now collected so bootcamp sessions are not timetabled against a
+candidate's classes. And the applicant's own identity number is now mandatory
+at every age: an adult gives a CNIC, a minor gives the B-Form they hold
+instead. Previously it was skippable under 18, which left those records with
+no way to identify the person. `candidate_profiles.id_document_type` records
+which document the number is, derived server-side from the date of birth.
+
+**Both candidate emails were rewritten.** The registration confirmation
+greets by full name, carries a red callout warning that a missed interview
+ends the application, and lists the seven documents needed at later stages
+with a separate block for under-18 applicants. It is framed as informational:
+nothing is collected at that stage.
+
+**The signup email is a Supabase template, not application code.** GoTrue
+sends it, so it cannot be changed from this repository. It has since been
+applied — see the entry above.
+
+Migration `20260827054856_university_and_id_document.sql` is **applied** via
+`supabase db push --linked`, which now works again since the migration ledger
+was reconciled.
+
+---
 
 ## Where things stand — 2026-08-24 (third merge)
 
@@ -416,8 +544,11 @@ Unanswered questions carried forward:
    item that blocks a public launch rather than merely improving it
 2. **Unify the two `ApplicationStage` sources** — `lib/types.ts` and
    `lib/stages.ts` — onto one definition; see *Known issue* above
-3. **Flip the Gmail API OAuth consent screen to Production** — prevents the
-   7-day refresh token expiry, no verification required
+3. **Check back around 2026-09-03** on whether the Gmail refresh token
+   generated 2026-08-27 has survived past 7 days — see today's entry above.
+   If it has, the open question is settled and this item can go. If it has
+   not, Production publishing does not actually prevent the 7-day expiry for
+   this app and a different fix is needed
 4. Seed real bootcamp admins so per-bootcamp scoping can be exercised through
    the UI, not just the API
 5. **Approve the registration field list against Agilytic's requirements**,
