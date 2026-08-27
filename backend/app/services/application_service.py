@@ -91,6 +91,10 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
         last_qualification=payload.last_qualification,
         referral_source=payload.referral_source,
         has_laptop=payload.has_laptop,
+        is_university_student=payload.is_university_student,
+        university_name=payload.university_name,
+        university_semester=payload.university_semester,
+        university_timing=payload.university_timing,
         # Stamped server-side. A client-supplied timestamp is a claim, not a
         # record.
         terms_accepted_at=datetime.now(timezone.utc),
@@ -158,6 +162,8 @@ def _upsert_candidate_profile(
     profile.phone = payload.phone
     profile.father_phone = payload.father_phone
     profile.cnic = payload.cnic
+    # Derived from the date of birth beside it, not taken from the client.
+    profile.id_document_type = payload.id_document_type
     profile.father_cnic = payload.father_cnic
     profile.address = payload.address
     profile.saylani_roll_number = payload.saylani_roll_number
