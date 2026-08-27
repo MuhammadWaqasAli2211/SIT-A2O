@@ -307,48 +307,152 @@ def send_registration_confirmation(
     """Confirm a submitted registration and hand over the candidate code.
 
     Never raises. Registration has already been committed by the time this
-    runs, so a mail failure must not surface as a failed application — the
+    runs, so a mail failure must not surface as a failed application: the
     candidate is registered whether or not Gmail was reachable. Failures are
     logged with the code so a missing email can be traced and resent by hand.
-    """
-    first_name = (full_name or "").split(" ")[0] or "there"
 
-    subject = f"Your bootcamp application — {candidate_code}"
+    The documents section is informational. Nothing is collected at this stage,
+    and the email says so, because a list of required paperwork with no context
+    reads like a demand and generates support mail.
+    """
+    name = (full_name or "").strip() or "there"
+
+    subject = f"Your bootcamp application: {candidate_code}"
 
     text_body = (
-        f"Hi {first_name},\n\n"
+        f"Hi {name},\n\n"
         f"Your application to {bootcamp_name} has been received.\n\n"
-        f"Your candidate code is {candidate_code}.\n\n"
-        "Keep this code. It identifies you at every stage from here on — the "
+        f"YOUR CANDIDATE CODE: {candidate_code}\n\n"
+        "Keep this code. It identifies you at every stage from here on: the "
         "interview, the physical interview at the campus, the enrolment form, "
         "and onboarding. Quote it in any email you send us, and bring it with "
         "you when you come to campus.\n\n"
         f"Program: {program_title}\n\n"
-        "We will email you again when interview scheduling opens. Nothing is "
-        "required from you until then.\n\n"
+        "IMPORTANT\n"
+        "Stay updated. Keep checking your email on a regular basis. If the "
+        "interview is missed, nothing can be done. You must attempt the "
+        "interview for further proceedings.\n\n"
+        "DOCUMENTS YOU WILL NEED LATER\n"
+        "You do not need to send anything now. Just make sure these are ready "
+        "when the next stage requires them.\n\n"
+        "1. Personal CNIC\n"
+        "2. Father's CNIC\n"
+        "3. Mother's CNIC\n"
+        "4. Updated CV\n"
+        "5. All educational documents (certificates and transcripts)\n"
+        "6. All experience letters or certificates, if any\n"
+        "7. Personal bank account details or cheque\n\n"
+        "A personal bank account and personal CNIC are mandatory for "
+        "candidates aged 18 and above.\n\n"
+        "READ THIS IF YOU ARE UNDER 18\n"
+        "In place of a personal CNIC, you will need your B-Form instead.\n"
+        "If you do not have a personal bank account, you must have an "
+        "Easypaisa or JazzCash account instead.\n\n"
         "Saylani Mass IT Training"
     )
 
+    documents = [
+        ("Personal CNIC", "Your own national identity card"),
+        ("Father's CNIC", "A clear copy is enough"),
+        ("Mother's CNIC", "A clear copy is enough"),
+        ("Updated CV", "One page is fine"),
+        ("Educational documents", "Certificates and transcripts"),
+        ("Experience letters", "Only if you have any"),
+        ("Bank account details", "Account details or a cheque"),
+    ]
+    document_rows = "".join(
+        f"""
+      <tr>
+        <td style="padding:8px 12px 8px 0;vertical-align:top;width:28px">
+          <span style="display:inline-block;width:24px;height:24px;line-height:24px;
+                       border-radius:12px;background:#dcfce7;color:#15803d;
+                       font-size:13px;font-weight:700;text-align:center">{index}</span>
+        </td>
+        <td style="padding:8px 0;vertical-align:top">
+          <strong style="color:#111827">{title}</strong><br>
+          <span style="color:#6b7280;font-size:14px">{hint}</span>
+        </td>
+      </tr>"""
+        for index, (title, hint) in enumerate(documents, start=1)
+    )
+
     html_body = f"""\
-<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.6;color:#1a1a1a">
-  <p>Hi {first_name},</p>
+<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;
+            color:#1f2937;max-width:600px">
+  <p style="font-size:16px">Hi {name},</p>
+
   <p>Your application to <strong>{bootcamp_name}</strong> has been received.</p>
-  <p style="margin:24px 0;padding:16px 20px;background:#f4f6f4;border-left:4px solid #16a34a;border-radius:6px">
-    Your candidate code is<br>
-    <strong style="font-size:26px;letter-spacing:1px;font-family:ui-monospace,monospace">{candidate_code}</strong>
-  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f0fdf4;
+              border-left:4px solid #16a34a;border-radius:6px">
+    <span style="font-size:12px;font-weight:700;letter-spacing:1px;
+                 text-transform:uppercase;color:#15803d">Your candidate code</span><br>
+    <strong style="font-size:28px;letter-spacing:1px;
+                   font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#111827">{candidate_code}</strong>
+  </div>
+
   <p>
     <strong>Keep this code.</strong> It identifies you at every stage from here
-    on — the interview, the physical interview at the campus, the enrolment
+    on: the interview, the physical interview at the campus, the enrolment
     form, and onboarding. Quote it in any email you send us, and bring it with
     you when you come to campus.
   </p>
-  <p>Program: {program_title}</p>
-  <p>
-    We will email you again when interview scheduling opens. Nothing is
-    required from you until then.
+
+  <p style="color:#6b7280">Program: <strong style="color:#1f2937">{program_title}</strong></p>
+
+  <div style="margin:28px 0;padding:18px 20px;background:#fef2f2;
+              border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:6px">
+    <p style="margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:0.5px;
+              text-transform:uppercase;color:#b91c1c">Important</p>
+    <p style="margin:0;font-weight:600;color:#7f1d1d">
+      Stay updated. Keep checking your email on a regular basis. If the
+      interview is missed, nothing can be done. You must attempt the interview
+      for further proceedings.
+    </p>
+  </div>
+
+  <h2 style="margin:32px 0 4px;font-size:18px;color:#111827">
+    Documents you will need later
+  </h2>
+  <p style="margin:0 0 16px;color:#6b7280;font-size:14px">
+    You do not need to send anything now. Just make sure these are ready when
+    the next stage requires them.
   </p>
-  <p style="color:#666;font-size:14px">Saylani Mass IT Training</p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0"
+         style="width:100%;border-collapse:collapse">
+    <tbody>{document_rows}
+    </tbody>
+  </table>
+
+  <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
+            border-radius:6px;font-size:14px;color:#374151">
+    A personal bank account and personal CNIC are mandatory for candidates aged
+    18 and above.
+  </p>
+
+  <div style="margin:28px 0;padding:18px 20px;background:#fffbeb;
+              border:1px solid #fde68a;border-radius:8px">
+    <p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#92400e">
+      Read this if you are under 18
+    </p>
+    <ul style="margin:0;padding-left:20px;color:#78350f">
+      <li style="margin-bottom:6px">
+        In place of a personal CNIC, you will need your <strong>B-Form</strong>
+        instead.
+      </li>
+      <li>
+        If you do not have a personal bank account, you must have an
+        <strong>Easypaisa</strong> or <strong>JazzCash</strong> account instead.
+      </li>
+    </ul>
+  </div>
+
+  <p style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;
+            color:#9ca3af;font-size:13px">
+    Saylani Mass IT Training
+  </p>
 </div>"""
 
     try:
@@ -363,8 +467,8 @@ def send_registration_confirmation(
         # one thing that must not happen is it reaching the candidate as an
         # error on a registration that actually succeeded.
         logger.exception(
-            "Registration confirmation FAILED to send for %s (%s) — "
-            "application was still created; resend by hand",
+            "Registration confirmation FAILED to send for %s (%s). "
+            "Application was still created; resend by hand.",
             candidate_code,
             to,
         )
