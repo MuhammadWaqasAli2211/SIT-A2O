@@ -5,6 +5,7 @@ from app.schemas.auth import (
     AuthResponse,
     LoginRequest,
     RefreshRequest,
+    ResendConfirmationRequest,
     SignupRequest,
     SignupResponse,
 )
@@ -19,6 +20,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def signup(payload: SignupRequest) -> SignupResponse:
     """Register a candidate account."""
     return auth_service.signup(payload)
+
+
+@router.post("/resend-confirmation", response_model=MessageResponse)
+def resend_confirmation(payload: ResendConfirmationRequest) -> MessageResponse:
+    """Send the signup confirmation email again.
+
+    Deliberately unauthenticated: the caller cannot sign in yet, which is the
+    whole reason they are here.
+    """
+    return auth_service.resend_confirmation(payload)
 
 
 @router.post("/login", response_model=AuthResponse)
