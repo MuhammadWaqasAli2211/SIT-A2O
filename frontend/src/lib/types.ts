@@ -53,6 +53,11 @@ export interface SignupResponse {
   email_confirmation_required: boolean
 }
 
+/** Endpoints that report an outcome rather than return a resource. */
+export interface MessageResponse {
+  message: string
+}
+
 /** Shape of every error the API returns; see backend app/main.py handlers. */
 export interface ApiError {
   code: string
