@@ -15,6 +15,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class ResendConfirmationRequest(BaseModel):
+    email: EmailStr
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
