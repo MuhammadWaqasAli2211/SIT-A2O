@@ -2,6 +2,38 @@
 
 # Project Status
 
+## Where things stand — 2026-08-28 (A4 pagination, mobile, huzaifa merged)
+
+**The onboarding forms' PDF download now matches the source PDFs' page
+count exactly** — Background Verification: 1 page, Employment Application:
+2 pages, Half Nama: 2 pages, each on real A4 (210x297mm). Verified with
+headless Chromium + `pypdf`, not eyeballed: before the fix, every form had
+no `@page` rule at all and was defaulting to US Letter with no compaction,
+so a 1-page form printed as 3 and a 2-page form as 5. Fixed with an explicit
+`@page` rule plus a per-form `zoom` factor tuned against the real measured
+output, `break-inside: avoid` on every table row and field cell, and the
+source PDFs' own page-break points confirmed by extracting the actual text
+from each generated PDF page.
+
+**All three forms are now responsive**, verified with real screenshots at
+375px and 768px, not code review alone. The mobile bug was `flex-nowrap`
+(added earlier specifically to stop CNIC boxes wrapping on desktop) having
+no mobile fallback. The real fix — after two false starts with flex-wrap
+variants that each failed in a different way — was replacing two-cell field
+rows with a responsive grid and switching section/salary bars to an
+unconditional stack-below-`sm:` pattern, since flex's shrink-vs-wrap
+ambiguity kept resurfacing at different nesting levels. Full account in
+`development-logs.md`.
+
+**`huzaifa` merged into `waqas`**, clean fast-forward, zero conflicts. Brings
+the AI Interview Invites feature: bulk-invite service with eligibility
+gates, `InterviewerAI` integration, admin dialog, two new tables
+(`interview_invite_batches`, `interview_invites`). Verified live and fully
+correct after merging — every column, index, and RLS setting checked
+directly against the migration file, not assumed from the ledger alone.
+
+---
+
 ## Where things stand — 2026-08-28 (onboarding forms)
 
 **The first three onboarding forms exist, admin-preview only.** Background
