@@ -6,6 +6,104 @@ Chronological record of what was built, when, and why. Newest first.
 
 ---
 
+## 2026-08-28 — A4 pagination fixed and measured, not guessed; mobile layout fixed; huzaifa merged
+
+**Branch:** `waqas`
+
+### The PDF page count bug, and how it was actually found
+
+Reported: a 2-page form was downloading as 3. Reproduced with real tooling
+before touching any code — headless Edge (`--print-to-pdf`) plus `pypdf` to
+count and measure the actual output, not a guess:
+
+| Form | Page size before | Pages before | Pages after |
+|---|---|---|---|
+| Background Verification | US Letter (612x792pt) | 3 | **1** |
+| Employment Application | US Letter | 5 | **2** |
+| Half Nama | US Letter | 3 | **2** |
+
+Worse than reported on every form, and for a reason the bug report didn't
+name: no `@page` CSS rule existed anywhere in the codebase, so every
+`window.print()` fell back to the browser's own default page size — not A4 —
+and content laid out for a ~1152px desktop canvas had no compaction for a
+physical page at all.
+
+Fixed with `@page { size: A4; margin: 10mm }` (once, global) plus a `zoom`
+factor on each form's print wrapper, tuned per form and verified against
+real measured page counts until each hit its target exactly. `zoom` rather
+than `transform: scale()`: transform does not affect the layout box
+Chromium's print engine paginates against, so it looks right on screen and
+still overflows when printed. `break-inside: avoid` was added to every table
+row and field cell via `data-slot` markers on the shared primitives, so nothing
+gets sliced across a page boundary.
+
+**Verified, not assumed:** extracted the actual text from each generated PDF
+page. Employment Application's page 1 ends exactly at the Professional
+Courses table; page 2 opens exactly with "EMPLOYMENT HISTORY" — the source
+PDF's own split point, confirmed in the real output, not inferred from the
+DOM structure alone.
+
+### The mobile bug, and three iterations to find the real fix
+
+`flex-nowrap`, added during the Background Verification Form's earlier
+review round specifically to stop CNIC boxes wrapping on desktop, had no
+mobile fallback — on a 375px screen it did exactly what it says, so CNIC
+boxes and sibling fields ran off the edge of the viewport with no way to
+see the rest.
+
+The fix took three real iterations, verified against actual screenshots
+each time rather than reasoned about in the abstract:
+
+1. `flex-wrap sm:flex-nowrap` — fixed the field that was overflowing, but
+   its sibling cell in the same row started getting cut instead of dropping
+   to its own line.
+2. Adding `min-w-0` — made it worse in a different way: flex items could now
+   shrink indefinitely instead of wrapping, so the row never wrapped at all;
+   it just squeezed both cells until the (unshrinkable) segmented digit-boxes
+   overflowed their own now-too-narrow container.
+3. The actual fix: two-cell field rows switched from flex to
+   `grid grid-cols-1 sm:grid-cols-2` (or `[2fr_1fr]` where CNIC needs more
+   room), which has none of flex's shrink-vs-wrap ambiguity. Section bars
+   and salary-bar headers switched from "wrap if it doesn't fit" to an
+   unconditional stack-on-mobile / row-from-`sm:` pattern, since the
+   combined English+Urdu title was borderline-width and flex-wrap wasn't
+   reliably triggering for it either. Every `<table>` wrapped in
+   `overflow-x-auto`, so tables that genuinely can't be stacked (Employment
+   History's nested Period/From/To header) scroll horizontally instead of
+   overflowing the page.
+
+Verified at 375px (mobile) and 768px (tablet) via real screenshots, not
+just code review, for all three forms.
+
+### huzaifa merged into waqas
+
+`origin/huzaifa` merged in clean, fast-forward, zero conflicts — its history
+already contained `waqas`'s via two prior merges on huzaifa's side. Brings
+in the AI Interview Invites feature (bulk-invite service with eligibility
+gates, `InterviewerAI` integration, admin dialog, `interview_invite_batches`
+/`interview_invites` tables). Verified post-merge: 202 backend tests pass,
+frontend build and `oxlint` clean, new routes reachable.
+
+One false alarm worth recording plainly: initially reported the migration's
+tables as missing from the live database. That was checking the wrong table
+names (`invite_batches`/`invites` instead of the migration's actual
+`interview_invite_batches`/`interview_invites`) — re-checked with the
+correct names and every column, index, and RLS setting matches the
+migration exactly. Nothing was wrong with the database; the mistake was
+mine, corrected before anything was changed.
+
+### Verified
+
+- Backend: 202 tests pass
+- Frontend: production build and `oxlint` clean, project-wide
+- PDF page counts re-verified after every responsiveness change — held at
+  1/2/2 throughout, no regression
+- Migration `20260827120000_interview_invites.sql` confirmed fully and
+  correctly applied: both tables, both enum types, both indexes, the unique
+  constraint, and RLS all present exactly as written
+
+---
+
 ## 2026-08-28 — Three onboarding forms, admin preview only
 
 **Branch:** `waqas`
