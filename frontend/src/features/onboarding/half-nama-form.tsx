@@ -103,7 +103,7 @@ export function HalfNamaForm() {
       <div
         dir="rtl"
         lang="ur"
-        className="mx-auto w-full max-w-4xl border-2 border-black bg-white font-urdu text-black print:max-w-none print:break-after-page print:border-0"
+        className="print-a4-half-nama mx-auto w-full max-w-4xl border-2 border-black bg-white font-urdu text-black print:max-w-none print:break-after-page print:border-0"
       >
         <div className="flex flex-col items-center gap-2 border-b-2 border-black px-6 py-4">
           <img
@@ -180,7 +180,7 @@ export function HalfNamaForm() {
       <div
         dir="rtl"
         lang="ur"
-        className="mx-auto w-full max-w-4xl border-2 border-black bg-white font-urdu text-black print:max-w-none print:border-0"
+        className="print-a4-half-nama mx-auto w-full max-w-4xl border-2 border-black bg-white font-urdu text-black print:max-w-none print:border-0"
       >
         <div className="flex flex-col items-center gap-2 border-b-2 border-black px-6 py-4">
           <img
@@ -234,6 +234,7 @@ export function HalfNamaForm() {
           </p>
         </div>
 
+        <div className="overflow-x-auto">
         <table dir="rtl" className="w-full border-collapse text-sm">
           <tbody>
             {POLICY_ROWS.map((text, i) => (
@@ -246,6 +247,7 @@ export function HalfNamaForm() {
             ))}
           </tbody>
         </table>
+        </div>
 
         <div className="border-b-2 border-black px-6 py-5">
           <p className="text-justify text-[17px] leading-[2.6]">
