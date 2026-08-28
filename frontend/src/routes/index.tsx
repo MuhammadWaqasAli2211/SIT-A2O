@@ -50,6 +50,13 @@ const AdminInterviewsPage = lazy(() => import('@/pages/admin/interviews-page'))
 const AdminPhasesPage = lazy(() => import('@/pages/admin/phases-page'))
 const AdminEmailsPage = lazy(() => import('@/pages/admin/emails-page'))
 const AdminDocumentsPage = lazy(() => import('@/pages/admin/documents-page'))
+const AdminBackgroundVerificationPreviewPage = lazy(
+  () => import('@/pages/admin/onboarding-preview/background-verification-page'),
+)
+const AdminEmploymentApplicationPreviewPage = lazy(
+  () => import('@/pages/admin/onboarding-preview/employment-application-page'),
+)
+const AdminHalfNamaPreviewPage = lazy(() => import('@/pages/admin/onboarding-preview/half-nama-page'))
 
 const SuperAdminDashboardPage = lazy(() => import('@/pages/super-admin/dashboard-page'))
 const SuperAdminBootcampsPage = lazy(() => import('@/pages/super-admin/bootcamps-page'))
@@ -145,6 +152,20 @@ export const router = createBrowserRouter([
                   { path: '/admin/phases', element: <AdminPhasesPage /> },
                   { path: '/admin/emails', element: <AdminEmailsPage /> },
                   { path: '/admin/documents', element: <AdminDocumentsPage /> },
+                  // Onboarding forms, built ahead of the phase that uses them.
+                  // Admin-only preview: no candidate route exists yet.
+                  {
+                    path: '/admin/onboarding-preview/background-verification',
+                    element: <AdminBackgroundVerificationPreviewPage />,
+                  },
+                  {
+                    path: '/admin/onboarding-preview/employment-application',
+                    element: <AdminEmploymentApplicationPreviewPage />,
+                  },
+                  {
+                    path: '/admin/onboarding-preview/half-nama',
+                    element: <AdminHalfNamaPreviewPage />,
+                  },
 
                   {
                     element: <RoleRoute allow={[UserRole.SUPER_ADMIN]} />,

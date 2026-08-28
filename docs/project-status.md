@@ -1,6 +1,53 @@
-> **Branch:** `waqas` — last updated 2026-08-27
+> **Branch:** `waqas` — last updated 2026-08-28
 
 # Project Status
+
+## Where things stand — 2026-08-28 (onboarding forms)
+
+**The first three onboarding forms exist, admin-preview only.** Background
+Verification Form (SWIT-IHR-FAF-11), Employment Application Form
+(SWIT-IHR-FAF-03, 2 pages), and the Half Nama oath form (2 pages, pure
+Urdu/RTL) are all digital twins of Saylani's paper forms, built pixel-first
+against the source PDFs rather than a general redesign. UI-only: no
+backend route, no database table, no candidate-facing URL yet — that
+waits for the selection phase these forms actually belong to, which this
+project hasn't built. Reachable now only at
+`/admin/onboarding-preview/{background-verification,employment-application,half-nama}`,
+behind the existing admin role gate.
+
+**Shared across all three**, not rebuilt per form: a segmented digit-box
+input (CNIC and date fields), a canvas-based signature pad, a localStorage
+auto-save hook with a stubbed backend save function, and a form-primitives
+file (`features/onboarding/form-primitives.tsx`) holding the bilingual
+label, section bar, field-grid cells, Yes/No radio pairs, the bordered
+text-input style, an addable-table row-helper set, and — new for the Urdu
+form — an inline mid-sentence blank distinct from every boxed field on the
+other two. `Download as PDF` is `window.print()` plus a print stylesheet on
+every form, not a PDF-rendering library.
+
+Two new small UI primitives (`components/ui/checkbox.tsx`,
+`components/ui/radio-group.tsx`) were added on top of `@base-ui/react`,
+already a dependency — no new package.
+
+**Verified:** production build and `oxlint` clean across every file, new
+and touched, project-wide. **Not verified:** no rendered screenshot exists
+from this side — no browser-automation tool is available in this
+environment. All three forms were reviewed directly in-browser by the
+project owner against the source PDFs; the Background Verification Form's
+listed fixes below came from that review.
+
+**Background Verification Form — Round 1 fixes, all applied:** real logo
+(previously a placeholder — no logo asset existed in the repo until
+supplied), wider page and more internal padding, the bilingual intro note
+forced onto one line, CNIC/phone fields given enough width and forced
+`flex-nowrap` so digit-boxes stop dropping to a second line under their
+label (this recurred in the References section too, on Imam/Other CNIC —
+fixed there as well), every checkbox/radio enlarged and recoloured to
+black-ink for visibility, and all four phone number fields (Mobile#,
+Emergency#, both References Mobile No.) converted from plain text to the
+same segmented digit-box style as CNIC.
+
+---
 
 ## Where things stand — 2026-08-27 (Gmail token, resolved for now)
 
@@ -559,6 +606,14 @@ Unanswered questions carried forward:
 8. Phase 3: interview batching is built (arbitrary slot counts, evenly
    spaced); the AI screening hook is still blocked on deciding what the AI
    Interviewer actually is
+9. **Decide how a thumbprint is captured digitally** — the Half Nama form's
+   two thumbprint areas are reserved layout space only, deliberately
+   non-functional, pending this decision
+10. Wire the three onboarding forms to a real backend once the selection
+    phase exists: a draft-persistence endpoint (`saveDraft()` is already
+    stubbed for this), a submission endpoint, and the eventual
+    candidate-facing route — none of which exist yet, by design, since
+    admin-preview was the explicit scope so far
 
 ## Running it
 
