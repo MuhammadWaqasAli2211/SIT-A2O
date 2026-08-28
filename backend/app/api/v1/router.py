@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     documents,
     emails,
     health,
+    interview_invites,
     interviews,
     profile,
     programs,
@@ -21,6 +22,7 @@ api_router.include_router(programs.router)
 api_router.include_router(bootcamps.router)
 api_router.include_router(applications.router)
 api_router.include_router(interviews.router)
+api_router.include_router(interview_invites.router)
 api_router.include_router(emails.router)
 api_router.include_router(users.router)
 api_router.include_router(documents.router)
