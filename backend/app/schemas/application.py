@@ -190,6 +190,14 @@ class ApplicantRow(BaseModel):
     stage: ApplicationStage
     status: ApplicationStatus
     applied_at: datetime
+    # Not contact detail — just whether one exists. The AI interview invite
+    # picker needs to grey out a candidate with none rather than let an admin
+    # select them and have the whole batch refused for it.
+    has_cnic: bool = False
+    # Same reasoning: InterviewerAI currently refuses to invite anyone who
+    # has not finished their prior course — verified against a live
+    # rejection, 2026-08-27 ("'Ongoing' is currently disabled").
+    course_completed: bool = False
 
 
 class ApplicantPage(BaseModel):
