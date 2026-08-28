@@ -237,6 +237,7 @@ function EducationTable({
   onChangeRow: (index: number, key: keyof AcademicRow, value: string) => void
 }) {
   return (
+    <div className="overflow-x-auto">
     <table className="w-full border-collapse text-xs">
       <thead>
         <tr className="border border-black/70 bg-neutral-100">
@@ -298,6 +299,7 @@ function EducationTable({
         })}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -340,7 +342,7 @@ export function EmploymentApplicationForm() {
       <OnboardingToolbar savedAt={savedAt} onClear={handleClear} />
 
       {/* ============================================================ PAGE 1 == */}
-      <div className="mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:break-after-page print:border-0">
+      <div className="print-a4-employment mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:break-after-page print:border-0">
         <div className="flex items-center justify-between border-b-2 border-black px-3 py-1 text-[11px] text-neutral-600">
           <span>Ref: SWIT-IHR-FAF-03</span>
           <span>Rev.1, 16-10-2021</span>
@@ -362,7 +364,7 @@ export function EmploymentApplicationForm() {
             box spanning both rows on the right — matching the source. */}
         <div className="flex border-b-2 border-black">
           <div className="flex flex-1 flex-col divide-y divide-black/70">
-            <div className="flex flex-nowrap items-center gap-x-3 px-4 py-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 px-4 py-2">
               <BilingualLabel en="Position Applied For" ur="منصب کے لیے درخواست" htmlFor="positionAppliedFor" />
               <Input
                 id="positionAppliedFor"
@@ -371,7 +373,7 @@ export function EmploymentApplicationForm() {
                 className={`${TEXT_INPUT_CLASS} flex-1`}
               />
             </div>
-            <div className="flex flex-nowrap items-baseline gap-x-1.5 px-4 py-2.5 text-xs">
+            <div className="flex flex-wrap sm:flex-nowrap items-baseline gap-x-1.5 px-4 py-2.5 text-xs">
               <span className="font-semibold italic">Personal information should be in CAPITAL LETTERS.</span>
               <span className="text-neutral-400">/</span>
               <span dir="rtl" lang="ur" className="font-urdu text-sm">
@@ -409,8 +411,8 @@ export function EmploymentApplicationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-[2] flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
+          <FieldCell className="flex-[2] flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
             <SegmentedDigitInput
               groups={[5, 7, 1]}
@@ -419,7 +421,7 @@ export function EmploymentApplicationForm() {
               ariaLabel="Applicant CNIC number"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Expiry" ur="تاریخ تنسیخ" />
             <SegmentedDigitInput
               groups={[2, 2, 4]}
@@ -430,7 +432,7 @@ export function EmploymentApplicationForm() {
           </FieldCell>
         </div>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Father's Name" ur="والدیت" htmlFor="fatherName" className="flex-1">
             <Input
               id="fatherName"
@@ -449,7 +451,7 @@ export function EmploymentApplicationForm() {
           </FieldRow>
         </div>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Nationality" ur="شہریت" htmlFor="nationality" className="flex-1">
             <Input
               id="nationality"
@@ -468,8 +470,8 @@ export function EmploymentApplicationForm() {
           </FieldRow>
         </div>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Date of Birth" ur="تاریخ پیدائش" />
             <SegmentedDigitInput
               groups={[2, 2, 4]}
@@ -478,13 +480,13 @@ export function EmploymentApplicationForm() {
               ariaLabel="Date of birth, day month year"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Marital Status" ur="ازدواجی حیثیت" />
             <RadioGroup
               aria-label="Marital status"
               value={draft.maritalStatus ?? undefined}
               onValueChange={(v) => set("maritalStatus", v as MaritalStatus)}
-              className="flex-nowrap gap-4"
+              className="flex-wrap gap-4"
             >
               {(["Married", "Unmarried"] as const).map((option) => (
                 <label key={option} className="flex cursor-pointer items-center gap-2 text-sm select-none">
@@ -496,14 +498,14 @@ export function EmploymentApplicationForm() {
           </FieldCell>
         </div>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Gender" ur="جنس" />
             <RadioGroup
               aria-label="Gender"
               value={draft.gender ?? undefined}
               onValueChange={(v) => set("gender", v as Gender)}
-              className="flex-nowrap gap-4"
+              className="flex-wrap gap-4"
             >
               <label className="flex cursor-pointer items-center gap-2 text-sm select-none">
                 <RadioGroupItem value="Male" shape="circle" className={onboardingRadioClass} />
@@ -537,7 +539,7 @@ export function EmploymentApplicationForm() {
             aria-label="Cast"
             value={draft.cast ?? undefined}
             onValueChange={(v) => set("cast", v as Cast)}
-            className="flex-nowrap gap-4"
+            className="flex-wrap gap-4"
           >
             <label className="flex cursor-pointer items-center gap-2 text-sm select-none">
               <RadioGroupItem value="Syed" shape="circle" className={onboardingRadioClass} />
@@ -571,7 +573,7 @@ export function EmploymentApplicationForm() {
           )}
         </FieldCell>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Blood Group" ur="خون کا گروپ" htmlFor="bloodGroup" className="flex-1">
             <Input
               id="bloodGroup"
@@ -610,8 +612,8 @@ export function EmploymentApplicationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Mobile #" ur="موبائل نمبر" />
             <span className="text-[10px] text-neutral-400">(Personal Number)</span>
             <SegmentedDigitInput
@@ -635,8 +637,8 @@ export function EmploymentApplicationForm() {
           </FieldRow>
         </div>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Emergency #" ur="ایمرجنسی نمبر" />
             <span className="text-[10px] text-neutral-400">(Emergency Number)</span>
             <SegmentedDigitInput
@@ -691,6 +693,7 @@ export function EmploymentApplicationForm() {
 
         {/* ------------------------------------------------ professional courses -- */}
         <SectionBar en="Professional Course / Certifications / Trainings etc." ur="دیگر پیشہ ورانہ کورسز اور تربیت" />
+        <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border border-black/70 bg-neutral-100">
@@ -760,6 +763,7 @@ export function EmploymentApplicationForm() {
             ))}
           </tbody>
         </table>
+        </div>
         <AddRowButton
           label="Add row"
           onClick={() => set("professionalCourses", addTableRow(draft.professionalCourses, EMPTY_COURSE_ROW))}
@@ -769,7 +773,7 @@ export function EmploymentApplicationForm() {
       </div>
 
       {/* ============================================================ PAGE 2 == */}
-      <div className="mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:border-0">
+      <div className="print-a4-employment mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:border-0">
         {/* ---------------------------------------------------- employment history -- */}
         <SectionBar en="Employment History" ur="ملازمت کی تفصیل" />
 
@@ -785,6 +789,7 @@ export function EmploymentApplicationForm() {
           </div>
         </FieldRow>
 
+        <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border border-black/70 bg-neutral-100">
@@ -871,20 +876,21 @@ export function EmploymentApplicationForm() {
             ))}
           </tbody>
         </table>
+        </div>
         <AddRowButton
           label="Add row"
           onClick={() => set("employmentHistory", addTableRow(draft.employmentHistory, EMPTY_JOB_ROW))}
         />
 
         {/* ------------------------------------------- salary and benefits -- */}
-        <div className="flex items-baseline justify-center gap-2 divide-x divide-white border-t-2 border-black bg-black px-3 py-1.5 text-center">
-          <span className="pr-3 text-sm font-bold tracking-wide text-white uppercase">
+        <div className="flex flex-col divide-y divide-white border-t-2 border-black bg-black text-center sm:flex-row sm:items-baseline sm:justify-center sm:divide-x sm:divide-y-0 sm:gap-2">
+          <span className="px-3 py-1.5 text-sm font-bold tracking-wide text-white uppercase">
             Present Salary and Benefits <span className="font-normal text-neutral-400">/</span>{" "}
             <span dir="rtl" lang="ur" className="font-urdu font-normal normal-case">
               موجودہ تنخواہ و مراعات
             </span>
           </span>
-          <span className="pl-3 text-sm font-bold tracking-wide text-white uppercase">
+          <span className="px-3 py-1.5 text-sm font-bold tracking-wide text-white uppercase">
             Expected Salary <span className="font-normal text-neutral-400">/</span>{" "}
             <span dir="rtl" lang="ur" className="font-urdu font-normal normal-case">
               متوقع تنخواہ
@@ -932,6 +938,7 @@ export function EmploymentApplicationForm() {
 
         {/* ------------------------------------------------------ family details -- */}
         <SectionBar en="Family Details" ur="خاندان کی تفصیلات" />
+        <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border border-black/70 bg-neutral-100">
@@ -969,6 +976,7 @@ export function EmploymentApplicationForm() {
             ))}
           </tbody>
         </table>
+        </div>
         <AddRowButton
           label="Add row"
           onClick={() => set("familyDetails", addTableRow(draft.familyDetails, EMPTY_FAMILY_ROW))}
@@ -1023,7 +1031,7 @@ export function EmploymentApplicationForm() {
           en="Employee Relative in the Saylani Welfare"
           ur="کوئی رشتہ دار جو سیلانی ویلفیئر میں ملازمت کرتا ہو"
         />
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Name" ur="نام" htmlFor="relativeName" className="flex-1">
             <Input
               id="relativeName"
@@ -1041,7 +1049,7 @@ export function EmploymentApplicationForm() {
             />
           </FieldRow>
         </div>
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Designation" ur="منصب" htmlFor="relativeDesignation" className="flex-1">
             <Input
               id="relativeDesignation"
@@ -1059,8 +1067,8 @@ export function EmploymentApplicationForm() {
             />
           </FieldRow>
         </div>
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Mobile No." ur="موبائل نمبر" />
             <SegmentedDigitInput
               groups={[4, 7]}
@@ -1182,7 +1190,7 @@ export function EmploymentApplicationForm() {
             مطابق درست ہیں۔
           </p>
         </div>
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
           <FieldCell className="flex-[2] flex-row flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Signature" ur="دستخط" />
             <SignaturePad
