@@ -97,3 +97,16 @@ class DocumentStatus(StrEnum):
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+
+
+class InviteBatchStatus(StrEnum):
+    PENDING = "PENDING"
+    SENDING = "SENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class InviteStatus(StrEnum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    FAILED = "FAILED"
