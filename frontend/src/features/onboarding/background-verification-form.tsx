@@ -141,7 +141,7 @@ export function BackgroundVerificationForm() {
     <div className="flex flex-col gap-3">
       <OnboardingToolbar savedAt={savedAt} onClear={handleClear} />
 
-      <div className="mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:border-0">
+      <div className="print-a4-bg-verification mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:border-0">
         {/* ------------------------------------------------------- masthead -- */}
         <div className="flex items-center justify-between border-b-2 border-black px-3 py-1 text-[11px] text-neutral-600">
           <span>Ref: SWIT-IHR-FAF-11</span>
@@ -157,7 +157,7 @@ export function BackgroundVerificationForm() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-black px-4 py-3">
-          <p className="flex flex-1 flex-nowrap items-baseline gap-x-1.5 text-xs">
+          <p className="flex flex-1 flex-wrap sm:flex-nowrap items-baseline gap-x-1.5 text-xs">
             <span className="font-semibold">Personal information should be in Capital Letters.</span>
             <span className="text-neutral-400">/</span>
             <span dir="rtl" lang="ur" className="font-urdu text-sm">
@@ -200,8 +200,8 @@ export function BackgroundVerificationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-[2] flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
+          <FieldCell className="flex-[2] flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
             <SegmentedDigitInput
               groups={[5, 7, 1]}
@@ -210,7 +210,7 @@ export function BackgroundVerificationForm() {
               ariaLabel="Applicant CNIC number"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Expiry" ur="تاریخ تنسیخ" />
             <SegmentedDigitInput
               groups={[2, 2, 4]}
@@ -230,8 +230,8 @@ export function BackgroundVerificationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-[2] flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
+          <FieldCell className="flex-[2] flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
             <SegmentedDigitInput
               groups={[5, 7, 1]}
@@ -240,7 +240,7 @@ export function BackgroundVerificationForm() {
               ariaLabel="Father's CNIC number"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Alive" ur="حیات" />
             <YesNoGroup
               shape="square"
@@ -260,8 +260,8 @@ export function BackgroundVerificationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-[2] flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
+          <FieldCell className="flex-[2] flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
             <SegmentedDigitInput
               groups={[5, 7, 1]}
@@ -270,7 +270,7 @@ export function BackgroundVerificationForm() {
               ariaLabel="Mother's CNIC number"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Alive" ur="حیات" />
             <YesNoGroup
               shape="square"
@@ -281,8 +281,8 @@ export function BackgroundVerificationForm() {
           </FieldCell>
         </div>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-[2] flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
+          <FieldCell className="flex-[2] flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Date of Birth" ur="تاریخ پیدائش" />
             <SegmentedDigitInput
               groups={[2, 2, 4]}
@@ -291,13 +291,13 @@ export function BackgroundVerificationForm() {
               ariaLabel="Date of birth, day month year"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Sect" ur="مسلک" />
             <RadioGroup
               aria-label="Sect"
               value={draft.sect ?? undefined}
               onValueChange={(v) => set("sect", v as Sect)}
-              className="flex-nowrap gap-4"
+              className="flex-wrap gap-4"
             >
               {(["Sunni", "Shia", "Others"] as const).map((option) => (
                 <label
@@ -312,7 +312,7 @@ export function BackgroundVerificationForm() {
           </FieldCell>
         </div>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
           <FieldRow en="Blood Group" ur="خون کا گروہ" htmlFor="bloodGroup" className="flex-1">
             <Input
               id="bloodGroup"
@@ -349,8 +349,8 @@ export function BackgroundVerificationForm() {
           />
         </FieldRow>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Mobile #" ur="موبائل نمبر" />
             <span className="text-[10px] text-neutral-400">(Personal Number)</span>
             <SegmentedDigitInput
@@ -360,7 +360,7 @@ export function BackgroundVerificationForm() {
               ariaLabel="Mobile number, personal"
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
             <BilingualLabel en="Emergency #" ur="ہنگامی نمبر" />
             <span className="text-[10px] text-neutral-400">(Emergency Number)</span>
             <SegmentedDigitInput
@@ -372,8 +372,8 @@ export function BackgroundVerificationForm() {
           </FieldCell>
         </div>
 
-        <div className="flex flex-wrap">
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Chronic disease" ur="دائمی مرض" />
             <YesNoGroup
               ariaLabel="Any chronic disease"
@@ -381,7 +381,7 @@ export function BackgroundVerificationForm() {
               onChange={(v) => set("chronicDisease", v)}
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Police Case" ur="پولیس کیس" />
             <YesNoGroup
               ariaLabel="Any police case"
@@ -389,7 +389,7 @@ export function BackgroundVerificationForm() {
               onChange={(v) => set("policeCase", v)}
             />
           </FieldCell>
-          <FieldCell className="flex-1 flex-row flex-nowrap items-center gap-x-3 gap-y-1">
+          <FieldCell className="flex-1 flex-col sm:flex-row sm:flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Any Addiction" ur="کوئی نشہ وغیرہ" />
             <YesNoGroup
               ariaLabel="Any addiction"
@@ -402,7 +402,7 @@ export function BackgroundVerificationForm() {
         {/* --------------------------------------------- organizational info -- */}
         <SectionBar en="Organizational Information" ur="تنظیمی معلومات" />
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-3">
           {(
             [
               ["orgProvince", "Organizational Province", "تنظیمی صوبہ"],
@@ -421,7 +421,7 @@ export function BackgroundVerificationForm() {
           ))}
         </div>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-3">
           {(
             [
               ["division", "Division", "ڈویژن"],
@@ -450,7 +450,7 @@ export function BackgroundVerificationForm() {
           </p>
         </div>
 
-        <div className="flex flex-wrap">
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr]">
           <FieldCell className="flex-[2] flex-row flex-wrap items-center gap-x-3 gap-y-1">
             <BilingualLabel en="Signature" ur="دستخط" />
             <SignaturePad
@@ -490,7 +490,7 @@ export function BackgroundVerificationForm() {
                 className={TEXT_INPUT_UPPERCASE_CLASS}
               />
             </FieldRow>
-            <FieldCell className="flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+            <FieldCell className="flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
               <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
               <SegmentedDigitInput
                 groups={[5, 7, 1]}
@@ -507,7 +507,7 @@ export function BackgroundVerificationForm() {
                 className={TEXT_INPUT_CLASS}
               />
             </FieldRow>
-            <FieldCell className="flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+            <FieldCell className="flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
               <BilingualLabel en="Mobile No." ur="موبائل نمبر" />
               <SegmentedDigitInput
                 groups={[4, 7]}
@@ -542,7 +542,7 @@ export function BackgroundVerificationForm() {
                 className={TEXT_INPUT_UPPERCASE_CLASS}
               />
             </FieldRow>
-            <FieldCell className="flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+            <FieldCell className="flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
               <BilingualLabel en="CNIC #" ur="شناختی کارڈ نمبر" />
               <SegmentedDigitInput
                 groups={[5, 7, 1]}
@@ -559,7 +559,7 @@ export function BackgroundVerificationForm() {
                 className={TEXT_INPUT_CLASS}
               />
             </FieldRow>
-            <FieldCell className="flex-row flex-nowrap items-center gap-x-2 gap-y-1">
+            <FieldCell className="flex-col sm:flex-row sm:flex-wrap items-center gap-x-2 gap-y-1">
               <BilingualLabel en="Mobile No." ur="موبائل نمبر" />
               <SegmentedDigitInput
                 groups={[4, 7]}
