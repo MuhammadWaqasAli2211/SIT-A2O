@@ -93,3 +93,12 @@ class EmailNotConfiguredError(AppError):
     status_code = 503
     code = "email_not_configured"
     message = "Email sending is not configured."
+
+
+class ServiceNotConfiguredError(AppError):
+    """A third-party integration has no credentials set — not a failure of
+    the integration itself, so distinct from UpstreamError."""
+
+    status_code = 503
+    code = "service_not_configured"
+    message = "This service is not configured."
