@@ -91,7 +91,7 @@ function PortalShell() {
       <motion.aside
         animate={{ width: collapsed ? 78 : 264 }}
         transition={{ duration: 0.28, ease: [0.21, 0.47, 0.32, 0.98] }}
-        className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-background lg:flex"
+        className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-background lg:flex print:hidden"
       >
         <SidebarBody
           groups={groups}
@@ -126,7 +126,7 @@ function PortalShell() {
 
       {/* ------------------------------------------------------- content -- */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6 print:hidden">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -227,7 +227,7 @@ function PortalShell() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
+        <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8 print:p-0">
           <div className="mx-auto max-w-7xl">
             {/* Keyed on the path so a page that failed does not leave its
                 fallback showing over every route the user visits next — the
