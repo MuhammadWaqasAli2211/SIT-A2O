@@ -266,9 +266,12 @@ def list_for_bootcamp(
         )
 
     base = (
-        select(Application, Profile, Program)
+        select(Application, Profile, Program, CandidateProfile.cnic)
         .join(Profile, Profile.id == Application.profile_id)
         .join(Program, Program.id == Application.program_id)
+        # Outer: a profile with no registration yet has no candidate_profiles
+        # row at all, and that must not drop the applicant from the list.
+        .outerjoin(CandidateProfile, CandidateProfile.profile_id == Profile.id)
         .where(*filters)
     )
 
@@ -288,8 +291,10 @@ def list_for_bootcamp(
             stage=app.stage,
             status=app.status,
             applied_at=app.applied_at,
+            has_cnic=cnic is not None,
+            course_completed=app.prior_course_status == "Completed",
         )
-        for app, profile, program in rows
+        for app, profile, program, cnic in rows
     ]
     return items, total
 
