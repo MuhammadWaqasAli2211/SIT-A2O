@@ -26,6 +26,9 @@ import type {
   InterviewMode,
   InterviewRow,
   InterviewStatus,
+  InviteBatch,
+  InviteBatchDetail,
+  InviteCategory,
   Page,
   PhaseType,
   PlatformStats,
@@ -384,4 +387,46 @@ export const documentApi = {
 
   /** Signed URLs expire quickly — fetch one per view, never cache it. */
   adminLink: (id: string) => get<DocumentLink>(`/admin/documents/${id}/link`),
+}
+
+/* ---------------------------------------------------- AI interview invites --
+ * InterviewerAI, not our own scheduled interviews — see the type-level note
+ * in lib/types.ts.
+ */
+
+export interface ManualInviteRow {
+  full_name: string
+  email: string
+  cnic: string
+  category: InviteCategory
+}
+
+export const interviewInviteApi = {
+  listForBootcamp: (bootcampId: string) =>
+    get<InviteBatch[]>(`/bootcamps/${bootcampId}/interview-invites`),
+
+  async sendBulk(
+    bootcampId: string,
+    payload: {
+      subject: string
+      batch_name?: string
+      personalize?: boolean
+      application_ids?: string[]
+      manual_rows?: ManualInviteRow[]
+      advance_stage?: boolean
+    },
+  ) {
+    const { data } = await api.post<InviteBatchDetail>(
+      `/bootcamps/${bootcampId}/interview-invites/bulk`,
+      payload,
+    )
+    return data
+  },
+
+  detail: (batchId: string) => get<InviteBatchDetail>(`/interview-invites/${batchId}`),
+
+  async refresh(batchId: string) {
+    const { data } = await api.post<InviteBatchDetail>(`/interview-invites/${batchId}/refresh`)
+    return data
+  },
 }
