@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CalendarPlus,
+  Mail,
   MoreHorizontal,
   Search,
   Trash2,
@@ -45,6 +46,7 @@ import {
   useConfirm,
 } from '@/features/admin/components'
 import { BatchScheduleDialog } from '@/pages/admin/batch-schedule-dialog'
+import { InterviewInviteDialog } from '@/pages/admin/interview-invite-dialog'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
@@ -81,6 +83,7 @@ export default function AdminInterviewsPage() {
   const [status, setStatus] = useState<string>(ALL)
   const [offset, setOffset] = useState(0)
   const [batchOpen, setBatchOpen] = useState(false)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const [scoring, setScoring] = useState<InterviewRow | null>(null)
 
   const debouncedSearch = useDebounced(search, 300)
@@ -136,6 +139,14 @@ export default function AdminInterviewsPage() {
         actions={
           <>
             <BootcampSwitcher />
+            <Button
+              variant="outline"
+              onClick={() => setInviteOpen(true)}
+              disabled={!selectedId}
+            >
+              <Mail className="size-4" />
+              AI interview invites
+            </Button>
             <Button onClick={() => setBatchOpen(true)} disabled={!selectedId}>
               <CalendarPlus className="size-4" />
               Schedule batch
@@ -329,6 +340,15 @@ export default function AdminInterviewsPage() {
           onOpenChange={setBatchOpen}
           bootcampId={selectedId}
           onScheduled={refetch}
+        />
+      )}
+
+      {selectedId && (
+        <InterviewInviteDialog
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          bootcampId={selectedId}
+          bootcampName={selected?.name}
         />
       )}
 
