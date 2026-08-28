@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # Seconds a download link stays valid. Short by intent: these are CNICs.
     DOCUMENT_SIGNED_URL_TTL: int = 120
 
+    # --- InterviewerAI (Phase 2 AI screening invites) ---
+    # A third-party service, not ours: it conducts the self-service AI
+    # interview itself once a candidate is invited. Empty by default so the
+    # app still boots without it configured; interview_invite_service raises
+    # a clear error if a send is attempted with no key set.
+    INTERVIEWER_AI_API_KEY: str = ""
+    INTERVIEWER_AI_BASE_URL: str = "https://interviewerai-production-b311.up.railway.app/api/v1"
+
     # Supabase signs access tokens with this audience.
     JWT_AUDIENCE: str = "authenticated"
     # Algorithms are selected per token in app/core/security.py; Supabase may
@@ -97,6 +105,10 @@ class Settings(BaseSettings):
             and self.GMAIL_CLIENT_SECRET
             and self.GMAIL_REFRESH_TOKEN
         )
+
+    @property
+    def interviewer_ai_configured(self) -> bool:
+        return bool(self.INTERVIEWER_AI_API_KEY)
 
 
 @lru_cache
