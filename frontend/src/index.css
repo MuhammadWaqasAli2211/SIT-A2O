@@ -293,3 +293,65 @@
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
 }
+
+/* --------------------------------------------------- print / A4 PDF export -- */
+/*
+ * Used only by the onboarding forms' Download-as-PDF (window.print()).
+ *
+ * No @page rule existed before this: the browser fell back to its own
+ * default page size — US Letter (612x792pt), not A4 — and content laid out
+ * for a ~1152px desktop canvas overflowed a physical page with no
+ * compaction at all. Verified directly (headless print + page count, not
+ * guessed): the Background Verification Form printed as 3 pages instead of
+ * 1, the Employment Application Form as 5 instead of 2, Half Nama as 3
+ * instead of 2.
+ */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  /*
+   * `zoom` rather than `transform: scale()`: zoom reflows layout (font
+   * sizes, padding, line-wrapping all shrink together), which is what
+   * page-break calculation actually measures. `transform` does not affect
+   * the pre-transform layout box Chromium's print engine paginates against,
+   * so scaling that way would look right on screen and still overflow when
+   * printed.
+   *
+   * Each ratio maps that form's on-screen container width to the A4
+   * printable width (210mm - 2*10mm margin = 190mm, ~718px at 96dpi):
+   *   Background Verification / Employment Application: max-w-6xl (1152px)
+   *     -> 718 / 1152 ~= 0.62
+   *   Half Nama: max-w-4xl (896px) -> 718 / 896 ~= 0.80
+   * Tuned further, empirically, against each form's actual measured page
+   * count until it matched its source PDF — the width-only ratio above was
+   * the starting point, not the final value.
+   */
+  .print-a4-bg-verification {
+    zoom: 0.54;
+  }
+  .print-a4-employment {
+    zoom: 0.58;
+  }
+  .print-a4-half-nama {
+    zoom: 0.8;
+  }
+
+  /* A table row, or one labelled field cell, must never get sliced across
+     a page boundary — either prints whole on one page or moves entirely to
+     the next. Scoped to onboarding forms via data-slot, set once on the
+     shared FieldCell/SectionBar primitives, rather than repeated per usage
+     site across three large form files. */
+  tr {
+    break-inside: avoid-page;
+  }
+  [data-slot="field-cell"] {
+    break-inside: avoid-page;
+  }
+  [data-slot="section-bar"] {
+    break-inside: avoid-page;
+    break-after: avoid-page;
+  }
+}
