@@ -206,6 +206,8 @@ export interface ApplicantRow {
   stage: ApplicationStage
   status: ApplicationStatus
   applied_at: string
+  has_cnic: boolean
+  course_completed: boolean
 }
 
 export interface StageTransition {
@@ -258,6 +260,61 @@ export interface InterviewRow extends Interview {
   candidate_email: string
   program_title: string
   interviewer_name: string | null
+}
+
+/* ---------------------------------------------------- AI interview invites --
+ * InterviewerAI, a third-party service — not our own interviews. It conducts
+ * the interview itself once invited; there is no admin-picked time. See
+ * docs/project-status.md for how this fits alongside the scheduled
+ * (Phase 3) interviews above.
+ */
+
+export const InviteCategory = {
+  AI: 'AI',
+  CLOUD_DATA: 'Cloud & Data Engineering',
+  WEB_MOBILE: 'Web and Mobile App Development',
+  UI_UX: 'Graphics and UI/UX Design',
+  INSTRUCTOR: 'Instructor',
+} as const
+export type InviteCategory = (typeof InviteCategory)[keyof typeof InviteCategory]
+
+export type InviteBatchStatus = 'PENDING' | 'SENDING' | 'COMPLETED' | 'FAILED'
+export type InviteStatus = 'PENDING' | 'SENT' | 'FAILED'
+
+export interface InviteRow {
+  id: string
+  application_id: string | null
+  full_name: string
+  email: string
+  cnic: string
+  category: string
+  course_status: string | null
+  status: InviteStatus
+  error: string | null
+}
+
+export interface InviteBatch {
+  id: string
+  bootcamp_id: string
+  subject: string
+  batch_name: string | null
+  status: InviteBatchStatus
+  total_count: number
+  sent_count: number
+  failed_count: number
+  created_at: string
+  last_polled_at: string | null
+}
+
+export interface InviteBatchDetail extends InviteBatch {
+  invites: InviteRow[]
+}
+
+export const INVITE_BATCH_STATUS_LABEL: Record<InviteBatchStatus, string> = {
+  PENDING: 'Queued',
+  SENDING: 'Sending',
+  COMPLETED: 'Sent',
+  FAILED: 'Failed',
 }
 
 export interface EmailLogEntry {
