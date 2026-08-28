@@ -1,8 +1,119 @@
-> **Branch:** `waqas` — last updated 2026-08-27
+> **Branch:** `waqas` — last updated 2026-08-28
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-28 — Three onboarding forms, admin preview only
+
+**Branch:** `waqas`
+
+Built ahead of the phase that uses them: candidates reach these only after
+selection, a stage this project hasn't built yet. Everything here is
+UI-only — no backend route, no database table, no candidate-facing URL.
+Each form lives behind the existing admin role gate at
+`/admin/onboarding-preview/<form>`, purely so the layout can be reviewed
+against the source PDF before any of it is wired to real data.
+
+### Shared infrastructure, built once and reused three times
+
+`frontend/src/features/onboarding/form-primitives.tsx` carries everything
+common to a "digital twin of a Saylani paper form": `BilingualLabel`,
+`SectionBar` (the heavy black section bar), `FieldCell`/`FieldRow`,
+`YesNoGroup`, the bordered `TEXT_INPUT_CLASS` family, `OnboardingToolbar`
+(the auto-save indicator, Clear, and Download-as-PDF button), row-array
+helpers for addable tables, and `InlineBlank` for a fillable word embedded
+mid-sentence rather than pulled into a labelled field.
+
+Also shared: `segmented-digit-input.tsx` (one box per digit, for CNIC and
+date fields), `signature-pad.tsx` (a hand-drawn canvas signature, no
+library), and `use-draft-autosave.ts` (localStorage autosave with a
+debounced write, restore-on-mount, and a stubbed `saveDraft()` for a future
+backend endpoint).
+
+Two new UI primitives needed adding for these forms specifically:
+`components/ui/checkbox.tsx` and `components/ui/radio-group.tsx`, thin
+Tailwind wrappers over `@base-ui/react` (already a project dependency, so
+no new package) following the same pattern `select.tsx` already used.
+Their checked-state colour is scoped to onboarding usage only — brand green
+stays the default for anything else that adopts them later.
+
+`Download as PDF` is `window.print()` with a print stylesheet, not a
+rendering library: the on-screen form already is the pixel-perfect replica,
+so printing it (with the admin sidebar/header/toolbar hidden via
+`print:hidden`, added to `portal-layout.tsx`) produces a PDF that matches
+the screen by construction rather than a second layout to keep in sync.
+
+Row state for the addable tables (Professional Courses, Employment History,
+Family Details) went through one design correction before shipping: an
+earlier `useTableRows` hook kept its own `useState`, which would have put
+every added row outside the one object `useDraftAutosave` watches — rows
+would have vanished on reload, defeating the feature. Replaced with plain
+array functions (`addTableRow`/`removeTableRow`/`updateTableRow`) that
+compose with the form's own state instead.
+
+### Background Verification Form (SWIT-IHR-FAF-11)
+
+Built first, then revised after a side-by-side comparison against the PDF
+surfaced seven fidelity issues in one pass: a missing logo asset, cramped
+padding, an intro line that wrapped instead of staying on one line, CNIC
+digit-boxes wrapping onto a second line for lack of width, checkboxes too
+small and too low-contrast to read at a glance, and phone number fields
+that were plain text instead of segmented like the CNIC fields. All seven
+fixed; the checked-state colour was deliberately made black-ink rather than
+brand green here, matching a printed form rather than the app's usual
+chrome.
+
+### Employment Application Form (SWIT-IHR-FAF-03), 2 pages
+
+Second form, reusing everything above rather than rebuilding it. Three
+places where the source disagreed with the brief describing it, caught by
+reading the PDF directly rather than the brief: Chronic Disease is a plain
+blank here, not a Yes/No pair like the first form; Passport # is
+alphanumeric and was kept as free text rather than forced into the
+digit-only segmented input; and Question 3 in the declarations ("What do
+you know about Saylani?") carries a Yes/No column in the source despite
+reading as open-ended — replicated as printed rather than corrected.
+
+### Half Nama / Oath Form (pure Urdu, RTL), 2 pages
+
+Third form, and structurally different from the first two: almost entirely
+flowing prose with inline blanks rather than a field grid, so
+`BilingualLabel`/`FieldRow`/`SectionBar` see little use here — `InlineBlank`
+was added specifically for this shape. Native `dir="rtl"` handles direction,
+the bidi algorithm, and RTL table-column mirroring without any new library.
+
+This PDF's Urdu text layer extracts cleanly, unlike the first two forms', so
+the oath paragraph and the 10-row policy table are transcribed directly from
+the source rather than reconstructed from standard vocabulary. Two
+discrepancies from the brief, caught by reading the actual sentence
+structure: page 1's second inline blank is the father's name ("بن" — "son
+of"), not an organisation code as the brief assumed; and page 2's opening
+sentence has five inline blanks, not three, since Department and
+Designation are named separately. Page 2 also has no Date field, matching
+the source exactly rather than assuming symmetry with page 1.
+
+The two thumbprint areas on page 2 are reserved, correctly proportioned
+layout space only — no input, no state, no click handler — pending a
+decision from Saylani's side on how a thumbprint should be captured
+digitally.
+
+### Verified
+
+- Frontend production build and `oxlint` clean across every new and touched
+  file, 0 errors
+- Full sweep of the whole project's `oxlint` output confirms nothing new
+  outside the touched files
+
+**Not verified:** an actual rendered screenshot or print preview of any of
+the three forms — no browser-automation tool is available in this
+environment, and reaching the admin-gated routes would have required
+fabricating an admin session, which is outside what this task asked for.
+All three were instead reviewed by the project owner directly in a browser
+against the source PDFs, and the Background Verification Form's Round 1
+fixes above came directly from that review.
 
 ---
 
