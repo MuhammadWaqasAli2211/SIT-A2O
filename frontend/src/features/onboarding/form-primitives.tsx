@@ -41,9 +41,12 @@ export function BilingualLabel({
 /** The heavy black bar the source form uses to open each major section. */
 export function SectionBar({ en, ur }: { en: string; ur: string }) {
   return (
-    <div className="flex items-baseline justify-center gap-2 bg-black px-3 py-1.5 text-center">
+    <div
+      data-slot="section-bar"
+      className="flex flex-col items-center gap-0.5 bg-black px-3 py-1.5 text-center sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-center sm:gap-x-2 sm:gap-y-0.5"
+    >
       <span className="text-sm font-bold tracking-wide text-white uppercase">{en}</span>
-      <span className="text-neutral-400">/</span>
+      <span className="hidden text-neutral-400 sm:inline">/</span>
       <span dir="rtl" lang="ur" className="font-urdu text-base text-white">
         {ur}
       </span>
@@ -60,7 +63,13 @@ export function FieldCell({
   children: ReactNode
 }) {
   return (
-    <div className={cn("flex flex-col gap-1.5 border border-black/70 px-3.5 py-2.5", className)}>
+    <div
+      data-slot="field-cell"
+      className={cn(
+        "flex min-w-0 flex-col gap-1.5 border border-black/70 px-3.5 py-2.5",
+        className
+      )}
+    >
       {children}
     </div>
   )
@@ -88,7 +97,9 @@ export function FieldRow({
   children: ReactNode
 }) {
   return (
-    <FieldCell className={cn("flex-row flex-wrap items-center gap-x-3 gap-y-1.5", className)}>
+    <FieldCell
+      className={cn("flex-col sm:flex-row sm:flex-wrap sm:items-center gap-x-3 gap-y-1.5", className)}
+    >
       <BilingualLabel en={en} ur={ur} required={required} htmlFor={htmlFor} />
       <div className="min-w-0 flex-1">{children}</div>
     </FieldCell>
