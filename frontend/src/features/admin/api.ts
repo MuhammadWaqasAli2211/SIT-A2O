@@ -9,6 +9,9 @@
 import { api } from '@/lib/api-client'
 import type {
   AdminApplicationDetail,
+  AdminGrants,
+  AiAnalytics,
+  AiScope,
   ApplicantRow,
   ApplicationStage,
   AuditEntry,
@@ -22,6 +25,8 @@ import type {
   EmailLogEntry,
   EmailSendResult,
   EmailStatus,
+  ExternalRecord,
+  ExternalRecords,
   Interview,
   InterviewMode,
   InterviewRow,
@@ -29,6 +34,7 @@ import type {
   InviteBatch,
   InviteBatchDetail,
   InviteCategory,
+  KeyScopes,
   Page,
   PhaseType,
   PlatformStats,
@@ -427,6 +433,71 @@ export const interviewInviteApi = {
 
   async refresh(batchId: string) {
     const { data } = await api.post<InviteBatchDetail>(`/interview-invites/${batchId}/refresh`)
+    return data
+  },
+}
+
+/* ------------------------------------------ AI Interviewer: results side --
+ * Reading back what the external service produced. Every call here goes
+ * through our own backend — the InterviewerAI key stays server-side and is
+ * never present in the browser.
+ */
+
+export const aiInterviewApi = {
+  listForBootcamp: (bootcampId: string) =>
+    get<ExternalRecords>(`/bootcamps/${bootcampId}/ai-interviews`),
+
+  detail: (interviewId: number) => get<ExternalRecord>(`/ai-interviews/${interviewId}`),
+
+  /** Full per-question report. Admin-only; never fetched by a candidate view. */
+  report: (interviewId: number) => get<ExternalRecord>(`/ai-interviews/${interviewId}/report`),
+
+  /** Their signed playback URL. Proxied through us so the key is not exposed. */
+  recording: (interviewId: number) =>
+    get<ExternalRecord>(`/ai-interviews/${interviewId}/recording`),
+
+  snapshots: (interviewId: number) =>
+    get<ExternalRecords>(`/ai-interviews/${interviewId}/snapshots`),
+
+  /** Requires the INTERVIEWS_DELETE grant. Deletes on their side only. */
+  async remove(interviewId: number) {
+    await api.delete(`/ai-interviews/${interviewId}`)
+  },
+
+  reinterviewRequests: (bootcampId?: string) =>
+    get<ExternalRecords>('/ai-reinterview-requests', bootcampId ? { bootcamp_id: bootcampId } : undefined),
+
+  /** Requires the REINTERVIEW_DECIDE grant. */
+  async decideReinterview(requestId: number, approve: boolean, note?: string) {
+    const { data } = await api.post<ExternalRecord>(
+      `/ai-reinterview-requests/${requestId}/decision`,
+      { approve, note },
+    )
+    return data
+  },
+
+  analytics: (bootcampId?: string) =>
+    get<AiAnalytics>('/ai-analytics', bootcampId ? { bootcamp_id: bootcampId } : undefined),
+
+  /** Super-admin only — their log is tenant-wide and cannot be intake-scoped. */
+  auditLog: () => get<ExternalRecords>('/ai-audit-log'),
+}
+
+export const permissionApi = {
+  /** What the signed-in admin may write, so the UI can disable rather than fail. */
+  mine: () => get<AiScope[]>('/me/permissions'),
+
+  grants: () => get<AdminGrants[]>('/admin-permissions'),
+
+  keyScopes: () => get<KeyScopes>('/admin-permissions/key'),
+
+  async grant(profileId: string, scope: AiScope) {
+    const { data } = await api.post<AiScope[]>(`/users/${profileId}/permissions`, { scope })
+    return data
+  },
+
+  async revoke(profileId: string, scope: AiScope) {
+    const { data } = await api.delete<AiScope[]>(`/users/${profileId}/permissions/${scope}`)
     return data
   },
 }
