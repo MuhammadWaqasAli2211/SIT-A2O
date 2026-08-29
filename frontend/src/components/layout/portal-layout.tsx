@@ -43,6 +43,7 @@ import {
   ApplicationProvider,
   useApplication,
 } from '@/features/applications/application-context'
+import { useNotifications } from '@/features/notifications/use-notifications'
 import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { LOCKED_HINT, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
@@ -154,14 +155,7 @@ function PortalShell() {
               Website
             </Button>
 
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="relative grid size-9 place-items-center rounded-lg border border-border transition-colors hover:bg-muted"
-            >
-              <Bell className="size-4" />
-              <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-background" />
-            </button>
+            {profile.role === UserRole.CANDIDATE && <NotificationBell />}
 
             <ThemeToggle />
 
@@ -305,6 +299,92 @@ function RegisterAction() {
       <ClipboardPen className="size-4" />
       Register
     </Button>
+  )
+}
+
+/* -------------------------------------------------------- notifications -- */
+
+function formatWhen(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const minutes = Math.round(diffMs / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+function NotificationBell() {
+  const { items, unreadCount, markRead, markAllRead } = useNotifications()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            className="relative grid size-9 place-items-center rounded-lg border border-border transition-colors hover:bg-muted"
+          />
+        }
+      >
+        <Bell className="size-4" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-background" />
+        )}
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuGroup>
+          <div className="flex items-center justify-between px-1.5 py-1">
+            <DropdownMenuLabel className="p-0 text-sm font-medium">
+              Notifications
+            </DropdownMenuLabel>
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void markAllRead()}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+
+        {items.length === 0 ? (
+          <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+            Nothing yet — you'll see updates here when your application moves.
+          </p>
+        ) : (
+          <DropdownMenuGroup>
+            <div className="max-h-96 overflow-y-auto">
+              {items.map((n) => (
+                <DropdownMenuItem
+                  key={n.id}
+                  onClick={() => !n.read && void markRead(n.id)}
+                  className="flex-col items-start gap-0.5 whitespace-normal"
+                >
+                  <span className="flex w-full items-center gap-1.5">
+                    {!n.read && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
+                    <span className={cn('text-sm font-medium', !n.read && 'text-foreground')}>
+                      {n.title}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">{n.body}</span>
+                  <span className="text-[0.68rem] text-muted-foreground/70">
+                    {formatWhen(n.created_at)}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </div>
+          </DropdownMenuGroup>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
