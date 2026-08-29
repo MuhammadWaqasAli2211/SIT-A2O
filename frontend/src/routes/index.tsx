@@ -50,6 +50,7 @@ const AdminInterviewsPage = lazy(() => import('@/pages/admin/interviews-page'))
 const AdminPhasesPage = lazy(() => import('@/pages/admin/phases-page'))
 const AdminEmailsPage = lazy(() => import('@/pages/admin/emails-page'))
 const AdminDocumentsPage = lazy(() => import('@/pages/admin/documents-page'))
+const AdminAiInterviewsPage = lazy(() => import('@/pages/admin/ai-interviews-page'))
 const AdminBackgroundVerificationPreviewPage = lazy(
   () => import('@/pages/admin/onboarding-preview/background-verification-page'),
 )
@@ -63,6 +64,7 @@ const SuperAdminBootcampsPage = lazy(() => import('@/pages/super-admin/bootcamps
 const SuperAdminAdminsPage = lazy(() => import('@/pages/super-admin/admins-page'))
 const SuperAdminAnalyticsPage = lazy(() => import('@/pages/super-admin/analytics-page'))
 const SuperAdminProgramsPage = lazy(() => import('@/pages/super-admin/programs-page'))
+const SuperAdminPermissionsPage = lazy(() => import('@/pages/super-admin/permissions-page'))
 
 // Attached to every top-level branch so a crash inside one section renders the
 // boundary rather than white-screening the whole app.
@@ -152,6 +154,9 @@ export const router = createBrowserRouter([
                   { path: '/admin/phases', element: <AdminPhasesPage /> },
                   { path: '/admin/emails', element: <AdminEmailsPage /> },
                   { path: '/admin/documents', element: <AdminDocumentsPage /> },
+                  // Results from the external AI Interviewer, distinct from
+                  // /admin/interviews, which schedules our own physical round.
+                  { path: '/admin/ai-interviews', element: <AdminAiInterviewsPage /> },
                   // Onboarding forms, built ahead of the phase that uses them.
                   // Admin-only preview: no candidate route exists yet.
                   {
@@ -176,6 +181,10 @@ export const router = createBrowserRouter([
                       { path: '/super-admin/admins', element: <SuperAdminAdminsPage /> },
                       { path: '/super-admin/analytics', element: <SuperAdminAnalyticsPage /> },
                       { path: '/super-admin/programs', element: <SuperAdminProgramsPage /> },
+                      {
+                        path: '/super-admin/permissions',
+                        element: <SuperAdminPermissionsPage />,
+                      },
                     ],
                   },
                 ],
