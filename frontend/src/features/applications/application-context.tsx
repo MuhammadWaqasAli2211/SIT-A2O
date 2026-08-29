@@ -12,7 +12,7 @@
  * three chances to disagree with each other mid-flight.
  */
 
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type ReactNode } from 'react'
 
 import {
   useMyApplication,
@@ -36,11 +36,43 @@ const ApplicationContext = createContext<ApplicationContextValue | null>(null)
 
 export function ApplicationProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
+  const isCandidate = profile?.role === UserRole.CANDIDATE
 
   // Only candidates have applications, and `/applications/mine` rejects
   // everyone else. Admins share this layout, so the fetch is gated by role
   // rather than by which routes happen to be mounted.
-  const state = useMyApplication({ enabled: profile?.role === UserRole.CANDIDATE })
+  const state = useMyApplication({ enabled: isCandidate })
+
+  // Kept current in the background.
+  //
+  // This is the single source of truth for the candidate's stage — the
+  // tracker, the journey stepper, the interview screen and the locked nav
+  // rows all read it from here. Fetching once on mount meant an admin
+  // advancing somebody left every one of those screens showing the old stage
+  // until the candidate happened to reload, which is exactly the stale-copy
+  // problem: one read, many screens, so it is fixed once here rather than
+  // patched in each of them.
+  //
+  // Deliberately slow, and only while the tab is visible. A candidate's own
+  // stage changes a handful of times over weeks; this is here so the change
+  // arrives without a reload, not to track a fast-moving value.
+  const reload = state.reload
+  useEffect(() => {
+    if (!isCandidate) return
+
+    const tick = () => {
+      // `reload()` raises `loading` but never `initialLoading`, so a
+      // background refresh cannot re-lock navigation or unmount a form
+      // mid-use — the distinction these two flags exist for.
+      if (document.visibilityState === 'visible') reload()
+    }
+    const timer = setInterval(tick, 45_000)
+    document.addEventListener('visibilitychange', tick)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', tick)
+    }
+  }, [isCandidate, reload])
 
   return (
     <ApplicationContext
