@@ -48,6 +48,12 @@ export function BootcampSwitcher() {
       // Base UI hands back null when a selection is cleared; there is no
       // "no intake" state to fall back to, so ignore it.
       onValueChange={(value) => value && select(value)}
+      // Without `items`, Select.Value can only show a label once its
+      // matching Item has actually mounted — which only happens after the
+      // popup has been opened once. `selectedId` is restored from
+      // localStorage before that ever happens, so the trigger showed the
+      // raw bootcamp uuid until the admin opened the dropdown themselves.
+      items={bootcamps.map((bootcamp) => ({ value: bootcamp.id, label: bootcamp.name }))}
     >
       <SelectTrigger className="w-full sm:w-64">
         <SelectValue placeholder="Select a bootcamp" />
