@@ -317,6 +317,94 @@ export const INVITE_BATCH_STATUS_LABEL: Record<InviteBatchStatus, string> = {
   FAILED: 'Failed',
 }
 
+/* ------------------------------------------- AI Interviewer: results side --
+ * The invite types above cover *sending*. These cover reading back what the
+ * external service produced — scores, evidence, reinterview requests.
+ *
+ * Admin-facing records are typed as loose records on purpose: their API
+ * publishes no response schemas, so naming fields here would invent a
+ * contract the service has not agreed to. The candidate shape below is the
+ * opposite — narrow by design, and mirrors CandidateScore on the backend.
+ */
+
+export type AiInterviewStatus =
+  | 'not_invited'
+  | 'invited'
+  | 'in_progress'
+  | 'completed'
+  | 'expired'
+
+/**
+ * The only AI-interview data a candidate ever receives. The backend cannot
+ * send more than this — see `CandidateScore` in schemas/ai_interview.py.
+ */
+export interface CandidateScore {
+  status: AiInterviewStatus
+  score: number | null
+  scale: number
+  completed_at: string | null
+  /** Their own interview deadline, so the portal can count down to it. */
+  deadline_at: string | null
+  /** Set once the deadline passed without a completed interview. */
+  can_explain: boolean
+  /** Whether they have already written to the admins about missing it. */
+  explanation_sent: boolean
+}
+
+/** One record from the external service, shape unverified. */
+export type ExternalRecord = Record<string, unknown>
+
+export interface ExternalRecords {
+  items: ExternalRecord[]
+}
+
+export interface ScoreBand {
+  band: string
+  count: number
+}
+
+export interface AiAnalytics {
+  scope: 'platform' | 'bootcamp'
+  candidates: number | null
+  interviews_completed: number | null
+  average_score: number | null
+  distribution: ScoreBand[]
+}
+
+/* -------------------------------------------------- AI write permissions --
+ * Only writes are grantable. Every admin can already read, so there is no
+ * read scope to hold — see permission_service.py.
+ */
+
+export const AiScope = {
+  CANDIDATES_WRITE: 'CANDIDATES_WRITE',
+  INTERVIEWS_DELETE: 'INTERVIEWS_DELETE',
+  INVITES_SEND: 'INVITES_SEND',
+  REINTERVIEW_DECIDE: 'REINTERVIEW_DECIDE',
+} as const
+export type AiScope = (typeof AiScope)[keyof typeof AiScope]
+
+export const AI_SCOPE_LABEL: Record<AiScope, string> = {
+  CANDIDATES_WRITE: 'Edit candidate records',
+  INTERVIEWS_DELETE: 'Delete AI interviews',
+  INVITES_SEND: 'Send AI interview invites',
+  REINTERVIEW_DECIDE: 'Decide reinterview requests',
+}
+
+export interface AdminGrants {
+  profile_id: string
+  full_name: string | null
+  email: string
+  scopes: AiScope[]
+}
+
+export interface KeyScopes {
+  name: string | null
+  company_name: string | null
+  scopes: string[]
+  rate_limit_per_minute: number | null
+}
+
 export interface EmailLogEntry {
   id: string
   recipient_email: string
