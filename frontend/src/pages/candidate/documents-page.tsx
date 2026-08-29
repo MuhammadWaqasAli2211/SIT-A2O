@@ -21,6 +21,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -146,16 +147,17 @@ function Checklist({ application }: { application: ApplicationDetail }) {
           </Alert>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <Stagger className="grid gap-4 lg:grid-cols-2">
           {rows.map((row) => (
-            <DocumentSlot
-              key={row.doc_type}
-              row={row}
-              applicationId={application.id}
-              onChanged={refetch}
-            />
+            <StaggerItem key={row.doc_type}>
+              <DocumentSlot
+                row={row}
+                applicationId={application.id}
+                onChanged={refetch}
+              />
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
 
         <p className="text-xs text-muted-foreground">
           PDF, JPG, PNG, or WebP · maximum {MAX_MB} MB per file. Your documents are stored
