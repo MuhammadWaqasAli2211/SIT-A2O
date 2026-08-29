@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import NotFoundError
 from app.models.application import Application
 from app.models.bootcamp import Bootcamp, BootcampAdmin, Program
 from app.models.enums import (
@@ -81,28 +82,64 @@ def _program_breakdown(db: Session, *where) -> list[ProgramCount]:
 
 def bootcamp_stats(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> BootcampStats:
     bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
-    bootcamp = bootcamp_service.get_bootcamp(db, bootcamp_id)
+
+    # Deliberately not bootcamp_service.get_bootcamp(): that eager-loads
+    # phases and programs through selectinload, which is three further round
+    # trips for relationships this function never reads. It needs four scalar
+    # columns, so it asks for four scalar columns.
+    bootcamp = db.execute(
+        select(
+            Bootcamp.id, Bootcamp.name, Bootcamp.bootcamp_number, Bootcamp.status
+        ).where(Bootcamp.id == bootcamp_id)
+    ).one_or_none()
+    if bootcamp is None:
+        raise NotFoundError("Bootcamp not found.")
 
     scoped = Application.bootcamp_id == bootcamp_id
     now = datetime.now(UTC)
 
-    # Interview figures need the join to applications to stay inside the intake.
-    def interview_count(status: InterviewStatus) -> int:
-        return (
-            db.scalar(
-                select(func.count())
-                .select_from(Interview)
-                .join(Application, Application.id == Interview.application_id)
-                .where(scoped, Interview.status == status)
-            )
-            or 0
+    # One pass per table rather than one query per figure.
+    #
+    # This used to issue nine separate `count(*)` statements. Every one of them
+    # is trivial for Postgres — the row counts are small — but the database is
+    # a remote pooler roughly 106ms away, so the cost was almost entirely
+    # round trips: measured at 18 queries and 4.3s for this one function,
+    # 2026-08-29. `count(*) FILTER (WHERE ...)` gets every conditional count
+    # out of a single scan, which is the same answer in one trip instead of
+    # nine.
+    totals = db.execute(
+        select(
+            func.count().label("total"),
+            func.count().filter(Application.status == ApplicationStatus.ACTIVE).label("active"),
+            func.count()
+            .filter(Application.status == ApplicationStatus.REJECTED)
+            .label("rejected"),
+            func.count()
+            .filter(Application.stage == ApplicationStage.ONBOARDED)
+            .label("onboarded"),
+            func.count()
+            .filter(Application.applied_at >= now - timedelta(days=7))
+            .label("last_7_days"),
         )
+        .select_from(Application)
+        .where(scoped)
+    ).one()
 
-    average = db.scalar(
-        select(func.avg(Interview.score))
+    # Interview figures need the join to applications to stay inside the
+    # intake. The average rides along in the same pass — it reads the same
+    # joined rows, so splitting it out only bought another round trip.
+    interviews = db.execute(
+        select(
+            func.count().filter(Interview.status == InterviewStatus.SCHEDULED).label("scheduled"),
+            func.count().filter(Interview.status == InterviewStatus.COMPLETED).label("completed"),
+            func.count().filter(Interview.status == InterviewStatus.NO_SHOW).label("no_show"),
+            func.avg(Interview.score).label("average"),
+        )
+        .select_from(Interview)
         .join(Application, Application.id == Interview.application_id)
-        .where(scoped, Interview.score.isnot(None))
-    )
+        .where(scoped)
+    ).one()
+    average = interviews.average
 
     trend_rows = db.execute(
         select(func.date(Application.applied_at), func.count())
@@ -125,23 +162,15 @@ def bootcamp_stats(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> Bootc
         bootcamp_name=bootcamp.name,
         bootcamp_number=bootcamp.bootcamp_number,
         status=bootcamp.status,
-        total_applications=_count(db, Application, scoped),
-        active_applications=_count(
-            db, Application, scoped, Application.status == ApplicationStatus.ACTIVE
-        ),
-        rejected_applications=_count(
-            db, Application, scoped, Application.status == ApplicationStatus.REJECTED
-        ),
-        onboarded=_count(
-            db, Application, scoped, Application.stage == ApplicationStage.ONBOARDED
-        ),
-        interviews_scheduled=interview_count(InterviewStatus.SCHEDULED),
-        interviews_completed=interview_count(InterviewStatus.COMPLETED),
-        interviews_no_show=interview_count(InterviewStatus.NO_SHOW),
+        total_applications=totals.total,
+        active_applications=totals.active,
+        rejected_applications=totals.rejected,
+        onboarded=totals.onboarded,
+        interviews_scheduled=interviews.scheduled,
+        interviews_completed=interviews.completed,
+        interviews_no_show=interviews.no_show,
         average_score=round(float(average), 1) if average is not None else None,
-        applications_last_7_days=_count(
-            db, Application, scoped, Application.applied_at >= now - timedelta(days=7)
-        ),
+        applications_last_7_days=totals.last_7_days,
         emails_sent=_count(
             db,
             EmailLog,
@@ -186,13 +215,29 @@ def platform_stats(db: Session) -> PlatformStats:
         .order_by(func.date(Application.applied_at))
     ).all()
 
+    # Same round-trip reasoning as bootcamp_stats above: these are seven
+    # trivial counts across four tables, collapsed to one query per table.
+    bootcamps = db.execute(
+        select(
+            func.count().label("total"),
+            func.count().filter(Bootcamp.status.in_(_ACTIVE_STATUSES)).label("active"),
+        ).select_from(Bootcamp)
+    ).one()
+
+    people = db.execute(
+        select(
+            func.count().filter(Profile.role == UserRole.CANDIDATE).label("candidates"),
+            func.count()
+            .filter(Profile.role.in_((UserRole.ADMIN, UserRole.SUPER_ADMIN)))
+            .label("admins"),
+        ).select_from(Profile)
+    ).one()
+
     return PlatformStats(
-        total_bootcamps=_count(db, Bootcamp),
-        active_bootcamps=_count(db, Bootcamp, Bootcamp.status.in_(_ACTIVE_STATUSES)),
-        total_candidates=_count(db, Profile, Profile.role == UserRole.CANDIDATE),
-        total_admins=_count(
-            db, Profile, Profile.role.in_((UserRole.ADMIN, UserRole.SUPER_ADMIN))
-        ),
+        total_bootcamps=bootcamps.total,
+        active_bootcamps=bootcamps.active,
+        total_candidates=people.candidates,
+        total_admins=people.admins,
         total_applications=_count(db, Application),
         total_interviews=_count(db, Interview),
         emails_sent=_count(db, EmailLog, EmailLog.status == EmailStatus.SENT),

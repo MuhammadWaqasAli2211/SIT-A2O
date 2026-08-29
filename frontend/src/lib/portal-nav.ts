@@ -1,9 +1,11 @@
 import {
   BarChart3,
+  BrainCircuit,
   Building2,
   CalendarClock,
   FileText,
   GraduationCap,
+  KeyRound,
   LayoutDashboard,
   Mail,
   Radar,
@@ -86,6 +88,10 @@ const CANDIDATE_NAV: PortalNavGroup[] = [
 const BOOTCAMP_TOOLS: PortalNavItem[] = [
   { label: 'Candidates', href: '/admin/candidates', icon: Users },
   { label: 'Interviews', href: '/admin/interviews', icon: CalendarClock },
+  // Results from the external AI screening service. Separate from
+  // 'Interviews' above, which schedules our own physical round — the two are
+  // different rounds against different systems, so they get different rows.
+  { label: 'AI interviews', href: '/admin/ai-interviews', icon: BrainCircuit },
   { label: 'Documents', href: '/admin/documents', icon: FileText },
   { label: 'Phases', href: '/admin/phases', icon: ShieldCheck },
   { label: 'Emails', href: '/admin/emails', icon: Mail },
@@ -110,6 +116,7 @@ const SUPER_ADMIN_NAV: PortalNavGroup[] = [
       { label: 'Analytics', href: '/super-admin/analytics', icon: BarChart3 },
       { label: 'Bootcamps', href: '/super-admin/bootcamps', icon: Building2 },
       { label: 'Administrators', href: '/super-admin/admins', icon: ShieldCheck },
+      { label: 'AI permissions', href: '/super-admin/permissions', icon: KeyRound },
       { label: 'Programs', href: '/super-admin/programs', icon: GraduationCap },
     ],
   },

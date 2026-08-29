@@ -7,7 +7,7 @@ app/integrations/interviewer_ai.py for why this is not an `interviews` row.
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, Text, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -50,6 +50,20 @@ class InterviewInviteBatch(Base):
     )
     last_polled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # The intake's INTERVIEW phase deadline as it stood when this batch was
+    # sent. After it passes the invite is no longer honoured — InterviewerAI
+    # has no invite-expiry of its own, so this is what enforces it. Snapshot,
+    # not a live read: see the migration for why.
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def is_expired(self) -> bool:
+        """Past its deadline. A batch sent before deadlines were recorded has
+        none, and is treated as still valid rather than retroactively expired."""
+        if self.deadline_at is None:
+            return False
+        return datetime.now(UTC) > self.deadline_at
+
     invites: Mapped[list["InterviewInvite"]] = relationship(
         back_populates="batch", cascade="all, delete-orphan", order_by="InterviewInvite.row_index"
     )
@@ -73,6 +87,12 @@ class InterviewInvite(Base):
     application_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("applications.id", ondelete="SET NULL")
     )
+
+    # InterviewerAI's own candidate id, resolved after the send so their
+    # interviews and reports can be matched back to this row without relying
+    # on the email address staying identical on both sides. Null when the
+    # lookup found nothing, or for rows sent before this was captured.
+    external_candidate_id: Mapped[int | None] = mapped_column(BigInteger)
 
     # Position in the array sent to InterviewerAI — how a status poll matches
     # their by-index `failures` back to a row.

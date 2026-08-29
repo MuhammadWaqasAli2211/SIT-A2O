@@ -10,6 +10,7 @@ import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Send } from 'lucid
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import { EmptyState, PageHeader, StageBadge, Timeline } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -60,11 +61,13 @@ export default function CandidateApplicationPage() {
         {applications.length === 0 ? (
           <ApplyFlow onApplied={refetch} />
         ) : (
-          <div className="flex flex-col gap-5">
+          <Stagger className="flex flex-col gap-5">
             {applications.map((application) => (
-              <SubmittedApplication key={application.id} application={application} />
+              <StaggerItem key={application.id}>
+                <SubmittedApplication application={application} />
+              </StaggerItem>
             ))}
-          </div>
+          </Stagger>
         )}
       </AsyncSection>
     </>

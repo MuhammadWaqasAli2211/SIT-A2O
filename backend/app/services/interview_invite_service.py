@@ -12,10 +12,10 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.integrations import interviewer_ai
 from app.models.application import Application
-from app.models.enums import ApplicationStage, InviteBatchStatus, InviteStatus
+from app.models.enums import ApplicationStage, InviteBatchStatus, InviteStatus, PhaseType
 from app.models.interview_invite import InterviewInvite, InterviewInviteBatch
 from app.models.user import Profile
 from app.schemas.interview_invite import BulkInviteRequest, ManualInviteRow
@@ -68,10 +68,45 @@ def _category_for(program_slug: str) -> str:
     return category
 
 
+def _link_external_candidates(invites: list[InterviewInvite]) -> None:
+    """Record InterviewerAI's own candidate id against each invite.
+
+    Best-effort by design: the invites have already been sent by the time
+    this runs, so a lookup that fails or comes back empty must leave the
+    batch intact and simply go unlinked. ai_interview_service falls back to
+    an email match for anything missing a id, and backfills it on first read.
+    """
+    for invite in invites:
+        try:
+            found = interviewer_ai.find_candidate_by_email(invite.email)
+        except AppError:
+            # Their service being unreachable or rate-limiting us is not a
+            # reason to fail a send that already succeeded.
+            return
+        if found and isinstance(found.get("id"), int):
+            invite.external_candidate_id = found["id"]
+
+
 def send_bulk(
     db: Session, bootcamp_id: uuid.UUID, payload: BulkInviteRequest, actor: Profile
 ) -> InterviewInviteBatch:
     bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+
+    # The same flag-and-clock gate registration uses, not a second mechanism:
+    # an invite may only go out while the intake's INTERVIEW phase is actually
+    # open, and `assert_phase_open` already refuses a phase whose deadline has
+    # passed even if somebody left the flag on.
+    phase = bootcamp_service.assert_phase_open(db, bootcamp_id, PhaseType.INTERVIEW)
+
+    # Required at the point of sending rather than defaulted. A deadline is
+    # what makes the invite expire, and an invite with no expiry is a link
+    # that works forever — so there is no sensible default to fall back to,
+    # and guessing one here would be inventing a promise to the candidate.
+    if phase.deadline_at is None:
+        raise ConflictError(
+            "The interview phase has no deadline set. Add one on the Phases "
+            "screen before sending invites — it is what expires the interview link."
+        )
 
     applications: list[Application] = []
     if payload.application_ids:
@@ -194,6 +229,7 @@ def send_bulk(
         failed_count=external.get("failed_count", 0),
         created_by=actor.id,
         last_polled_at=datetime.now(UTC),
+        deadline_at=phase.deadline_at,
     )
     db.add(batch)
     db.flush()
@@ -201,6 +237,8 @@ def send_bulk(
     for invite in invites:
         invite.batch_id = batch.id
     db.add_all(invites)
+
+    _link_external_candidates(invites)
 
     if payload.advance_stage:
         for application in applications:

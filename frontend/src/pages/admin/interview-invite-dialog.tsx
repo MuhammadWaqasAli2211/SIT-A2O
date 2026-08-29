@@ -42,6 +42,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -728,31 +729,7 @@ function Field({
   )
 }
 
-/** No shadcn Switch exists in this project yet — a small styled toggle rather
-    than adding one for a single settings row. */
-function Switch({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        'relative h-6 w-11 shrink-0 rounded-full transition-colors',
-        checked ? 'bg-primary' : 'bg-muted-foreground/25',
-      )}
-    >
-      <span
-        className={cn(
-          'absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform',
-          checked ? 'translate-x-[1.375rem]' : 'translate-x-0.5',
-        )}
-      />
-    </button>
-  )
-}
-
-/** No shadcn Checkbox exists in this project yet — same reasoning as Switch. */
+/** No shadcn Checkbox exists in this project yet. */
 function RowCheckbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
     <button

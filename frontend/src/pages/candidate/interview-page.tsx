@@ -1,16 +1,30 @@
 /**
  * The candidate's own interview schedule.
  *
- * Deliberately shows no score. Interview scores are an internal admin signal —
- * the candidate sees the schedule and their stage progression, never the mark.
- * The API returns `score` on this row type; rendering it here would be the bug.
+ * Two different interviews meet on this page, and they have opposite rules
+ * about scores:
+ *
+ *   Physical / HR interview (the cards below) — the mark is an internal admin
+ *   signal. `InterviewRow.score` arrives on these rows and rendering it here
+ *   would be the bug. The candidate sees the slot and the status, never the
+ *   mark.
+ *
+ *   AI screening interview (`AiScoreCard`) — the candidate *is* entitled to
+ *   their own overall score, and only that. It comes from a separate endpoint
+ *   whose response shape cannot carry anything else.
+ *
+ * Keeping both on one page is deliberate: a candidate thinks of "my
+ * interview" as one thing. Keeping the score rules straight between them is
+ * what the split above is for.
  */
 
 import { CalendarClock, CheckCircle2, Clock, MapPin, Video, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { Reveal, Stagger, StaggerItem } from '@/components/motion/reveal'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
+import { AiScoreCard } from '@/features/ai-interview/score-card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -68,55 +82,74 @@ export default function CandidateInterviewPage() {
         description="Your screening interview schedule and what to bring."
       />
 
-      <AsyncSection
-        initialLoading={initialLoading}
-        error={error}
-        onRetry={refetch}
-        skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
-      >
-        {interviews.length === 0 ? (
-          <EmptyState
-            icon={CalendarClock}
-            title="No interview scheduled yet"
-            description="Once registration closes, we schedule screening interviews in batches. You will get an email with your slot."
-            action={
-              <Link
-                to="/dashboard"
-                className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              >
-                Back to overview
-              </Link>
-            }
-          />
-        ) : (
-          <div className="flex flex-col gap-5">
-            {upcoming.length > 0 && (
-              <>
-                <Alert>
-                  <CalendarClock className="size-4" />
-                  <AlertTitle>You have an interview coming up</AlertTitle>
-                  <AlertDescription>
-                    Bring your CNIC and your candidate code. Arrive ten minutes early.
-                  </AlertDescription>
-                </Alert>
+      <div className="flex flex-col gap-5">
+        {/* Ahead of the schedule: a candidate who has taken the AI round is
+            usually here to look for that result, not for a past slot. Renders
+            nothing at all when they were never invited to it. */}
+        <AiScoreCard />
 
-                {upcoming.map((interview) => (
-                  <InterviewCard key={interview.id} interview={interview} highlight />
-                ))}
-              </>
-            )}
+        <AsyncSection
+          initialLoading={initialLoading}
+          error={error}
+          onRetry={refetch}
+          skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
+        >
+          {interviews.length === 0 ? (
+            <Reveal>
+              <EmptyState
+                icon={CalendarClock}
+                title="No interview scheduled yet"
+                description="Once registration closes, we schedule screening interviews in batches. You will get an email with your slot."
+                action={
+                  <Link
+                    to="/dashboard"
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  >
+                    Back to overview
+                  </Link>
+                }
+              />
+            </Reveal>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {upcoming.length > 0 && (
+                <>
+                  <Reveal>
+                    <Alert>
+                      <CalendarClock className="size-4" />
+                      <AlertTitle>You have an interview coming up</AlertTitle>
+                      <AlertDescription>
+                        Bring your CNIC and your candidate code. Arrive ten minutes early.
+                      </AlertDescription>
+                    </Alert>
+                  </Reveal>
 
-            {past.length > 0 && (
-              <div className="flex flex-col gap-3">
-                <h2 className="text-sm font-medium text-muted-foreground">Earlier</h2>
-                {past.map((interview) => (
-                  <InterviewCard key={interview.id} interview={interview} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </AsyncSection>
+                  <Stagger className="flex flex-col gap-5">
+                    {upcoming.map((interview) => (
+                      <StaggerItem key={interview.id}>
+                        <InterviewCard interview={interview} highlight />
+                      </StaggerItem>
+                    ))}
+                  </Stagger>
+                </>
+              )}
+
+              {past.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-sm font-medium text-muted-foreground">Earlier</h2>
+                  <Stagger className="flex flex-col gap-3">
+                    {past.map((interview) => (
+                      <StaggerItem key={interview.id}>
+                        <InterviewCard interview={interview} />
+                      </StaggerItem>
+                    ))}
+                  </Stagger>
+                </div>
+              )}
+            </div>
+          )}
+        </AsyncSection>
+      </div>
     </>
   )
 }

@@ -1,6 +1,177 @@
-> **Branch:** `waqas` — last updated 2026-08-28
+> **Branch:** `waqas` — last updated 2026-08-29
 
 # Project Status
+
+## Where things stand — 2026-08-29 (interview lifecycle, live status, performance)
+
+**The admin dashboard was taking 4.3 seconds. It now takes 0.9.** Profiled
+rather than guessed: it was issuing **18 sequential queries**, and the
+database is a pooler roughly **106ms away**, so the cost was almost entirely
+round trips rather than query work — there are only 4 applications in the
+table. Nine of those were separate `count(*)` statements that Postgres does
+in one pass with `count(*) FILTER (WHERE ...)`, and `get_bootcamp` was
+eager-loading phases and programs for a function that reads four scalar
+columns. **18 queries → 8, 4343ms → 939ms.** Platform stats went 13 → 11.
+
+Worth carrying forward: at ~106ms per round trip, **query count is the whole
+performance story on this project**, not query cost. An N+1 that would be
+invisible against a local database is seconds here.
+
+This also settles the react-query question: it points the other way. The fix
+was server-side query collapsing, so the hand-rolled `use-async` hook stays.
+
+**Interview invites now have a lifecycle.** An invite can only go out while
+the intake's INTERVIEW phase is open — the same `assert_phase_open`
+flag-and-clock gate registration uses, not a second mechanism — and the phase
+must have a deadline set, or the send is refused outright. There is no
+default: an invite with no deadline is a link that works forever.
+
+The deadline is **snapshotted onto the batch** at send time rather than read
+live, so an admin editing the phase later cannot retroactively expire links
+that were valid this morning. Past it, the candidate's status becomes
+`expired` and the link stops being honoured. **We enforce this, not
+InterviewerAI** — their OpenAPI spec has no invite-expiry concept at all
+(their only "expiry" terms are password-reset codes, API keys, and an
+in-session timer), so nothing on their side would have done it.
+
+**Missed deadlines hold, they do not reject.** The application stays exactly
+where it is — no automatic rejection, no automatic progression. The candidate
+sees a live `Countdown` to the deadline beforehand, and afterwards a form to
+write to the intake's administrators. **No AI judges the reason** (decided
+2026-08-29): a person reads it. The explanation is stored as an `email_log`
+row (also decided) and the reason text goes into the audit trail either way.
+Unsticking a candidate is an ordinary stage move, which is already audited.
+
+Known trade-off, taken knowingly: `email_log` is a delivery record with no
+decision column, so there is no accepted/declined state — the candidate sees
+"sent", not a verdict.
+
+**"Unknown candidate" is fixed at the source.** It was the frontend reading
+the name out of InterviewerAI's undocumented payload, which may carry no name
+under any key we recognise. The name is now joined server-side from our own
+invite and application rows and attached as `local` on each record, so the UI
+never guesses. Verified: a payload carrying only `candidate_id: 271` resolves
+to "Muhammad Umar Khan / B08-011".
+
+**Live status, without the dependency.** Decided 2026-08-29 as *polling now,
+realtime later*: `useLiveResource` refreshes on a fast cadence while the tab
+is visible and backs off when it is not, behind a narrow enough contract that
+swapping in Supabase Realtime later is one module. A `LiveIndicator` shows
+when the data last landed. What this avoided for now: `@supabase/supabase-js`
+is not installed, and the `supabase_realtime` publication contains **zero
+tables**, so realtime would have needed a dependency *and* a migration. The
+RLS side was already fine — `applications_select_own` exists.
+
+Stale reads were fixed at the source too: `ApplicationProvider` is the single
+copy of the candidate's stage that the tracker, stepper, interview screen and
+locked nav rows all read, and it fetched once on mount. It now refreshes in
+the background, so one fix covers every screen downstream.
+
+**The report UI was rebuilt, not reskinned.** It previously fetched the
+report, the recording and every snapshot the moment it opened — three
+external calls to answer a question nobody had asked — and stacked them in
+one scrolling column. Now the score leads (via `Counter`), the per-question
+breakdown is scannable rows that expand for the answer, and evidence sits
+behind its own tab that does not fetch until opened.
+
+**Routing was audited and left alone.** Every route already sits behind the
+right guard and the hierarchy is consistent; there was nothing to fix, so
+nothing was changed. One naming observation: `/admin/interviews` (our
+physical round) and `/admin/ai-interviews` (the external one) are similar
+names for genuinely different things.
+
+**Verified:** 253 backend tests pass (12 new, covering deadline expiry and
+the explanation gate), clean production build, 0 type errors, 0 lint errors.
+Expiry transitions confirmed against the live database and rolled back:
+before → `invited`, after → `expired` with the explanation route open, no
+deadline → not retroactively expired. Migration `20260829140000` applied.
+
+---
+
+## Where things stand — 2026-08-29 (AI Interviewer, role-gated)
+
+**The AI Interviewer integration now covers results, not just sending.** A new
+scoped API key (ten scopes) replaced the send-only one, and the whole partner
+surface is wired through our own FastAPI routes: interviews, reports,
+recordings, proctor snapshots, reinterview decisions, analytics and their
+audit log. The key never leaves the backend.
+
+**The access model, as built:**
+
+| | |
+|---|---|
+| `CANDIDATE` | Their own overall score and nothing else. `CandidateScore` carries four fields and has no field able to hold question data, snapshots, recordings or audit entries — the boundary is the schema, not a UI filter |
+| `ADMIN` | Every read, scoped to their own intakes. **No writes at all** by default |
+| `SUPER_ADMIN` | Everything, and grants individual write scopes to individual admins |
+
+**Permissions are a table, not a flag.** `admin_permissions`
+(`profile_id`, `scope`, `granted_by`, `granted_at`) with a native `ai_scope`
+enum holding only the four *write* scopes — reads are not grantable because
+they are never withheld from an admin. Grant and revoke are idempotent and
+both land in the existing audit trail. Screen at
+`/super-admin/permissions`.
+
+**Four things were decided rather than assumed** (2026-08-29): the permission
+table over bundles; `invites:send` extends the existing bulk flow while
+`interviews:delete` stays separate from our own Phase 3 cancel; their audit
+log stays a separate read; and their candidate id is now stored on
+`interview_invites` with an email fallback.
+
+**Three findings worth carrying forward:**
+
+1. **Their `/api/v1` responses are undocumented.** The OpenAPI spec types
+   query parameters but leaves every response schema empty, and there are no
+   component schemas for score/report/proctor. Everything is parsed
+   defensively — `extract_score` looks under six key names and three nested
+   containers, and returns `None` rather than guessing.
+2. **Their tenant is empty.** Zero interviews, reports, snapshots,
+   recordings, reinterview requests or audit entries as of 2026-08-29, so no
+   read surface has been verified against real data. Only the shapes are
+   built; the first real interview is what will confirm them.
+3. **Two of their endpoints cannot be intake-scoped.** `/audit-log` and
+   `/analytics/summary` are tenant-wide with no filter, so the audit read is
+   super-admin only and an admin's analytics are computed from their own
+   bootcamp's interviews instead of passed through.
+
+**Still open — needs your answer:** what "overall score" actually means
+numerically (raw, percentile, or a band) and where the pass threshold sits.
+The candidate card deliberately shows the number with no pass/fail wording
+until that is confirmed, because telling someone they failed against an
+invented threshold is worse than showing a bare score.
+
+**Bug found and fixed while testing:** `delete_interview` checked bootcamp
+scope before the permission scope, which meant an admin holding no delete
+grant could tell an existing interview id from a missing one by whether they
+got a 404 or a 403. Permission is now the first gate, with a regression test
+pinning the ordering rather than only the outcome.
+
+**Verified:** 241 backend tests pass (39 new, covering the gating), clean
+production build, 0 type errors, 0 lint errors, all 16 new routes registered
+and returning 401 unauthenticated. Migration `20260829120000` applied to the
+live database and recorded in the ledger.
+
+---
+
+## Where things stand — 2026-08-28 (notifications)
+
+**The header bell does something now.** It was decorative — no click handler,
+a hardcoded unread dot, and no backend behind it. Candidates now get a
+notification when their application passes or fails a stage, created from
+`application_service.advance_stage()` since every stage move already funnels
+through that one function. Polls every 30s; click marks read.
+
+Scoped to candidates deliberately: there is no staff notification source yet,
+so the bell renders only for them rather than showing an empty panel to
+admins. New `notifications` table, migration `20260828120000`, applied.
+
+**Also fixed:** the bootcamp switcher showed a raw UUID until the dropdown had
+been opened once. Base UI's `Select.Value` can only render a label once its
+matching item has mounted, and the selection is restored from `localStorage`
+before that happens — so the trigger fell back to the raw value. Passing
+`items` to the `Select` fixes it everywhere, since `BootcampSwitcher` is
+shared by all five admin screens.
+
+---
 
 ## Where things stand — 2026-08-28 (A4 pagination, mobile, huzaifa merged)
 

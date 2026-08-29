@@ -21,7 +21,7 @@ from app.schemas.application import (
     StageTransitionOut,
 )
 from app.schemas.bootcamp import ProgramOut
-from app.services import audit_service, bootcamp_service
+from app.services import audit_service, bootcamp_service, notification_service
 
 # Set by the unique (bootcamp_id, profile_id) index on applications.
 _DUPLICATE_APPLICATION_CONSTRAINT = "applications_bootcamp_id_profile_id_key"
@@ -354,6 +354,14 @@ def advance_stage(
         entity_id=application.id,
         summary=f"{application.candidate_code}: {previous.value} to {to_stage.value}",
         metadata={"from": previous.value, "to": to_stage.value, "reason": reason},
+    )
+    notification_service.notify_stage_outcome(
+        db,
+        profile_id=application.profile_id,
+        application_id=application.id,
+        candidate_code=application.candidate_code,
+        from_stage=previous,
+        to_stage=to_stage,
     )
     db.flush()
     return application

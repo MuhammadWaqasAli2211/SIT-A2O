@@ -11,6 +11,7 @@
 import { api } from '@/lib/api-client'
 import type {
   ApplicationDetail,
+  CandidateScore,
   DocumentLink,
   DocumentRecord,
   DocumentType,
@@ -50,6 +51,25 @@ export const candidateApi = {
    * scores are an internal admin signal. See docs/project-status.md.
    */
   myInterviews: () => get<InterviewRow[]>('/me/interviews'),
+
+  /**
+   * The candidate's own AI screening result.
+   *
+   * Returns a score and nothing else — the backend's `CandidateScore` has no
+   * field able to carry questions, proctor snapshots, recordings or audit
+   * entries, so this is safe to render directly rather than filtered here.
+   */
+  myAiInterview: () => get<CandidateScore>('/me/ai-interview'),
+
+  /**
+   * Write to the intake's administrators about a missed interview deadline.
+   *
+   * Accepted only once the deadline has actually passed, and only once. No
+   * agent judges the reason — an administrator reads it and decides.
+   */
+  async explainMissedDeadline(reason: string) {
+    await api.post('/me/ai-interview/explanation', { reason })
+  },
 
   /* ----------------------------------------------------------- documents -- */
 

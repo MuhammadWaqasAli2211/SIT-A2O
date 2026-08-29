@@ -110,3 +110,45 @@ class InviteStatus(StrEnum):
     PENDING = "PENDING"
     SENT = "SENT"
     FAILED = "FAILED"
+
+
+class AiScope(StrEnum):
+    """Write scopes on the AI Interviewer API key that a super admin may
+    delegate to an individual admin.
+
+    Only writes appear here. Every ADMIN may read from that API by default
+    (bootcamp-scoped, like all admin reads), so read scopes are not grantable
+    and storing them would imply a restriction that does not exist.
+
+    Labels are our own; `external` is the spelling their API uses.
+    """
+
+    CANDIDATES_WRITE = "CANDIDATES_WRITE"
+    INTERVIEWS_DELETE = "INTERVIEWS_DELETE"
+    INVITES_SEND = "INVITES_SEND"
+    REINTERVIEW_DECIDE = "REINTERVIEW_DECIDE"
+
+    @property
+    def external(self) -> str:
+        """The scope string as the AI Interviewer API names it."""
+        return _AI_SCOPE_EXTERNAL[self]
+
+    @property
+    def label(self) -> str:
+        """Wording for a permission-assignment screen."""
+        return _AI_SCOPE_LABEL[self]
+
+
+_AI_SCOPE_EXTERNAL: dict[AiScope, str] = {
+    AiScope.CANDIDATES_WRITE: "candidates:write",
+    AiScope.INTERVIEWS_DELETE: "interviews:delete",
+    AiScope.INVITES_SEND: "invites:send",
+    AiScope.REINTERVIEW_DECIDE: "reinterview:decide",
+}
+
+_AI_SCOPE_LABEL: dict[AiScope, str] = {
+    AiScope.CANDIDATES_WRITE: "Edit candidate records",
+    AiScope.INTERVIEWS_DELETE: "Delete AI interviews",
+    AiScope.INVITES_SEND: "Send AI interview invites",
+    AiScope.REINTERVIEW_DECIDE: "Decide reinterview requests",
+}
