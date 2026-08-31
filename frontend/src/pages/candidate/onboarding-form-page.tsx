@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { useApplication } from '@/features/applications/application-context'
@@ -25,11 +26,13 @@ import {
   type EmploymentApplicationDraft,
 } from '@/features/onboarding/employment-application-form'
 import { HalfNamaForm, type HalfNamaDraft } from '@/features/onboarding/half-nama-form'
+import { OnboardingStepIndicator } from '@/features/onboarding/step-indicator'
 import { candidateApi } from '@/features/candidate/api'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
 import { isAdult } from '@/lib/age'
 import { ONBOARDING_FORM_BY_SLUG, ONBOARDING_FORM_LABEL, OnboardingFormType } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 export default function OnboardingFormPage() {
   const { slug } = useParams<{ slug: string }>()
@@ -84,23 +87,28 @@ function FormBody({
     >
       {rows.data && (() => {
         const row = rows.data.find((r) => r.form_type === formType)
+
         if (!row?.unlocked) {
           return (
-            <EmptyState
-              icon={Lock}
-              title="Not available yet"
-              description="Complete the forms before this one first."
-              action={
-                <Link to="/dashboard/documents" className={buttonVariants({ size: 'sm' })}>
-                  Back to Student's Folder
-                </Link>
-              }
-            />
+            <div className="flex flex-col gap-6">
+              <OnboardingStepIndicator rows={rows.data} active={formType} />
+              <EmptyState
+                icon={Lock}
+                title="Not available yet"
+                description="Complete the forms before this one first."
+                action={
+                  <Link to="/dashboard/documents" className={buttonVariants({ size: 'sm' })}>
+                    Back to Student's Folder
+                  </Link>
+                }
+              />
+            </div>
           )
         }
 
         const readOnly = row.submission?.status === 'SUBMITTED'
         const initialData = row.submission?.submitted_data
+        const reopened = row.submission?.status === 'REOPENED'
 
         const handleSubmit = async (draft: unknown) => {
           if (await submit.run(draft)) {
@@ -111,31 +119,53 @@ function FormBody({
         }
 
         return (
-          <div className="flex flex-col gap-4">
-            {row.submission?.status === 'REOPENED' && (
-              <Alert>
-                <AlertTriangle className="size-4" />
-                <AlertTitle>Sent back for correction</AlertTitle>
-                <AlertDescription>
-                  {row.submission.reopen_note || 'An administrator asked you to review and resubmit this form.'}
-                </AlertDescription>
-              </Alert>
-            )}
-            {submit.error && (
-              <Alert variant="destructive">
-                <AlertTriangle className="size-4" />
-                <AlertDescription>{submit.error}</AlertDescription>
-              </Alert>
-            )}
+          <div className="flex flex-col gap-6">
+            <OnboardingStepIndicator rows={rows.data} active={formType} />
 
-            <RenderForm
-              formType={formType}
-              initialData={initialData}
-              readOnly={readOnly}
-              submitting={submit.pending}
-              onSubmit={handleSubmit}
-              isAdultCandidate={dateOfBirth ? isAdult(dateOfBirth) : true}
-            />
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-5 py-3.5">
+                <span className="text-sm font-medium">{ONBOARDING_FORM_LABEL[formType]}</span>
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
+                    readOnly && 'bg-success/15 text-success',
+                    reopened && 'bg-warning/15 text-warning-foreground dark:text-warning',
+                    !readOnly && !reopened && 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {readOnly ? 'Submitted' : reopened ? 'Sent back for correction' : 'Not submitted yet'}
+                </span>
+              </div>
+
+              {reopened && (
+                <Alert>
+                  <AlertTriangle className="size-4" />
+                  <AlertTitle>Sent back for correction</AlertTitle>
+                  <AlertDescription>
+                    {row.submission?.reopen_note || 'An administrator asked you to review and resubmit this form.'}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {submit.error && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="size-4" />
+                  <AlertDescription>{submit.error}</AlertDescription>
+                </Alert>
+              )}
+
+              <Card className="border-border/80 shadow-sm">
+                <CardContent className="p-5 sm:p-8">
+                  <RenderForm
+                    formType={formType}
+                    initialData={initialData}
+                    readOnly={readOnly}
+                    submitting={submit.pending}
+                    onSubmit={handleSubmit}
+                    isAdultCandidate={dateOfBirth ? isAdult(dateOfBirth) : true}
+                  />
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )
       })()}
