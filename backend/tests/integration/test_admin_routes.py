@@ -55,14 +55,21 @@ def client():
         ("delete", f"/api/v1/applications/{NIL}"),
         ("post", f"/api/v1/applications/{NIL}/reinstate"),
         ("get", f"/api/v1/applications/{NIL}/admin"),
-        # documents
-        ("get", f"/api/v1/bootcamps/{NIL}/documents"),
-        ("get", f"/api/v1/applications/{NIL}/documents"),
-        ("post", f"/api/v1/applications/{NIL}/documents"),
-        ("delete", f"/api/v1/documents/{NIL}"),
-        ("get", f"/api/v1/documents/{NIL}/link"),
-        ("get", f"/api/v1/admin/documents/{NIL}/link"),
-        ("post", f"/api/v1/documents/{NIL}/review"),
+        # onboarding: forms
+        ("get", f"/api/v1/applications/{NIL}/onboarding/forms"),
+        ("get", f"/api/v1/applications/{NIL}/onboarding/progress"),
+        ("post", f"/api/v1/applications/{NIL}/onboarding/forms/BACKGROUND_VERIFICATION"),
+        ("get", f"/api/v1/admin/applications/{NIL}/onboarding/forms"),
+        ("post", f"/api/v1/onboarding/forms/{NIL}/reopen"),
+        # onboarding: documents hub
+        ("get", f"/api/v1/bootcamps/{NIL}/onboarding/candidates"),
+        ("get", f"/api/v1/applications/{NIL}/onboarding/documents"),
+        ("post", f"/api/v1/applications/{NIL}/onboarding/documents"),
+        ("get", f"/api/v1/admin/applications/{NIL}/onboarding/documents"),
+        ("delete", f"/api/v1/onboarding/documents/{NIL}"),
+        ("get", f"/api/v1/onboarding/documents/{NIL}/link"),
+        ("get", f"/api/v1/admin/onboarding/documents/{NIL}/link"),
+        ("post", f"/api/v1/onboarding/documents/{NIL}/review"),
         # self-service
         ("get", "/api/v1/auth/me/detail"),
         ("patch", "/api/v1/auth/me"),
@@ -125,20 +132,20 @@ def test_self_update_ignores_a_role_in_the_body(client):
     assert response.status_code == 401
 
 
-def test_document_review_body_is_validated(client):
+def test_onboarding_document_review_body_is_validated(client):
     response = client.post(
-        f"/api/v1/documents/{NIL}/review",
+        f"/api/v1/onboarding/documents/{NIL}/review",
         headers={"Authorization": "Bearer nonsense"},
         json={"status": "NOT_A_STATUS"},
     )
     assert response.status_code in (401, 422)
 
 
-def test_document_upload_requires_multipart(client):
+def test_onboarding_document_upload_requires_multipart(client):
     """A JSON body must not be accepted where a file is expected."""
     response = client.post(
-        f"/api/v1/applications/{NIL}/documents",
+        f"/api/v1/applications/{NIL}/onboarding/documents",
         headers={"Authorization": "Bearer nonsense"},
-        json={"doc_type": "CNIC_FRONT"},
+        json={"doc_type": "CV"},
     )
     assert response.status_code in (401, 422)
