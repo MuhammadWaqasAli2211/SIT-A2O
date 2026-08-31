@@ -1,7 +1,7 @@
 """Applications: submission, listing, and stage transitions."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
@@ -223,6 +223,19 @@ def get_admin_detail(
         date_of_birth=candidate.date_of_birth if candidate else None,
         interview_count=interviews or 0,
     )
+
+
+def get_date_of_birth(db: Session, application: Application) -> date:
+    """The applicant's DOB, for the age-conditional onboarding rules.
+
+    Registration requires it, so a missing row here means the data is
+    corrupt, not merely absent — raised rather than returned as None so a
+    caller cannot silently treat a data problem as "treat them as a minor".
+    """
+    candidate = db.get(CandidateProfile, application.profile_id)
+    if candidate is None or candidate.date_of_birth is None:
+        raise ConflictError("This candidate has no date of birth on file.")
+    return candidate.date_of_birth
 
 
 def my_applications(db: Session, applicant: Profile) -> list[Application]:
