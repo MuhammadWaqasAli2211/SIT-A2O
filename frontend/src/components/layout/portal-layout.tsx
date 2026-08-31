@@ -47,7 +47,7 @@ import { useNotifications } from '@/features/notifications/use-notifications'
 import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { relativeTime } from '@/lib/format'
-import { LOCKED_HINT, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
+import { LOCKED_HINT_BY_REQUIRES, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
 import { UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -393,13 +393,19 @@ const ROW_BASE =
  * in a new tab, all of which promise something the row cannot deliver.
  */
 function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }) {
-  const { hasRegistered, loading } = useApplication()
+  const { hasRegistered, hasClearedPhysicalInterview, loading } = useApplication()
 
-  const gated = item.requires === 'application'
+  const unlocked =
+    item.requires === 'application'
+      ? hasRegistered
+      : item.requires === 'onboarding'
+        ? hasClearedPhysicalInterview
+        : true
 
   // Locked while loading too. Flashing a row unlocked and then shutting it
   // reads as a bug; the reverse is just a row settling.
-  if (gated && !hasRegistered) {
+  if (item.requires && !unlocked) {
+    const hint = LOCKED_HINT_BY_REQUIRES[item.requires]
     return (
       <Tooltip>
         <TooltipTrigger
@@ -425,10 +431,10 @@ function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }
               )}
             </>
           )}
-          <span className="sr-only">{LOCKED_HINT}</span>
+          <span className="sr-only">{hint}</span>
         </TooltipTrigger>
         <TooltipContent side="right">
-          {collapsed ? `${item.label} — ${LOCKED_HINT}` : LOCKED_HINT}
+          {collapsed ? `${item.label} — ${hint}` : hint}
         </TooltipContent>
       </Tooltip>
     )
