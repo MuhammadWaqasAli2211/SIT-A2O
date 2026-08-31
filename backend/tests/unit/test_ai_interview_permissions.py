@@ -183,6 +183,7 @@ def test_candidate_score_cannot_carry_evidence():
         "deadline_at",
         "can_explain",
         "explanation_sent",
+        "passed",
     }
     for forbidden in ("recording_url", "proctor_snapshots", "questions", "transcript", "audit"):
         assert forbidden not in dumped
