@@ -84,19 +84,51 @@ class EmailStatus(StrEnum):
     FAILED = "FAILED"
 
 
-class DocumentType(StrEnum):
-    CNIC_FRONT = "CNIC_FRONT"
-    CNIC_BACK = "CNIC_BACK"
-    PHOTO = "PHOTO"
-    QUALIFICATION = "QUALIFICATION"
-    BANK_LETTER = "BANK_LETTER"
-    OTHER = "OTHER"
-
-
 class DocumentStatus(StrEnum):
+    """Shared review states — used by the Documents Hub
+    (onboarding_documents). The old pre-onboarding checklist that minted
+    this alongside DocumentType has been retired; DocumentType went with it,
+    this did not."""
+
     PENDING = "PENDING"
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+
+
+class OnboardingFormType(StrEnum):
+    """The four items in the Onboarding Form sub-section, in the fixed order
+    a candidate must complete them."""
+
+    BACKGROUND_VERIFICATION = "BACKGROUND_VERIFICATION"
+    EMPLOYMENT_APPLICATION = "EMPLOYMENT_APPLICATION"
+    HALF_NAMA = "HALF_NAMA"
+    BANK_PAYMENT_DETAILS = "BANK_PAYMENT_DETAILS"
+
+
+class OnboardingFormStatus(StrEnum):
+    """SUBMITTED is the resting state. REOPENED is an admin sending one form
+    back for correction — it re-locks everything after it in the sequence
+    until the candidate resubmits."""
+
+    SUBMITTED = "SUBMITTED"
+    REOPENED = "REOPENED"
+
+
+class OnboardingDocumentType(StrEnum):
+    """The Documents Hub set. PERSONAL_ID_CNIC/BFORM and BANK_PROOF/
+    EASYPAISA_PROOF are mutually exclusive pairs chosen by the candidate's
+    age — only one of each pair is ever the *required* one, but both exist
+    as distinct types so a row unambiguously says which was collected."""
+
+    PERSONAL_ID_CNIC = "PERSONAL_ID_CNIC"
+    PERSONAL_ID_BFORM = "PERSONAL_ID_BFORM"
+    FATHER_CNIC = "FATHER_CNIC"
+    MOTHER_CNIC = "MOTHER_CNIC"
+    CV = "CV"
+    EDUCATIONAL_CERT = "EDUCATIONAL_CERT"
+    EXPERIENCE_LETTER = "EXPERIENCE_LETTER"
+    BANK_PROOF = "BANK_PROOF"
+    EASYPAISA_PROOF = "EASYPAISA_PROOF"
 
 
 class InviteBatchStatus(StrEnum):
