@@ -21,7 +21,7 @@ import { useDraftAutosave } from "@/features/onboarding/use-draft-autosave"
 
 type Sect = "Sunni" | "Shia" | "Others"
 
-interface Draft {
+export interface BackgroundVerificationDraft {
   photo: string | null
   fullName: string
   cnic: string
@@ -63,7 +63,7 @@ interface Draft {
   otherSignature: string | null
 }
 
-const EMPTY_DRAFT: Draft = {
+const EMPTY_DRAFT: BackgroundVerificationDraft = {
   photo: null,
   fullName: "",
   cnic: "",
@@ -109,19 +109,35 @@ const DRAFT_KEY = "sit.draft.background-verification"
 
 /**
  * Digital twin of Saylani's "Background Verification Form" (SWIT-IHR-FAF-11).
- * One page, matching the source: no wizard, no steps. Admin preview only —
- * see the route this is mounted behind for the access gate.
+ * One page, matching the source: no wizard, no steps.
+ *
+ * Three modes, driven entirely by which props are passed: the admin preview
+ * route uses none of them (blank, editable, unsubmittable — the original
+ * behaviour, untouched); the candidate's first pass or a reopened correction
+ * passes `initialData/onSubmit` (editable, seeded, submittable); an
+ * already-submitted view passes `readOnly` too (nothing editable, PDF only).
  */
-export function BackgroundVerificationForm() {
-  const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
+export function BackgroundVerificationForm({
+  initialData,
+  readOnly = false,
+  onSubmit,
+  submitting = false,
+}: {
+  initialData?: Partial<BackgroundVerificationDraft>
+  readOnly?: boolean
+  onSubmit?: (draft: BackgroundVerificationDraft) => void
+  submitting?: boolean
+} = {}) {
+  const [draft, setDraft] = React.useState<BackgroundVerificationDraft>(() => ({ ...EMPTY_DRAFT, ...initialData }))
 
-  const { savedAt, clearDraft } = useDraftAutosave<Draft>({
+  const { savedAt, clearDraft } = useDraftAutosave<BackgroundVerificationDraft>({
     key: DRAFT_KEY,
     value: draft,
     onRestore: setDraft,
+    disabled: readOnly,
   })
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+  const set = <K extends keyof BackgroundVerificationDraft>(key: K, value: BackgroundVerificationDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }))
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,10 +153,22 @@ export function BackgroundVerificationForm() {
     clearDraft()
   }
 
+  const handleSubmit = () => {
+    onSubmit?.(draft)
+    clearDraft()
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <OnboardingToolbar savedAt={savedAt} onClear={handleClear} />
+      <OnboardingToolbar
+        savedAt={savedAt}
+        onClear={handleClear}
+        onSubmit={onSubmit && handleSubmit}
+        submitting={submitting}
+        readOnly={readOnly}
+      />
 
+      <fieldset disabled={readOnly} className="contents">
       <div className="print-a4-bg-verification mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:border-0">
         {/* ------------------------------------------------------- masthead -- */}
         <div className="flex items-center justify-between border-b-2 border-black px-3 py-1 text-[11px] text-neutral-600">
@@ -457,6 +485,7 @@ export function BackgroundVerificationForm() {
               ariaLabel="Applicant signature"
               value={draft.ackSignature}
               onChange={(v) => set("ackSignature", v)}
+              disabled={readOnly}
             />
           </FieldCell>
           <FieldRow en="Date" ur="تاریخ" htmlFor="ackDate" className="flex-1">
@@ -522,6 +551,7 @@ export function BackgroundVerificationForm() {
                 ariaLabel="Imam Masjid signature"
                 value={draft.imamSignature}
                 onChange={(v) => set("imamSignature", v)}
+                disabled={readOnly}
               />
             </FieldCell>
           </div>
@@ -574,6 +604,7 @@ export function BackgroundVerificationForm() {
                 ariaLabel="Other reference signature"
                 value={draft.otherSignature}
                 onChange={(v) => set("otherSignature", v)}
+                disabled={readOnly}
               />
             </FieldCell>
           </div>
@@ -586,6 +617,7 @@ export function BackgroundVerificationForm() {
           </span>
         </div>
       </div>
+      </fieldset>
     </div>
   )
 }
