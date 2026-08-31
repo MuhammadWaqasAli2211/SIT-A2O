@@ -37,14 +37,20 @@ from app.core.exceptions import (
     PermissionDeniedError,
 )
 from app.integrations import interviewer_ai
-from app.models.application import Application
+from app.models.application import Application, StageTransition
 from app.models.bootcamp import Bootcamp, BootcampAdmin, Program
-from app.models.enums import AiScope, EmailStatus, UserRole
+from app.models.enums import AiScope, ApplicationStage, ApplicationStatus, EmailStatus, UserRole
 from app.models.interview_invite import InterviewInvite, InterviewInviteBatch
 from app.models.notification import Notification
 from app.models.ops import EmailLog
 from app.models.user import Profile
-from app.services import audit_service, bootcamp_service, email_service, permission_service
+from app.services import (
+    audit_service,
+    bootcamp_service,
+    email_service,
+    notification_service,
+    permission_service,
+)
 
 # Field names their API might use for the headline score. Undocumented and
 # unobservable today (no completed interviews exist), so we look for any of
@@ -669,13 +675,7 @@ def candidate_score(db: Session, user: Profile) -> dict:
     empty = {"status": "not_invited", "score": None, "scale": 100, "completed_at": None}
 
     row = db.execute(
-        select(
-            InterviewInvite,
-            InterviewInviteBatch,
-            Application.id,
-            Application.bootcamp_id,
-            Application.candidate_code,
-        )
+        select(InterviewInvite, InterviewInviteBatch, Application)
         .join(InterviewInviteBatch, InterviewInvite.batch_id == InterviewInviteBatch.id)
         .join(Application, Application.id == InterviewInvite.application_id)
         .where(Application.profile_id == user.id)
@@ -684,7 +684,12 @@ def candidate_score(db: Session, user: Profile) -> dict:
     ).first()
     if row is None:
         return empty
-    invite, batch, application_id, bootcamp_id, candidate_code = row
+    invite, batch, application = row
+    application_id, bootcamp_id, candidate_code = (
+        application.id,
+        application.bootcamp_id,
+        application.candidate_code,
+    )
 
     # Everything from here carries the deadline, so the portal can count down
     # to it rather than show a bare date.
@@ -736,6 +741,15 @@ def candidate_score(db: Session, user: Profile) -> dict:
         # Reporting "in progress" is honest; inventing a 0 is not.
         return {**base, "status": "in_progress"}
 
+    # Not gated on `admin_notified_at` below: that flag only stops a second
+    # notification, and reusing it here would mean a candidate who is only
+    # notified once (by design) could never be caught by this if today's poll
+    # is not the first one to see them completed — e.g. an application that
+    # was already sitting completed before this stage-advance existed at all.
+    # `_mark_interviewed` is idempotent on its own (a no-op once the stage has
+    # actually moved), so it is safe to check on every poll.
+    _mark_interviewed(db, application)
+
     if invite.admin_notified_at is None:
         # Detected here rather than by a background job: this backend has no
         # scheduler and InterviewerAI sends no webhook, so "a candidate just
@@ -764,6 +778,62 @@ def candidate_score(db: Session, user: Profile) -> dict:
         "passed": score >= PASS_THRESHOLD,
         "completed_at": best.get("completed_at") or best.get("updated_at"),
     }
+
+
+def _mark_interviewed(db: Session, application: Application) -> None:
+    """Move a candidate off "scheduled" and onto "AI-Interviewed" the moment
+    their AI interview is detected as complete — decided 2026-08-31, after an
+    admin found a completed interview sitting under a stage that had not
+    moved and read it as a bug.
+
+    A fact about the interview having happened, not a selection decision:
+    this stage already meant "seen, decision pending" (as INTERVIEWED) before
+    the AI Interviewer existed (see ApplicationStage's own docstring — "clearing the
+    interview is what moves a candidate to PHYSICAL_INTERVIEW"). Advancing to
+    Physical Interview or Rejected stays an explicit admin action from the
+    Completed Interviews table; this only saves the one purely mechanical
+    step nobody was actually deciding.
+
+    Only fires from exactly INTERVIEW_SCHEDULED on an ACTIVE application, so
+    it can never regress a stage an admin already moved further, and it is
+    attributed to no actor — this is the system recording that the interview
+    happened, not a person's decision.
+    """
+    if application.status != ApplicationStatus.ACTIVE:
+        return
+    if application.stage != ApplicationStage.INTERVIEW_SCHEDULED:
+        return
+
+    from_stage = application.stage
+    to_stage = ApplicationStage.AI_INTERVIEWED
+    application.stage = to_stage
+
+    db.add(
+        StageTransition(
+            application_id=application.id,
+            from_stage=from_stage,
+            to_stage=to_stage,
+            actor_id=None,
+            reason="AI interview completed",
+        )
+    )
+    audit_service.record(
+        db,
+        actor=None,
+        action="application.advance_stage",
+        entity_type="application",
+        entity_id=application.id,
+        summary=f"{application.candidate_code}: {from_stage.value} to {to_stage.value} (automatic)",
+        metadata={"from": from_stage.value, "to": to_stage.value, "reason": "AI interview completed"},
+    )
+    notification_service.notify_stage_outcome(
+        db,
+        profile_id=application.profile_id,
+        application_id=application.id,
+        candidate_code=application.candidate_code,
+        from_stage=from_stage,
+        to_stage=to_stage,
+    )
 
 
 def _notify_admins_of_completion(
