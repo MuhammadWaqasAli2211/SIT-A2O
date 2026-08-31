@@ -47,7 +47,8 @@ import {
   NoBootcampSelected,
 } from '@/features/admin/components'
 import { useAiPermissions } from '@/features/ai-interview/use-permissions'
-import { ReportView } from '@/features/ai-interview/report-view'
+import { CompletedInterviewsPanel } from '@/features/ai-interview/completed-interviews'
+import { EvidenceDialog } from '@/features/ai-interview/report-view'
 import {
   candidateEmail,
   candidateName,
@@ -90,12 +91,16 @@ export default function AdminAiInterviewsPage() {
         <Tabs defaultValue="results">
           <TabsList>
             <TabsTrigger value="results">Results</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
             <TabsTrigger value="reinterviews">Reinterview requests</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="results">
             <ResultsTab bootcampId={selectedId} />
+          </TabsContent>
+          <TabsContent value="completed">
+            <CompletedInterviewsPanel bootcampId={selectedId} />
           </TabsContent>
           <TabsContent value="reinterviews">
             <ReinterviewsTab bootcampId={selectedId} />
@@ -160,7 +165,7 @@ function ResultsTab({ bootcampId }: { bootcampId: string }) {
       <EvidenceDialog
         record={open}
         onClose={() => setOpen(null)}
-        onDeleted={() => {
+        onChanged={() => {
           setOpen(null)
           refresh()
         }}
@@ -202,46 +207,6 @@ function InterviewRow({ record, onOpen }: { record: ExternalRecord; onOpen: () =
     </Card>
   )
 }
-
-/* ------------------------------------------------------------ evidence -- */
-
-function EvidenceDialog({
-  record,
-  onClose,
-  onDeleted,
-}: {
-  record: ExternalRecord | null
-  onClose: () => void
-  onDeleted: () => void
-}) {
-  const id = record ? recordId(record) : null
-
-  return (
-    <Dialog open={record !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{record ? candidateName(record) : 'Interview'}</DialogTitle>
-          <DialogDescription>
-            Score, per-question breakdown, and the proctoring evidence behind it.
-          </DialogDescription>
-        </DialogHeader>
-
-        {record !== null && id !== null && (
-          <ReportView interviewId={id} record={record} onDeleted={onDeleted} />
-        )}
-        {record !== null && id === null && (
-          <Alert variant="destructive">
-            <AlertTriangle className="size-4" />
-            <AlertDescription>
-              This record arrived without an id, so its report cannot be fetched.
-            </AlertDescription>
-          </Alert>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 
 /* -------------------------------------------------------- reinterviews -- */
 
