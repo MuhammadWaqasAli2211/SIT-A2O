@@ -349,6 +349,9 @@ export interface CandidateScore {
   can_explain: boolean
   /** Whether they have already written to the admins about missing it. */
   explanation_sent: boolean
+  /** None until completed. score >= AI_PASS_THRESHOLD (see records.ts) — a
+   * fact about the number, not an automated verdict. */
+  passed: boolean | null
 }
 
 /** One record from the external service, shape unverified. */
@@ -369,6 +372,18 @@ export interface AiAnalytics {
   interviews_completed: number | null
   average_score: number | null
   distribution: ScoreBand[]
+}
+
+export interface CompletedInterviewStats {
+  total: number
+  completed_today: number
+  completed_this_week: number
+  average_score: number | null
+}
+
+export interface CompletedInterviewsPage {
+  items: ExternalRecord[]
+  stats: CompletedInterviewStats
 }
 
 /* -------------------------------------------------- AI write permissions --
