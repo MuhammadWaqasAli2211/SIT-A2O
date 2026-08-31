@@ -86,6 +86,47 @@ export function RequiresApplication() {
   return <Outlet />
 }
 
+/**
+ * Requires a submitted application that has cleared the Physical Interview
+ * stage — the gate behind Student's Folder.
+ *
+ * Same reasoning as RequiresApplication: the locked sidebar row is not
+ * enforcement on its own, since the URL is still directly reachable.
+ */
+export function RequiresOnboardingUnlocked() {
+  const { hasClearedPhysicalInterview, initialLoading } = useApplication()
+
+  if (initialLoading) {
+    return (
+      <>
+        <PageHeader title="Loading" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </>
+    )
+  }
+
+  if (!hasClearedPhysicalInterview) {
+    return (
+      <>
+        <PageHeader title="Not available yet" />
+        <EmptyState
+          icon={ClipboardPen}
+          title="Available once your Physical Interview is cleared"
+          description="Student's Folder collects your onboarding paperwork. It unlocks once your application moves past the Physical Interview stage."
+          action={
+            <Button render={<Link to="/dashboard" />}>
+              Back to overview
+              <ArrowRight className="size-4" />
+            </Button>
+          }
+        />
+      </>
+    )
+  }
+
+  return <Outlet />
+}
+
 /** For /login and /signup: a signed-in user should not see them. */
 export function GuestRoute() {
   const { profile, isLoading } = useAuth()
