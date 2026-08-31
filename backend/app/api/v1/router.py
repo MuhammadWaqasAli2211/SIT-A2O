@@ -6,12 +6,12 @@ from app.api.v1.routes import (
     audit,
     auth,
     bootcamps,
-    documents,
     emails,
     health,
     interview_invites,
     interviews,
     notifications,
+    onboarding,
     permissions,
     profile,
     programs,
@@ -28,7 +28,7 @@ api_router.include_router(interviews.router)
 api_router.include_router(interview_invites.router)
 api_router.include_router(emails.router)
 api_router.include_router(users.router)
-api_router.include_router(documents.router)
+api_router.include_router(onboarding.router)
 api_router.include_router(audit.router)
 api_router.include_router(profile.router)
 api_router.include_router(notifications.router)
