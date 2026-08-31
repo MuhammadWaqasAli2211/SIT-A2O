@@ -12,13 +12,17 @@ import { api } from '@/lib/api-client'
 import type {
   ApplicationDetail,
   CandidateScore,
-  DocumentLink,
-  DocumentRecord,
-  DocumentType,
   InterviewRow,
+  OnboardingDocumentLink,
+  OnboardingDocumentRecord,
+  OnboardingDocumentType,
+  OnboardingFormRow,
+  OnboardingFormSubmission,
+  OnboardingFormType,
+  OnboardingProgress,
   Program,
   PublicBootcamp,
-  RequiredDocument,
+  RequiredOnboardingDocument,
   UserDetail,
 } from '@/lib/types'
 
@@ -71,30 +75,43 @@ export const candidateApi = {
     await api.post('/me/ai-interview/explanation', { reason })
   },
 
-  /* ----------------------------------------------------------- documents -- */
+  /* ----------------------------------------------- onboarding: forms hub -- */
 
-  checklist: (applicationId: string) =>
-    get<RequiredDocument[]>(`/applications/${applicationId}/documents`),
+  onboardingForms: (applicationId: string) =>
+    get<OnboardingFormRow[]>(`/applications/${applicationId}/onboarding/forms`),
 
-  async upload(applicationId: string, docType: DocumentType, file: File) {
+  onboardingProgress: (applicationId: string) =>
+    get<OnboardingProgress>(`/applications/${applicationId}/onboarding/progress`),
+
+  async submitOnboardingForm(applicationId: string, formType: OnboardingFormType, submitted_data: unknown) {
+    const { data } = await api.post<OnboardingFormSubmission>(
+      `/applications/${applicationId}/onboarding/forms/${formType}`,
+      { submitted_data },
+    )
+    return data
+  },
+
+  /* ------------------------------------------- onboarding: documents hub -- */
+
+  onboardingDocuments: (applicationId: string) =>
+    get<RequiredOnboardingDocument[]>(`/applications/${applicationId}/onboarding/documents`),
+
+  async uploadOnboardingDocument(applicationId: string, docType: OnboardingDocumentType, file: File) {
     const form = new FormData()
     form.append('doc_type', docType)
     form.append('file', file)
-
-    // Content-Type is deliberately unset: the browser must add the multipart
-    // boundary itself, and naming the header here would overwrite it.
-    const { data } = await api.post<DocumentRecord>(
-      `/applications/${applicationId}/documents`,
+    const { data } = await api.post<OnboardingDocumentRecord>(
+      `/applications/${applicationId}/onboarding/documents`,
       form,
       { headers: { 'Content-Type': undefined } },
     )
     return data
   },
 
-  deleteDocument: (id: string) => api.delete(`/documents/${id}`).then(() => undefined),
+  deleteOnboardingDocument: (id: string) =>
+    api.delete(`/onboarding/documents/${id}`).then(() => undefined),
 
-  /** Short-lived; fetch one per view rather than storing it. */
-  documentLink: (id: string) => get<DocumentLink>(`/documents/${id}/link`),
+  onboardingDocumentLink: (id: string) => get<OnboardingDocumentLink>(`/onboarding/documents/${id}/link`),
 
   /* ------------------------------------------------------------- profile -- */
 
