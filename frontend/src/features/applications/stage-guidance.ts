@@ -50,7 +50,7 @@ export const STAGE_GUIDANCE: Record<ApplicationStage, StageGuidance> = {
     action: { label: 'Open interview details', to: '/dashboard/interview' },
   },
 
-  INTERVIEWED: {
+  'AI-INTERVIEWED': {
     headline: 'Interview complete — awaiting the result',
     body:
       'Your interview has been recorded and is being reviewed alongside the rest of your batch. Everyone is told at the same time. Clear this and the next step is a physical interview at the campus.',

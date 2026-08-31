@@ -35,7 +35,7 @@ def _is_duplicate_application(exc: IntegrityError) -> bool:
 # The two stored stages that render as the single "Interview" node.
 _INTERVIEW_STAGES = (
     ApplicationStage.INTERVIEW_SCHEDULED,
-    ApplicationStage.INTERVIEWED,
+    ApplicationStage.AI_INTERVIEWED,
 )
 
 

@@ -80,7 +80,7 @@ export const HOME_BY_ROLE: Record<UserRole, string> = {
 export const ApplicationStage = {
   APPLIED: 'APPLIED',
   INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
-  INTERVIEWED: 'INTERVIEWED',
+  'AI-INTERVIEWED': 'AI-INTERVIEWED',
   PHYSICAL_INTERVIEW: 'PHYSICAL_INTERVIEW',
   FORM: 'FORM',
   ONBOARDED: 'ONBOARDED',
@@ -91,7 +91,7 @@ export type ApplicationStage = (typeof ApplicationStage)[keyof typeof Applicatio
 export const STAGE_LABEL: Record<ApplicationStage, string> = {
   APPLIED: 'Applied',
   INTERVIEW_SCHEDULED: 'Interview scheduled',
-  INTERVIEWED: 'Interviewed',
+  'AI-INTERVIEWED': 'AI Interviewed',
   PHYSICAL_INTERVIEW: 'Physical interview',
   FORM: 'Form',
   ONBOARDED: 'Onboarded',

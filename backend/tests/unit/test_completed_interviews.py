@@ -13,7 +13,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.core.exceptions import NotFoundError
-from app.models.enums import UserRole
+from app.models.application import StageTransition
+from app.models.enums import ApplicationStage, ApplicationStatus, UserRole
+from app.models.notification import Notification
+from app.models.ops import AuditLog
 from app.models.user import Profile
 from app.services.ai_interview_service import _completed_at, _completed_stats
 
@@ -212,3 +215,102 @@ def test_falls_back_to_super_admins_when_the_bootcamp_has_none_assigned():
 
     assert len(session.added) == 1
     assert session.added[0].profile_id == super_admin
+
+
+# ---------------------------------------------- auto-advance to AI_INTERVIEWED --
+
+
+class RecordingAddSession:
+    """A session fake that only needs to record `.add()` calls — everything
+    `_mark_interviewed` touches (StageTransition, AuditLog via
+    audit_service.record, Notification via notify_stage_outcome) goes through
+    `db.add`, none of it through `scalars` or a real query."""
+
+    def __init__(self):
+        self.added = []
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    def flush(self):
+        pass
+
+
+class FakeApplication:
+    """Duck-types the handful of fields `_mark_interviewed` reads and writes.
+    Not the real ORM model, so this stays a unit test with no database."""
+
+    def __init__(self, *, stage, status):
+        self.id = uuid.uuid4()
+        self.profile_id = uuid.uuid4()
+        self.candidate_code = "B08-099"
+        self.stage = stage
+        self.status = status
+
+
+def test_mark_interviewed_advances_from_interview_scheduled():
+    from app.services.ai_interview_service import _mark_interviewed
+
+    session = RecordingAddSession()
+    application = FakeApplication(
+        stage=ApplicationStage.INTERVIEW_SCHEDULED, status=ApplicationStatus.ACTIVE
+    )
+
+    _mark_interviewed(session, application)
+
+    assert application.stage == ApplicationStage.AI_INTERVIEWED
+
+    transitions = [o for o in session.added if isinstance(o, StageTransition)]
+    assert len(transitions) == 1
+    assert transitions[0].from_stage == ApplicationStage.INTERVIEW_SCHEDULED
+    assert transitions[0].to_stage == ApplicationStage.AI_INTERVIEWED
+    # Attributed to no one — this is the system recording a fact, not a
+    # person's decision, unlike an admin's own advance_stage() call.
+    assert transitions[0].actor_id is None
+
+    audit_rows = [o for o in session.added if isinstance(o, AuditLog)]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].actor_id is None
+    assert audit_rows[0].entity_id == application.id
+
+    notifications = [o for o in session.added if isinstance(o, Notification)]
+    assert len(notifications) == 1
+    assert notifications[0].profile_id == application.profile_id
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [
+        ApplicationStage.APPLIED,
+        ApplicationStage.AI_INTERVIEWED,
+        ApplicationStage.PHYSICAL_INTERVIEW,
+        ApplicationStage.FORM,
+        ApplicationStage.ONBOARDED,
+        ApplicationStage.REJECTED,
+    ],
+)
+def test_mark_interviewed_is_a_no_op_from_any_other_stage(stage):
+    """Only fires from exactly INTERVIEW_SCHEDULED — never regresses a stage
+    an admin already moved further, and never touches a rejected pipeline."""
+    from app.services.ai_interview_service import _mark_interviewed
+
+    session = RecordingAddSession()
+    application = FakeApplication(stage=stage, status=ApplicationStatus.ACTIVE)
+
+    _mark_interviewed(session, application)
+
+    assert application.stage == stage
+    assert session.added == []
+
+
+@pytest.mark.parametrize("status", [ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN])
+def test_mark_interviewed_is_a_no_op_on_a_closed_application(status):
+    from app.services.ai_interview_service import _mark_interviewed
+
+    session = RecordingAddSession()
+    application = FakeApplication(stage=ApplicationStage.INTERVIEW_SCHEDULED, status=status)
+
+    _mark_interviewed(session, application)
+
+    assert application.stage == ApplicationStage.INTERVIEW_SCHEDULED
+    assert session.added == []

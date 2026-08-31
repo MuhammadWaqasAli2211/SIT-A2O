@@ -21,7 +21,7 @@ from app.models.user import Profile
 _STAGE_LABEL: dict[ApplicationStage, str] = {
     ApplicationStage.APPLIED: "Application",
     ApplicationStage.INTERVIEW_SCHEDULED: "Interview scheduling",
-    ApplicationStage.INTERVIEWED: "Interview",
+    ApplicationStage.AI_INTERVIEWED: "AI interview",
     ApplicationStage.PHYSICAL_INTERVIEW: "Physical interview",
     ApplicationStage.FORM: "Onboarding form",
     ApplicationStage.ONBOARDED: "Onboarding",

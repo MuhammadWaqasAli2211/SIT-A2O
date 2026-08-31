@@ -1,0 +1,11 @@
+-- Renames the INTERVIEWED application_stage value to AI-INTERVIEWED.
+--
+-- A rename, not a new value: every application already sitting at
+-- INTERVIEWED reads as AI-INTERVIEWED immediately, with no data migration —
+-- that is what RENAME VALUE is for, unlike DROP/ADD which would orphan the
+-- existing rows.
+--
+-- The Python side pairs this with a member name that stays a legal
+-- identifier (AI_INTERVIEWED) bound to this exact string value via
+-- values_callable — see app/models/application.py's _STAGE_ENUM.
+alter type public.application_stage rename value 'INTERVIEWED' to 'AI-INTERVIEWED';

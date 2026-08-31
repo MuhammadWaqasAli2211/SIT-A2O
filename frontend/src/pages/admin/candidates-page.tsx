@@ -43,7 +43,9 @@ import {
   useConfirm,
 } from '@/features/admin/components'
 import { CandidateSheet } from '@/pages/admin/candidate-sheet'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { LiveIndicator } from '@/features/live/live-indicator'
+import { useLiveResource } from '@/features/live/use-live-resource'
+import { useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
@@ -92,7 +94,12 @@ export default function AdminCandidatesPage() {
   // Debounced so typing a name does not fire a request per keystroke.
   const debouncedSearch = useDebounced(search, 300)
 
-  const { data, error, initialLoading, refetch } = useAsync(
+  // Live rather than a one-shot fetch: a stage change made anywhere else (the
+  // candidate sheet here, or the AI interview report screen) has no shared
+  // cache to invalidate, so this screen needs to notice on its own. Backs off
+  // on its own when the tab is hidden, same contract as the AI Interviews
+  // screen.
+  const { data, error, initialLoading, lastUpdated, live, refresh } = useLiveResource(
     () =>
       selectedId
         ? applicationApi.listForBootcamp(selectedId, {
@@ -119,7 +126,7 @@ export default function AdminCandidatesPage() {
     if (done) {
       toast.success(`Deleted ${done.candidate_code}`)
       remove.close()
-      refetch()
+      refresh()
     }
   }
 
@@ -159,6 +166,8 @@ export default function AdminCandidatesPage() {
         <NoBootcampSelected icon={Users} />
       ) : (
         <div className="flex flex-col gap-4">
+          <LiveIndicator lastUpdated={lastUpdated} live={live} />
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -188,7 +197,7 @@ export default function AdminCandidatesPage() {
             </Select>
           </div>
 
-          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
+          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
             {rows.length === 0 ? (
               <EmptyState
                 icon={Users}
@@ -277,7 +286,7 @@ export default function AdminCandidatesPage() {
       <CandidateSheet
         applicationId={openId}
         onClose={() => setOpenId(null)}
-        onChanged={refetch}
+        onChanged={refresh}
       />
 
       <ConfirmDialog

@@ -12,6 +12,20 @@ from app.models.bootcamp import Bootcamp, Program
 from app.models.enums import ApplicationStage, ApplicationStatus
 from app.models.user import Profile
 
+# SQLAlchemy's Enum binds by member *name* against the native Postgres type
+# by default, not member *value* — harmless while every member's name equals
+# its value, but AI_INTERVIEWED's stored label ("AI-INTERVIEWED") is not a
+# legal Python identifier, so name and value diverge for that one member.
+# values_callable makes the binding explicit rather than relying on the
+# default ever holding.
+_STAGE_ENUM = Enum(
+    ApplicationStage,
+    name="application_stage",
+    native_enum=True,
+    create_type=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+)
+
 
 class Application(Base, TimestampMixin):
     __tablename__ = "applications"
@@ -34,7 +48,7 @@ class Application(Base, TimestampMixin):
     candidate_code: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
 
     stage: Mapped[ApplicationStage] = mapped_column(
-        Enum(ApplicationStage, name="application_stage", native_enum=True, create_type=False),
+        _STAGE_ENUM,
         nullable=False,
         server_default=text("'APPLIED'::application_stage"),
     )
@@ -109,13 +123,8 @@ class StageTransition(Base):
     application_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("applications.id", ondelete="CASCADE"), nullable=False
     )
-    from_stage: Mapped[ApplicationStage | None] = mapped_column(
-        Enum(ApplicationStage, name="application_stage", native_enum=True, create_type=False)
-    )
-    to_stage: Mapped[ApplicationStage] = mapped_column(
-        Enum(ApplicationStage, name="application_stage", native_enum=True, create_type=False),
-        nullable=False,
-    )
+    from_stage: Mapped[ApplicationStage | None] = mapped_column(_STAGE_ENUM)
+    to_stage: Mapped[ApplicationStage] = mapped_column(_STAGE_ENUM, nullable=False)
     actor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
