@@ -19,9 +19,6 @@ import type {
   BootcampDetail,
   BootcampStats,
   CompletedInterviewsPage,
-  DocumentLink,
-  DocumentRecord,
-  DocumentRow,
   DocumentStatus,
   EmailLogEntry,
   EmailSendResult,
@@ -36,12 +33,18 @@ import type {
   InviteBatchDetail,
   InviteCategory,
   KeyScopes,
+  OnboardingCandidateSummary,
+  OnboardingDocumentLink,
+  OnboardingDocumentRecord,
+  OnboardingFormRow,
+  OnboardingFormSubmission,
   Page,
   PhaseType,
   PlatformStats,
   Profile,
   Program,
   ProgramAdmin,
+  RequiredOnboardingDocument,
   UserDetail,
   UserRole,
   UserRow,
@@ -375,25 +378,41 @@ export const platformApi = {
   audit: (params?: Params) => get<Page<AuditEntry>>('/audit', params),
 }
 
-/* ------------------------------------------------------------- documents -- */
+/* ------------------------------------------------------------ onboarding --
+ * Student's Folder review: the bootcamp-level candidate-folder list, one
+ * candidate's 4 forms + document checklist, reopening a form, and
+ * per-document approve/reject.
+ */
 
-export const documentApi = {
-  /** Admin: every upload in an intake, for review. */
-  listForBootcamp: (
+export const onboardingApi = {
+  listCandidates: (
     bootcampId: string,
-    params?: { status?: DocumentStatus; limit?: number; offset?: number },
-  ) => get<Page<DocumentRow>>(`/bootcamps/${bootcampId}/documents`, params),
+    params?: { search?: string; limit?: number; offset?: number },
+  ) => get<Page<OnboardingCandidateSummary>>(`/bootcamps/${bootcampId}/onboarding/candidates`, params),
 
-  async review(id: string, status: DocumentStatus, review_note?: string) {
-    const { data } = await api.post<DocumentRecord>(`/documents/${id}/review`, {
+  forms: (applicationId: string) =>
+    get<OnboardingFormRow[]>(`/admin/applications/${applicationId}/onboarding/forms`),
+
+  async reopenForm(submissionId: string, note?: string) {
+    const { data } = await api.post<OnboardingFormSubmission>(
+      `/onboarding/forms/${submissionId}/reopen`,
+      { note },
+    )
+    return data
+  },
+
+  documents: (applicationId: string) =>
+    get<RequiredOnboardingDocument[]>(`/admin/applications/${applicationId}/onboarding/documents`),
+
+  documentLink: (id: string) => get<OnboardingDocumentLink>(`/admin/onboarding/documents/${id}/link`),
+
+  async reviewDocument(id: string, status: DocumentStatus, review_note?: string) {
+    const { data } = await api.post<OnboardingDocumentRecord>(`/onboarding/documents/${id}/review`, {
       status,
       review_note,
     })
     return data
   },
-
-  /** Signed URLs expire quickly — fetch one per view, never cache it. */
-  adminLink: (id: string) => get<DocumentLink>(`/admin/documents/${id}/link`),
 }
 
 /* ---------------------------------------------------- AI interview invites --
