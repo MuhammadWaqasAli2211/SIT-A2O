@@ -19,7 +19,16 @@ import {
   type MyApplicationState,
 } from '@/features/applications/use-my-application'
 import { useAuth } from '@/hooks/use-auth'
-import { UserRole } from '@/lib/types'
+import { ApplicationStage, UserRole } from '@/lib/types'
+
+// Cleared Physical Interview means the stage has moved to FORM or beyond —
+// not `is_selected`, which only records the interview verdict, not whether
+// the candidate has actually progressed past it (see ApplicationStage's own
+// doc comment on the pipeline order).
+const ONBOARDING_UNLOCKED_STAGES: ApplicationStage[] = [
+  ApplicationStage.FORM,
+  ApplicationStage.ONBOARDED,
+]
 
 export interface ApplicationContextValue extends MyApplicationState {
   /**
@@ -30,6 +39,8 @@ export interface ApplicationContextValue extends MyApplicationState {
    * user cannot walk through, which reads as a bug.
    */
   hasRegistered: boolean
+  /** Whether Student's Folder unlocks — see ONBOARDING_UNLOCKED_STAGES. */
+  hasClearedPhysicalInterview: boolean
 }
 
 const ApplicationContext = createContext<ApplicationContextValue | null>(null)
@@ -82,6 +93,10 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
         // navigation the candidate is already using.
         ...state,
         hasRegistered: !state.initialLoading && state.application !== null,
+        hasClearedPhysicalInterview:
+          !state.initialLoading &&
+          state.application !== null &&
+          ONBOARDING_UNLOCKED_STAGES.includes(state.application.stage),
       }}
     >
       {children}
