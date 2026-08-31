@@ -6,7 +6,7 @@
  *     Application -> Interview -> Physical Interview -> Form -> Onboarded
  *
  * The database stores more than five values, and the extra ones are not
- * clutter. `INTERVIEW_SCHEDULED` and `INTERVIEWED` are the two halves of the
+ * clutter. `INTERVIEW_SCHEDULED` and `AI-INTERVIEWED` are the two halves of the
  * batching workflow: an admin has to be able to ask who has a slot but has not
  * yet been seen. Both collapse into the single "Interview" node here, so the
  * candidate is told one clear thing while the admin keeps the detail.
@@ -32,7 +32,7 @@ import {
 export type ApplicationStage =
   | 'APPLIED'
   | 'INTERVIEW_SCHEDULED'
-  | 'INTERVIEWED'
+  | 'AI-INTERVIEWED'
   | 'PHYSICAL_INTERVIEW'
   | 'FORM'
   | 'ONBOARDED'
@@ -77,7 +77,7 @@ export const JOURNEY_STEPS: readonly JourneyStep[] = [
     label: 'Interview',
     blurb: 'You are given a slot, sit the interview, and wait for the result.',
     icon: Bot,
-    stages: ['INTERVIEW_SCHEDULED', 'INTERVIEWED'],
+    stages: ['INTERVIEW_SCHEDULED', 'AI-INTERVIEWED'],
   },
   {
     key: 'PHYSICAL_INTERVIEW',
@@ -128,7 +128,7 @@ export const STEP_INDEX: Record<ApplicationStage, number> = {
 export const STAGE_LABEL: Record<ApplicationStage, string> = {
   APPLIED: 'Applied',
   INTERVIEW_SCHEDULED: 'Interview scheduled',
-  INTERVIEWED: 'Interviewed',
+  'AI-INTERVIEWED': 'AI Interviewed',
   PHYSICAL_INTERVIEW: 'Physical interview',
   FORM: 'Form',
   ONBOARDED: 'Onboarded',
