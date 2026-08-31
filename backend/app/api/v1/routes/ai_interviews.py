@@ -14,6 +14,7 @@ from app.api.deps import AdminUser, CandidateUser, CurrentUser, DbSession
 from app.schemas.ai_interview import (
     AiAnalytics,
     CandidateScore,
+    CompletedInterviewsPage,
     DeadlineExplanation,
     ExternalRecords,
     ReinterviewDecision,
@@ -66,6 +67,18 @@ def list_bootcamp_ai_interviews(
         items=ai_interview_service.list_for_bootcamp(
             db, bootcamp_id, user, limit=limit, offset=offset
         )
+    )
+
+
+@router.get("/ai-interviews/completed", response_model=CompletedInterviewsPage)
+def list_completed_ai_interviews(
+    user: AdminUser, db: DbSession, bootcamp_id: uuid.UUID | None = None
+) -> CompletedInterviewsPage:
+    """Every completed AI interview visible to this admin, plus the summary
+    stats. An ADMIN must supply `bootcamp_id`; a SUPER_ADMIN may omit it for
+    the platform-wide view — the service raises for anyone else who omits it."""
+    return CompletedInterviewsPage.model_validate(
+        ai_interview_service.list_completed(db, user, bootcamp_id)
     )
 
 
