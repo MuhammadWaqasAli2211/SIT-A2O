@@ -102,7 +102,7 @@ const EMPTY_REFERENCE: ReferenceBlock = {
   email: "",
 }
 
-interface Draft {
+export interface EmploymentApplicationDraft {
   photo: string | null
   positionAppliedFor: string
   fullName: string
@@ -170,7 +170,7 @@ const ISLAMIC_LABELS = [
   { en: "Mufti Course", ur: "مفتی کورس / تخصص" },
 ] as const
 
-const EMPTY_DRAFT: Draft = {
+const EMPTY_DRAFT: EmploymentApplicationDraft = {
   photo: null,
   positionAppliedFor: "",
   fullName: "",
@@ -307,18 +307,30 @@ function EducationTable({
  * Digital twin of Saylani's "Employment Application Form"
  * (SWIT-IHR-FAF-03), 2 pages. Reuses the Background Verification Form's
  * primitives throughout — see form-primitives.tsx for what's shared.
- * Admin-only preview for now, no backend.
+ *
+ * Same three modes as BackgroundVerificationForm — see its doc comment.
  */
-export function EmploymentApplicationForm() {
-  const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
+export function EmploymentApplicationForm({
+  initialData,
+  readOnly = false,
+  onSubmit,
+  submitting = false,
+}: {
+  initialData?: Partial<EmploymentApplicationDraft>
+  readOnly?: boolean
+  onSubmit?: (draft: EmploymentApplicationDraft) => void
+  submitting?: boolean
+} = {}) {
+  const [draft, setDraft] = React.useState<EmploymentApplicationDraft>(() => ({ ...EMPTY_DRAFT, ...initialData }))
 
-  const { savedAt, clearDraft } = useDraftAutosave<Draft>({
+  const { savedAt, clearDraft } = useDraftAutosave<EmploymentApplicationDraft>({
     key: DRAFT_KEY,
     value: draft,
     onRestore: setDraft,
+    disabled: readOnly,
   })
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+  const set = <K extends keyof EmploymentApplicationDraft>(key: K, value: EmploymentApplicationDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }))
 
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,13 +346,25 @@ export function EmploymentApplicationForm() {
     clearDraft()
   }
 
+  const handleSubmit = () => {
+    onSubmit?.(draft)
+    clearDraft()
+  }
+
   const setReference = (which: "reference1" | "reference2", key: keyof ReferenceBlock, value: string) =>
     setDraft((prev) => ({ ...prev, [which]: { ...prev[which], [key]: value } }))
 
   return (
     <div className="flex flex-col gap-3">
-      <OnboardingToolbar savedAt={savedAt} onClear={handleClear} />
+      <OnboardingToolbar
+        savedAt={savedAt}
+        onClear={handleClear}
+        onSubmit={onSubmit && handleSubmit}
+        submitting={submitting}
+        readOnly={readOnly}
+      />
 
+      <fieldset disabled={readOnly} className="contents">
       {/* ============================================================ PAGE 1 == */}
       <div className="print-a4-employment mx-auto w-full max-w-6xl border-2 border-black bg-white font-serif text-black print:max-w-none print:break-after-page print:border-0">
         <div className="flex items-center justify-between border-b-2 border-black px-3 py-1 text-[11px] text-neutral-600">
@@ -1197,6 +1221,7 @@ export function EmploymentApplicationForm() {
               ariaLabel="Applicant signature"
               value={draft.ackSignature}
               onChange={(v) => set("ackSignature", v)}
+              disabled={readOnly}
             />
           </FieldCell>
           <FieldRow en="Date" ur="تاریخ" htmlFor="ackDate" className="flex-1">
@@ -1212,6 +1237,7 @@ export function EmploymentApplicationForm() {
 
         <div className="border-t-2 border-black py-1.5 text-center text-[10px] text-neutral-500">Page 2 of 2</div>
       </div>
+      </fieldset>
     </div>
   )
 }
