@@ -23,7 +23,8 @@ import {
   NoBootcampSelected,
 } from '@/features/admin/components'
 import { bootcampApi } from '@/features/admin/api'
-import { useAsync } from '@/hooks/use-async'
+import { LiveIndicator } from '@/features/live/live-indicator'
+import { useLiveResource } from '@/features/live/use-live-resource'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { EmptyState, PageHeader, StatCard } from '@/components/shared/portal-ui'
 import { STAGE_LABEL, type BootcampStats } from '@/lib/types'
@@ -44,7 +45,12 @@ function formatDateTime(iso: string) {
 export default function AdminDashboardPage() {
   const { selected, selectedId } = useBootcamp()
 
-  const { data, error, initialLoading, loading, refetch } = useAsync(
+  // Live rather than a one-shot fetch: an admin advancing a candidate from
+  // the AI interview report screen (or any other screen) has no shared cache
+  // to invalidate, so the dashboard needs to notice on its own. Backs off on
+  // its own when the tab is hidden, same contract as the AI Interviews
+  // screen.
+  const { data, error, initialLoading, lastUpdated, live, refresh } = useLiveResource(
     () => (selectedId ? bootcampApi.stats(selectedId) : Promise.resolve(undefined)),
     [selectedId],
   )
@@ -61,8 +67,8 @@ export default function AdminDashboardPage() {
         actions={
           <>
             <BootcampSwitcher />
-            <Button variant="outline" size="icon" onClick={refetch} aria-label="Refresh">
-              <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />
+            <Button variant="outline" size="icon" onClick={refresh} aria-label="Refresh">
+              <RefreshCw className="size-4" />
             </Button>
           </>
         }
@@ -71,14 +77,17 @@ export default function AdminDashboardPage() {
       {!selectedId ? (
         <NoBootcampSelected />
       ) : (
-        <AsyncSection
-          initialLoading={initialLoading}
-          error={error}
-          onRetry={refetch}
-          skeleton={<CardsSkeleton />}
-        >
-          {data && <DashboardBody stats={data} />}
-        </AsyncSection>
+        <>
+          <LiveIndicator lastUpdated={lastUpdated} live={live} className="mb-4" />
+          <AsyncSection
+            initialLoading={initialLoading}
+            error={error}
+            onRetry={refresh}
+            skeleton={<CardsSkeleton />}
+          >
+            {data && <DashboardBody stats={data} />}
+          </AsyncSection>
+        </>
       )}
     </>
   )
