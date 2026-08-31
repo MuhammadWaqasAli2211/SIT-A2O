@@ -2,6 +2,115 @@
 
 # Project Status
 
+## Where things stand — 2026-08-30 (closing Phase 3)
+
+Three gaps flagged when asked to "complete Phase 3" — all three approved and
+built, plus the pass/fail threshold you supplied (**50/100**).
+
+**1. A score no longer dead-ends on a screen.** The completed-interview
+report now carries "Advance to Physical Interview" / "Reject" buttons, right
+where the score is being read. They call the exact same endpoint the
+Candidates screen's own stage control already uses
+(`applicationApi.advanceStage` → `POST /applications/{id}/stage`) — no new
+backend action, no new permission model. Shown only when the record resolves
+to a real, still-ACTIVE application that hasn't already moved past this
+point; a manual/Instructor invite (no application behind it) gets no buttons
+at all. Verified live against a real ACTIVE application and rolled back:
+`INTERVIEW_SCHEDULED` → `PHYSICAL_INTERVIEW`, `is_selected` set `True`.
+
+**2. Admins are now notified when a candidate finishes.** The honest
+mechanism, stated plainly rather than glossed over: **this backend has no
+scheduler and InterviewerAI sends no webhook**, so "a candidate just
+finished" is only knowable when something asks their own status — which the
+candidate's own interview page already polls every 10s. Detection piggybacks
+on that existing poll (`candidate_score()`), guarded by a new
+`admin_notified_at` timestamp on `interview_invites` so a notification is
+created once, not on every subsequent poll. Falls back to active super
+admins if the bootcamp has no admin assigned — same fallback
+`submit_deadline_explanation` already uses. **The trade-off, named
+outright:** an admin is notified the next time that candidate's browser
+happens to poll after finishing, not the instant InterviewerAI marks it
+complete. A real webhook or a scheduled poll would remove the dependency on
+the candidate's tab being open; neither exists in this codebase today.
+
+The notification system itself widened from candidate-only to any
+authenticated role to carry this — every route was already scoped to
+`user.id` internally, so the change is additive, not a new exposure. The bell
+now renders for every signed-in role, not just candidates.
+
+**3. Pass/fail wording is live, deliberately not final.** `PASS_THRESHOLD =
+50.0` in `ai_interview_service.py`, mirrored as `AI_PASS_THRESHOLD` in
+`records.ts` (two runtimes, one constant, cross-referenced in both places so
+a future change is caught by grep). `CandidateScore.passed` is a fact about
+the number, not an automated verdict — nothing auto-rejects on it, which is
+why the candidate-facing copy says "below the pass mark" rather than
+"failed," and explicitly notes the admissions team makes the final call.
+
+**Verified:** 273 backend tests pass (7 new — the threshold constant, the
+notify-once-per-completion guard, the notify-every-assigned-admin fan-out),
+clean production build, 0 type errors, 0 lint errors. One real bug caught and
+fixed before it shipped: the new stage-advance buttons initially called
+`useMutation` after two conditional early returns, which breaks React's
+Rules of Hooks — moved the hook calls above every return.
+
+**One migration mistake caught in verification, not by anyone else:** the
+`admin_notified_at` column first landed on the wrong model
+(`InterviewInviteBatch`, batch-level) instead of `InterviewInvite`
+(per-candidate row) — text-matched on the wrong `deadline_at` comment nearby.
+Caught immediately by a live smoke test (`UndefinedColumn` on the *other*
+table), fixed before the migration mattered.
+
+---
+
+## Where things stand — 2026-08-29 (Completed Interviews)
+
+**A filterable, exportable roster of every finished AI interview**, built on
+top of the 2026-08-29 lifecycle/performance work. `list_completed()` in
+`ai_interview_service.py` costs exactly **one DB query and one external HTTP
+call** regardless of row count or whether the view is bootcamp-scoped or
+platform-wide — the same round-trip discipline as the dashboard fix, verified
+live: 1 query / 1 call / ~2s (external API latency, not ours) for the
+platform-wide read.
+
+**Status filtering happens on our side, not theirs.** Their `status=`
+query param is unverified — the same undocumented-API problem that already
+caused a real bug once (`"complete"` vs `"completed"`, see
+`interview_invite_service.py`). Trusting their filter risked silently
+returning nothing; fetching everything and filtering with the existing
+`is_completed()` tolerant-spelling check does not.
+
+**Structural call made without a prior question, flagged here:** the
+super-admin "platform-wide, filterable by bootcamp" requirement does not fit
+inside the existing `/admin/ai-interviews` screen — that page is locked to
+one bootcamp at a time via the shared `BootcampSwitcher`, with no "all
+bootcamps" mode. Every other cross-cutting concern in this app already splits
+the same way (`bootcamp_stats`/`platform_stats`, `/admin` vs
+`/super-admin/analytics`), so this got the same treatment: a new
+`/super-admin/ai-interviews` page, platform-wide by default, filterable down.
+It shares one component (`CompletedInterviewsPanel`) with the admin tab —
+nothing is duplicated between the two.
+
+**Two private helpers were promoted to shared utilities** rather than
+written a third time: `relativeTime()` ("2h ago") lived inside the
+notification bell, `downloadCsv()` lived inside the candidates page. Both now
+live in `lib/format.ts` / `lib/csv-export.ts`, and their original call sites
+were refactored to use the shared version — same pattern as promoting
+`Switch` out of the interview-invite dialog on 2026-08-29.
+
+**Search and the track/bootcamp filters are entirely client-side** over the
+single fetched batch — there is nothing to page through at current volumes,
+and re-filtering an in-memory array costs nothing worth a network round trip
+over. Export ships exactly what's currently filtered on screen, matching the
+existing candidates-page export's behaviour.
+
+**Verified:** 266 backend tests pass (13 new, covering the stat-card date
+math and the admin-without-bootcamp refusal), clean production build, 0 type
+errors, 0 lint errors. Confirmed live against real data: Muhammad Waqas Ali
+(B08-014, Data Science & AI, Bootcamp 8) and Vera (no application — a manual
+invite row) both resolve correctly with names, bootcamp and score intact.
+
+---
+
 ## Where things stand — 2026-08-29 (interview lifecycle, live status, performance)
 
 **The admin dashboard was taking 4.3 seconds. It now takes 0.9.** Profiled
