@@ -65,6 +65,7 @@ const SuperAdminAdminsPage = lazy(() => import('@/pages/super-admin/admins-page'
 const SuperAdminAnalyticsPage = lazy(() => import('@/pages/super-admin/analytics-page'))
 const SuperAdminProgramsPage = lazy(() => import('@/pages/super-admin/programs-page'))
 const SuperAdminPermissionsPage = lazy(() => import('@/pages/super-admin/permissions-page'))
+const SuperAdminAiInterviewsPage = lazy(() => import('@/pages/super-admin/ai-interviews-page'))
 
 // Attached to every top-level branch so a crash inside one section renders the
 // boundary rather than white-screening the whole app.
@@ -184,6 +185,10 @@ export const router = createBrowserRouter([
                       {
                         path: '/super-admin/permissions',
                         element: <SuperAdminPermissionsPage />,
+                      },
+                      {
+                        path: '/super-admin/ai-interviews',
+                        element: <SuperAdminAiInterviewsPage />,
                       },
                     ],
                   },
