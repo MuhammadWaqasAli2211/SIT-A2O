@@ -7,7 +7,13 @@ import HomePage from '@/pages/public/home-page'
 import NotFoundPage from '@/pages/not-found-page'
 import { AdminBootcampLayout } from '@/routes/admin-layout'
 import { RouteErrorBoundary } from '@/routes/error-boundary'
-import { GuestRoute, ProtectedRoute, RequiresApplication, RoleRoute } from '@/routes/guards'
+import {
+  GuestRoute,
+  ProtectedRoute,
+  RequiresApplication,
+  RequiresOnboardingUnlocked,
+  RoleRoute,
+} from '@/routes/guards'
 import { UserRole } from '@/lib/types'
 
 /**
@@ -38,7 +44,9 @@ const CandidateTrackPage = lazy(() => import('@/pages/candidate/track-page'))
 const CandidateRegisterPage = lazy(() => import('@/pages/candidate/register-page'))
 const CandidateApplicationPage = lazy(() => import('@/pages/candidate/application-page'))
 const CandidateInterviewPage = lazy(() => import('@/pages/candidate/interview-page'))
-const CandidateDocumentsPage = lazy(() => import('@/pages/candidate/documents-page'))
+const StudentFolderPage = lazy(() => import('@/pages/candidate/student-folder-page'))
+const OnboardingFormPage = lazy(() => import('@/pages/candidate/onboarding-form-page'))
+const DocumentsHubPage = lazy(() => import('@/pages/candidate/documents-hub-page'))
 
 // One account screen for every role, rather than a candidate-only profile page
 // that staff could reach from the topbar and get bounced out of.
@@ -49,8 +57,9 @@ const AdminCandidatesPage = lazy(() => import('@/pages/admin/candidates-page'))
 const AdminInterviewsPage = lazy(() => import('@/pages/admin/interviews-page'))
 const AdminPhasesPage = lazy(() => import('@/pages/admin/phases-page'))
 const AdminEmailsPage = lazy(() => import('@/pages/admin/emails-page'))
-const AdminDocumentsPage = lazy(() => import('@/pages/admin/documents-page'))
 const AdminAiInterviewsPage = lazy(() => import('@/pages/admin/ai-interviews-page'))
+const AdminOnboardingCandidatesPage = lazy(() => import('@/pages/admin/onboarding-candidates-page'))
+const AdminOnboardingCandidatePage = lazy(() => import('@/pages/admin/onboarding-candidate-page'))
 const AdminBackgroundVerificationPreviewPage = lazy(
   () => import('@/pages/admin/onboarding-preview/background-verification-page'),
 )
@@ -132,7 +141,18 @@ export const router = createBrowserRouter([
                 children: [
                   { path: '/dashboard/application', element: <CandidateApplicationPage /> },
                   { path: '/dashboard/interview', element: <CandidateInterviewPage /> },
-                  { path: '/dashboard/documents', element: <CandidateDocumentsPage /> },
+                ],
+              },
+
+              // Student's Folder: locked until Physical Interview clears — a
+              // stricter gate than RequiresApplication above, so its own guard
+              // rather than nested inside it.
+              {
+                element: <RequiresOnboardingUnlocked />,
+                children: [
+                  { path: '/dashboard/documents', element: <StudentFolderPage /> },
+                  { path: '/dashboard/documents/forms/:slug', element: <OnboardingFormPage /> },
+                  { path: '/dashboard/documents/hub', element: <DocumentsHubPage /> },
                 ],
               },
             ],
@@ -154,10 +174,15 @@ export const router = createBrowserRouter([
                   { path: '/admin/interviews', element: <AdminInterviewsPage /> },
                   { path: '/admin/phases', element: <AdminPhasesPage /> },
                   { path: '/admin/emails', element: <AdminEmailsPage /> },
-                  { path: '/admin/documents', element: <AdminDocumentsPage /> },
                   // Results from the external AI Interviewer, distinct from
                   // /admin/interviews, which schedules our own physical round.
                   { path: '/admin/ai-interviews', element: <AdminAiInterviewsPage /> },
+                  // Review of the 4 onboarding forms + Documents Hub uploads.
+                  { path: '/admin/onboarding', element: <AdminOnboardingCandidatesPage /> },
+                  {
+                    path: '/admin/onboarding/:applicationId',
+                    element: <AdminOnboardingCandidatePage />,
+                  },
                   // Onboarding forms, built ahead of the phase that uses them.
                   // Admin-only preview: no candidate route exists yet.
                   {
