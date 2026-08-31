@@ -185,7 +185,7 @@ def test_bank_fields_do_not_satisfy_a_minors_requirement():
 
 @pytest.mark.parametrize(
     "stage",
-    [ApplicationStage.APPLIED, ApplicationStage.INTERVIEW_SCHEDULED, ApplicationStage.INTERVIEWED,
+    [ApplicationStage.APPLIED, ApplicationStage.INTERVIEW_SCHEDULED, ApplicationStage.AI_INTERVIEWED,
      ApplicationStage.PHYSICAL_INTERVIEW, ApplicationStage.REJECTED],
 )
 def test_onboarding_is_locked_before_the_form_stage(stage):
