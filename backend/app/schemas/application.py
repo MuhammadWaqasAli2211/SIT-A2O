@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from app.core.age import is_adult
 from app.models.enums import ApplicationStage, ApplicationStatus
 from app.schemas.bootcamp import PhaseOut, ProgramOut
 
@@ -111,10 +112,7 @@ class ApplicationCreate(BaseModel):
         Derived rather than sent: a client-supplied answer could disagree with
         the date of birth beside it, and the date is the one we can check.
         """
-        today = date.today()
-        born = self.date_of_birth
-        age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-        return "CNIC" if age >= 18 else "B_FORM"
+        return "CNIC" if is_adult(self.date_of_birth) else "B_FORM"
 
 
 class StageTransitionOut(BaseModel):
