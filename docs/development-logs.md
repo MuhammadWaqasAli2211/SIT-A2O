@@ -1,8 +1,95 @@
-> **Branch:** `waqas` — last updated 2026-08-28
+> **Branch:** `waqas` — last updated 2026-08-31
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-08-31 — Student's Folder: onboarding forms + Documents Hub go live
+
+**Branch:** `waqas`
+
+Turned the 3 admin-preview-only form replicas into a real candidate flow,
+added a 4th (Bank & Payment Details, a plain web form, not a PDF replica),
+built the age-reactive 7-tab Documents Hub, and the full admin review side —
+bootcamp-scoped candidate folders, per-document approve/reject with a
+required rejection reason, and "reopen for correction" on a submitted form.
+
+### Schema, proposed and approved before writing a line of backend code
+
+Two new tables (`onboarding_form_submissions`, `onboarding_documents`), not
+folded into the existing `documents` table: Educational Documents and
+Experience Letters need to hold several files at once, which that table's
+one-row-per-type replace semantics doesn't support. Storage reuses the
+existing `candidate-documents` bucket under a new `onboarding/` prefix
+rather than a new bucket — no new credential surface.
+
+Two decisions made explicit and agreed before implementation: onboarding
+forms are viewable, not approve/reject (there's nothing on a candidate's own
+filled paperwork for an admin to accept or reject the way a blurry CNIC scan
+can be), and the "download PDF" stays the same client-side `window.print()`
+approach already verified for A4 fidelity rather than adding a server-side
+headless-browser dependency to produce a stored file — the submitted JSONB
+is the source of truth, the PDF is always regenerated fresh from it.
+
+### The sequential-lock / reopen mechanism
+
+The 4-form order is enforced both ways: `assert_in_order` blocks a
+later-form submit until every predecessor is `SUBMITTED`, and
+`unlocked_map`/`hub_unlocked` derive what the candidate can currently reach
+from that same predecessor check — nothing stored beyond each row's own
+`status`. The interesting part is that a `REOPENED` predecessor is treated
+identically to "not submitted yet" by both functions, which is the entire
+mechanism behind "reopening one form re-locks everything after it, and the
+Documents Hub too" — no extra bookkeeping needed once the order check
+already existed for the forward direction.
+
+### Old checklist removed, not left dangling
+
+Mid-build, realised the candidate sidebar slot being repurposed
+("Documents" → "Student's Folder") already pointed at a working, different,
+narrower document checklist (CNIC front/back, Photo, Qualification, Bank
+Letter) with its own admin review page. Asked before touching it. Confirmed
+zero rows existed in `documents` live, grepped the whole codebase for every
+dependent, then removed: the table, `document_type` enum, `document_service.py`,
+both pages, both routes, and the now-stale integration tests — rewriting
+them to hit the new onboarding routes instead of deleting coverage.
+`document_status` (PENDING/ACCEPTED/REJECTED) survived — the new
+`onboarding_documents` table reuses it.
+
+### Shared age logic, finally actually shared
+
+`isEighteenOrOlder`/`isAdult` had been deliberately duplicated three times
+already (registration's schema layer, registration's field-unlock layer, and
+now this) for layering reasons. Extracted to `frontend/src/lib/age.ts` and
+`backend/app/core/age.py` — both leaf modules with no dependents of their
+own, which is what made importing them from every layer safe where importing
+across those layers directly was not.
+
+### Verification, and a real bug it surfaced
+
+Backend: 305/305 tests pass (45 new — order enforcement, reopen/re-lock,
+age-conditional validation, multi-file vs. supersede). Frontend: build and
+`oxlint` clean. Two migrations applied and confirmed live via direct schema
+queries, not just the ledger.
+
+Full browser click-through as a real candidate wasn't possible: the live
+database has exactly one real application row, and reading it 500s. Traced
+to a schema drift unrelated to this work — the live `application_stage`
+enum has `AI-INTERVIEWED` where every migration file and both codebases say
+`INTERVIEWED`, changed directly against the database outside the migration
+system at some point. Reported before doing anything about it; told to
+leave it and verify a different way. Did two things instead: a real-DB,
+real-Storage integration pass using a temporary, additive-only application
+for the real account (never touching the broken row), exercising every
+service function for real — 18/18 checks, everything cleaned up after,
+storage objects included; and a real-HTTP pass via `TestClient` with only
+the token-verification step bypassed (no password available), confirming
+`GET /bootcamps/{id}/onboarding/candidates` returns a correct, empty list
+for both bootcamps without ever touching the broken row, and confirming by
+direct traceback that the 500 lives in pre-existing `application_service.my_applications`,
+not anything from this round.
 
 ---
 
