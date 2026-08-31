@@ -12,24 +12,7 @@
 
 import { z } from 'zod'
 
-/**
- * Age on the day of applying, calendar-correct.
- *
- * Duplicated deliberately from `fields.tsx` rather than imported: schema.ts is
- * the validation layer and importing from a component module would make the
- * dependency point the wrong way. Both call sites are one expression and are
- * tested by the same submit.
- */
-function isEighteenOrOlder(value: unknown): boolean {
-  if (typeof value !== 'string' || !value) return false
-  const dob = new Date(value)
-  if (Number.isNaN(dob.getTime())) return false
-  const today = new Date()
-  let age = today.getFullYear() - dob.getFullYear()
-  const m = today.getMonth() - dob.getMonth()
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1
-  return age >= 18
-}
+import { isAdult as isEighteenOrOlder } from '@/lib/age'
 
 import {
   CAMPUSES,
