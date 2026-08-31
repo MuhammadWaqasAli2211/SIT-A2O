@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, Plus, RotateCcw, Trash2 } from "lucide-react"
+import { CheckCircle2, Download, Loader2, Plus, RotateCcw, Send, Trash2 } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -171,21 +171,34 @@ export const TABLE_CELL_INPUT_CLASS =
 
 /**
  * Toolbar shared by every onboarding form: the auto-save status, a reset,
- * and print-to-PDF. Identical between the Background Verification Form and
- * the Employment Application Form, which is what made it worth extracting
- * rather than a second copy-paste.
+ * and print-to-PDF — plus, for the real candidate-facing flow, a Submit
+ * action and a read-only mode. The admin preview pages use this with none of
+ * the new props set, which reproduces the original Clear + Download bar
+ * exactly, so that route is untouched by this extension.
  */
 export function OnboardingToolbar({
   savedAt,
   onClear,
+  onSubmit,
+  submitting,
+  submitLabel = "Submit",
+  readOnly,
 }: {
   savedAt: number | null
   onClear: () => void
+  /** When provided, renders a Submit button that calls this with no args —
+   *  the calling form passes its own current draft via a closure. */
+  onSubmit?: () => void
+  submitting?: boolean
+  submitLabel?: string
+  /** An already-submitted form being viewed, not edited: only the PDF
+   *  download stays — Clear and Submit make no sense on read data. */
+  readOnly?: boolean
 }) {
   return (
     <div className="flex items-center justify-between print:hidden">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-        {savedAt !== null && (
+        {!readOnly && savedAt !== null && (
           <span key={savedAt} className="flex items-center gap-1.5 animate-draft-saved">
             <CheckCircle2 className="size-3.5 text-success" />
             Draft saved
@@ -193,14 +206,22 @@ export function OnboardingToolbar({
         )}
       </div>
       <div className="flex gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onClear}>
-          <RotateCcw className="size-3.5" />
-          Clear form
-        </Button>
-        <Button type="button" size="sm" onClick={() => window.print()}>
+        {!readOnly && (
+          <Button type="button" variant="outline" size="sm" onClick={onClear} disabled={submitting}>
+            <RotateCcw className="size-3.5" />
+            Clear form
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
           <Download className="size-3.5" />
           Download as PDF
         </Button>
+        {!readOnly && onSubmit && (
+          <Button type="button" size="sm" onClick={onSubmit} disabled={submitting}>
+            {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+            {submitLabel}
+          </Button>
+        )}
       </div>
     </div>
   )
