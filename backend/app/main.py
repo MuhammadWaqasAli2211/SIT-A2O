@@ -87,7 +87,10 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "app.main:app",
-        host=os.getenv("HOST", "127.0.0.1"),
+        # 0.0.0.0, not 127.0.0.1: a host's loopback interface only accepts
+        # connections from inside that same container, which is exactly what
+        # a platform's proxy (e.g. Railway) is not.
+        host=os.getenv("HOST", "0.0.0.0"),
         # Overridable so a second instance can be started without editing code.
         port=int(os.getenv("PORT", "8000")),
         reload=settings.DEBUG and not settings.is_production,
