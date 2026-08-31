@@ -18,6 +18,7 @@ import type {
   Bootcamp,
   BootcampDetail,
   BootcampStats,
+  CompletedInterviewsPage,
   DocumentLink,
   DocumentRecord,
   DocumentRow,
@@ -446,6 +447,11 @@ export const interviewInviteApi = {
 export const aiInterviewApi = {
   listForBootcamp: (bootcampId: string) =>
     get<ExternalRecords>(`/bootcamps/${bootcampId}/ai-interviews`),
+
+  /** Omit bootcampId for the platform-wide view — super admin only, the
+   * backend refuses an admin who omits it. */
+  completed: (bootcampId?: string) =>
+    get<CompletedInterviewsPage>('/ai-interviews/completed', bootcampId ? { bootcamp_id: bootcampId } : undefined),
 
   detail: (interviewId: number) => get<ExternalRecord>(`/ai-interviews/${interviewId}`),
 
