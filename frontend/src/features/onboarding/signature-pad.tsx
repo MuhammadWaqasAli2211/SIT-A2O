@@ -17,11 +17,13 @@ export function SignaturePad({
   onChange,
   ariaLabel,
   className,
+  disabled,
 }: {
   value: string | null
   onChange: (dataUrl: string | null) => void
   ariaLabel: string
   className?: string
+  disabled?: boolean
 }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
   const drawing = React.useRef(false)
@@ -56,6 +58,7 @@ export function SignaturePad({
   }
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (disabled) return
     const canvas = canvasRef.current
     const ctx = getContext()
     if (!canvas || !ctx) return
@@ -104,16 +107,21 @@ export function SignaturePad({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
-        className="h-20 w-full max-w-70 touch-none rounded border border-input bg-white print:border-black"
+        className={cn(
+          "h-20 w-full max-w-70 touch-none rounded border border-input bg-white print:border-black",
+          disabled && "opacity-70",
+        )}
       />
-      <button
-        type="button"
-        onClick={clear}
-        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground print:hidden"
-      >
-        <Eraser className="size-3" />
-        Clear
-      </button>
+      {!disabled && (
+        <button
+          type="button"
+          onClick={clear}
+          className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-foreground print:hidden"
+        >
+          <Eraser className="size-3" />
+          Clear
+        </button>
+      )}
     </div>
   )
 }
