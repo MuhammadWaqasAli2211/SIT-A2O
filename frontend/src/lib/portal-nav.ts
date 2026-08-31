@@ -24,18 +24,28 @@ export interface PortalNavItem {
   /** Shown as a count chip on the right of the nav row. */
   badge?: string
   /**
-   * Gate this item behind having registered for a bootcamp.
+   * Gate this item behind a condition beyond merely being signed in.
    *
-   * Signing up creates a User; registering creates an Application. These pages
-   * describe an Application, so before one exists there is nothing for them to
-   * show — they render locked rather than as empty shells implying a pipeline
-   * the user has not entered.
+   * 'application': having registered for a bootcamp. Signing up creates a
+   * User; registering creates an Application. These pages describe an
+   * Application, so before one exists there is nothing for them to show —
+   * they render locked rather than as empty shells implying a pipeline the
+   * user has not entered.
+   *
+   * 'onboarding': having cleared the Physical Interview stage. Student's
+   * Folder describes onboarding paperwork, which does not exist to fill in
+   * until the application has actually reached that stage.
    */
-  requires?: 'application'
+  requires?: 'application' | 'onboarding'
 }
 
 /** Shown on locked items, in the tooltip and to screen readers. */
 export const LOCKED_HINT = 'Available after you register'
+
+export const LOCKED_HINT_BY_REQUIRES: Record<'application' | 'onboarding', string> = {
+  application: LOCKED_HINT,
+  onboarding: 'Available once your Physical Interview is cleared',
+}
 
 export interface PortalNavGroup {
   heading: string
@@ -65,10 +75,10 @@ const CANDIDATE_NAV: PortalNavGroup[] = [
         requires: 'application',
       },
       {
-        label: 'Documents',
+        label: "Student's Folder",
         href: '/dashboard/documents',
         icon: GraduationCap,
-        requires: 'application',
+        requires: 'onboarding',
       },
     ],
   },
@@ -92,7 +102,8 @@ const BOOTCAMP_TOOLS: PortalNavItem[] = [
   // 'Interviews' above, which schedules our own physical round — the two are
   // different rounds against different systems, so they get different rows.
   { label: 'AI interviews', href: '/admin/ai-interviews', icon: BrainCircuit },
-  { label: 'Documents', href: '/admin/documents', icon: FileText },
+  // Review of the 4 onboarding forms + Documents Hub uploads, per candidate.
+  { label: 'Onboarding', href: '/admin/onboarding', icon: GraduationCap },
   { label: 'Phases', href: '/admin/phases', icon: ShieldCheck },
   { label: 'Emails', href: '/admin/emails', icon: Mail },
 ]
