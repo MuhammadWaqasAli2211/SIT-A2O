@@ -91,6 +91,62 @@ export function candidateCode(record: ExternalRecord): string | null {
   return ours ? text(ours, 'candidate_code') : null
 }
 
+/** The program/track they applied to, when the record belongs to an
+ * applicant (manual invite rows have no application, so no track). */
+export function programTitle(record: ExternalRecord): string | null {
+  const ours = local(record)
+  return ours ? text(ours, 'program_title') : null
+}
+
+/** Which of our bootcamps invited them — only meaningful on a platform-wide
+ * view; a bootcamp-scoped one already knows the answer. */
+export function bootcampName(record: ExternalRecord): string | null {
+  const ours = local(record)
+  return ours ? text(ours, 'bootcamp_name')?.trim() || null : null
+}
+
+/** One application's id, live stage and status — present only when the
+ * record belongs to a real applicant (a manual/Instructor invite has none). */
+export interface LocalApplication {
+  id: string
+  stage: string | null
+  status: string | null
+}
+
+export function applicationInfo(record: ExternalRecord): LocalApplication | null {
+  const ours = local(record)
+  const id = ours ? text(ours, 'application_id') : null
+  if (!id) return null
+  return {
+    id,
+    stage: ours ? text(ours, 'application_stage') : null,
+    status: ours ? text(ours, 'application_status') : null,
+  }
+}
+
+const _PAST_INTERVIEW_STAGES = new Set(['PHYSICAL_INTERVIEW', 'FORM', 'ONBOARDED'])
+
+/** Whether the "Advance to Physical Interview" / "Reject" actions make sense
+ * for this record: a real, still-ACTIVE application that has not already
+ * moved past the interview stage. A manual/Instructor invite (no
+ * application) or a stage already decided gets neither. */
+export function canDecideStage(record: ExternalRecord): boolean {
+  const app = applicationInfo(record)
+  if (!app || app.status !== 'ACTIVE') return false
+  return !(app.stage && _PAST_INTERVIEW_STAGES.has(app.stage))
+}
+
+/** Mirrors PASS_THRESHOLD in backend/app/services/ai_interview_service.py —
+ * decided 2026-08-30: 50/100. Keep both in sync if this ever changes. */
+export const AI_PASS_THRESHOLD = 50
+
+/** null when there is no score to judge yet. A fact about the number, not an
+ * automated verdict — see PASS_THRESHOLD's own comment. */
+export function hasPassed(record: ExternalRecord): boolean | null {
+  const value = score(record)
+  return value === null ? null : value >= AI_PASS_THRESHOLD
+}
+
 export function candidateEmail(record: ExternalRecord): string | null {
   const ours = local(record)
   if (ours) {
