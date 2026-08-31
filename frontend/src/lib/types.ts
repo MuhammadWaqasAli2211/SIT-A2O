@@ -558,17 +558,12 @@ export interface PlatformStats {
   bootcamps: BootcampSummary[]
 }
 
-/* -------------------------------------------------------------- documents -- */
-
-export const DocumentType = {
-  CNIC_FRONT: 'CNIC_FRONT',
-  CNIC_BACK: 'CNIC_BACK',
-  PHOTO: 'PHOTO',
-  QUALIFICATION: 'QUALIFICATION',
-  BANK_LETTER: 'BANK_LETTER',
-  OTHER: 'OTHER',
-} as const
-export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
+/* -------------------------------------------------------------- documents --
+ * DocumentStatus is the only survivor of the pre-onboarding document
+ * checklist (retired 2026-08-31, superseded by the Documents Hub below) — its
+ * PENDING/ACCEPTED/REJECTED review states are shared with
+ * OnboardingDocumentRecord.
+ */
 
 export type DocumentStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED'
 
@@ -578,10 +573,83 @@ export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   REJECTED: 'Rejected',
 }
 
-export interface DocumentRecord {
+/* --------------------------------------------------------------- onboarding --
+ * Student's Folder: the 4-item Onboarding Form and the Documents Hub. Mirrors
+ * backend/app/schemas/onboarding.py.
+ */
+
+export const OnboardingFormType = {
+  BACKGROUND_VERIFICATION: 'BACKGROUND_VERIFICATION',
+  EMPLOYMENT_APPLICATION: 'EMPLOYMENT_APPLICATION',
+  HALF_NAMA: 'HALF_NAMA',
+  BANK_PAYMENT_DETAILS: 'BANK_PAYMENT_DETAILS',
+} as const
+export type OnboardingFormType = (typeof OnboardingFormType)[keyof typeof OnboardingFormType]
+
+/** Display order for the sequential checklist — declaration order is the
+ *  fixed sequence a candidate must complete them in. */
+export const ONBOARDING_FORM_ORDER: OnboardingFormType[] = Object.values(OnboardingFormType)
+
+export const ONBOARDING_FORM_LABEL: Record<OnboardingFormType, string> = {
+  BACKGROUND_VERIFICATION: 'Background Verification Form',
+  EMPLOYMENT_APPLICATION: 'Employment Application Form',
+  HALF_NAMA: 'Half Nama / Oath Form',
+  BANK_PAYMENT_DETAILS: 'Bank & Payment Details',
+}
+
+/** URL-friendly slug per form, used in the /dashboard/documents/forms/:slug route. */
+export const ONBOARDING_FORM_SLUG: Record<OnboardingFormType, string> = {
+  BACKGROUND_VERIFICATION: 'background-verification',
+  EMPLOYMENT_APPLICATION: 'employment-application',
+  HALF_NAMA: 'half-nama',
+  BANK_PAYMENT_DETAILS: 'bank-payment',
+}
+export const ONBOARDING_FORM_BY_SLUG: Record<string, OnboardingFormType> = Object.fromEntries(
+  Object.entries(ONBOARDING_FORM_SLUG).map(([type, slug]) => [slug, type as OnboardingFormType]),
+)
+
+export type OnboardingFormStatus = 'SUBMITTED' | 'REOPENED'
+
+export interface OnboardingFormSubmission {
   id: string
   application_id: string
-  doc_type: DocumentType
+  form_type: OnboardingFormType
+  submitted_data: Record<string, unknown>
+  status: OnboardingFormStatus
+  submitted_at: string
+  reopened_at: string | null
+  reopen_note: string | null
+}
+
+export interface OnboardingFormRow {
+  form_type: OnboardingFormType
+  submission: OnboardingFormSubmission | null
+  unlocked: boolean
+}
+
+export interface OnboardingProgress {
+  forms_submitted: number
+  forms_total: number
+  hub_unlocked: boolean
+}
+
+export const OnboardingDocumentType = {
+  PERSONAL_ID_CNIC: 'PERSONAL_ID_CNIC',
+  PERSONAL_ID_BFORM: 'PERSONAL_ID_BFORM',
+  FATHER_CNIC: 'FATHER_CNIC',
+  MOTHER_CNIC: 'MOTHER_CNIC',
+  CV: 'CV',
+  EDUCATIONAL_CERT: 'EDUCATIONAL_CERT',
+  EXPERIENCE_LETTER: 'EXPERIENCE_LETTER',
+  BANK_PROOF: 'BANK_PROOF',
+  EASYPAISA_PROOF: 'EASYPAISA_PROOF',
+} as const
+export type OnboardingDocumentType = (typeof OnboardingDocumentType)[keyof typeof OnboardingDocumentType]
+
+export interface OnboardingDocumentRecord {
+  id: string
+  application_id: string
+  doc_type: OnboardingDocumentType
   file_name: string
   content_type: string
   size_bytes: number
@@ -591,22 +659,34 @@ export interface DocumentRecord {
   created_at: string
 }
 
-export interface DocumentRow extends DocumentRecord {
-  candidate_code: string
-  candidate_name: string | null
-}
-
-/** One line of the candidate's upload checklist. */
-export interface RequiredDocument {
-  doc_type: DocumentType
+/** One tab of the Documents Hub — `documents` is a list (not one optional
+ *  record) because EDUCATIONAL_CERT and EXPERIENCE_LETTER hold several. */
+export interface RequiredOnboardingDocument {
+  doc_type: OnboardingDocumentType
   label: string
   required: boolean
-  document: DocumentRecord | null
+  multi: boolean
+  documents: OnboardingDocumentRecord[]
 }
 
-export interface DocumentLink {
+export interface OnboardingDocumentLink {
   url: string
   expires_in: number
+}
+
+/** One row of the admin's bootcamp-level candidate-folder list. */
+export interface OnboardingCandidateSummary {
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  forms_submitted: number
+  forms_total: number
+  documents_required: number
+  documents_uploaded: number
+  documents_approved: number
+  documents_rejected: number
+  documents_pending: number
+  hub_unlocked: boolean
 }
 
 /* ---------------------------------------------------------- candidate view -- */
