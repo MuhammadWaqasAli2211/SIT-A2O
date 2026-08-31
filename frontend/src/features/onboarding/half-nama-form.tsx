@@ -8,7 +8,7 @@ import {
 import { SignaturePad } from "@/features/onboarding/signature-pad"
 import { useDraftAutosave } from "@/features/onboarding/use-draft-autosave"
 
-interface Draft {
+export interface HalfNamaDraft {
   page1Name: string
   page1FatherName: string
   page1Date: string
@@ -22,7 +22,7 @@ interface Draft {
   page2Signature: string | null
 }
 
-const EMPTY_DRAFT: Draft = {
+const EMPTY_DRAFT: HalfNamaDraft = {
   page1Name: "",
   page1FatherName: "",
   page1Date: "",
@@ -75,19 +75,31 @@ function ThumbprintPlaceholder({ label }: { label: string }) {
  * Digital twin of Saylani's "Half Nama" oath form. Pure Urdu, right-to-left
  * throughout — unlike the previous two forms, this one is almost entirely
  * flowing prose with inline blanks, not a grid of labelled fields, so it
- * does not reuse FieldRow/FieldCell/BilingualLabel at all. Admin-only
- * preview, no backend, same as the other two.
+ * does not reuse FieldRow/FieldCell/BilingualLabel at all.
+ *
+ * Same three modes as BackgroundVerificationForm — see its doc comment.
  */
-export function HalfNamaForm() {
-  const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
+export function HalfNamaForm({
+  initialData,
+  readOnly = false,
+  onSubmit,
+  submitting = false,
+}: {
+  initialData?: Partial<HalfNamaDraft>
+  readOnly?: boolean
+  onSubmit?: (draft: HalfNamaDraft) => void
+  submitting?: boolean
+} = {}) {
+  const [draft, setDraft] = React.useState<HalfNamaDraft>(() => ({ ...EMPTY_DRAFT, ...initialData }))
 
-  const { savedAt, clearDraft } = useDraftAutosave<Draft>({
+  const { savedAt, clearDraft } = useDraftAutosave<HalfNamaDraft>({
     key: DRAFT_KEY,
     value: draft,
     onRestore: setDraft,
+    disabled: readOnly,
   })
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+  const set = <K extends keyof HalfNamaDraft>(key: K, value: HalfNamaDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }))
 
   const handleClear = () => {
@@ -95,10 +107,22 @@ export function HalfNamaForm() {
     clearDraft()
   }
 
+  const handleSubmit = () => {
+    onSubmit?.(draft)
+    clearDraft()
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <OnboardingToolbar savedAt={savedAt} onClear={handleClear} />
+      <OnboardingToolbar
+        savedAt={savedAt}
+        onClear={handleClear}
+        onSubmit={onSubmit && handleSubmit}
+        submitting={submitting}
+        readOnly={readOnly}
+      />
 
+      <fieldset disabled={readOnly} className="contents">
       {/* ============================================================ PAGE 1 == */}
       <div
         dir="rtl"
@@ -167,6 +191,7 @@ export function HalfNamaForm() {
               ariaLabel="دستخط"
               value={draft.page1Signature}
               onChange={(v) => set("page1Signature", v)}
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -264,6 +289,7 @@ export function HalfNamaForm() {
               ariaLabel="دستخط"
               value={draft.page2Signature}
               onChange={(v) => set("page2Signature", v)}
+              disabled={readOnly}
             />
           </div>
           <ThumbprintPlaceholder label="سیدھے ہاتھ کا انگوٹھا" />
@@ -274,6 +300,7 @@ export function HalfNamaForm() {
           Page 2 of 2
         </div>
       </div>
+      </fieldset>
     </div>
   )
 }
