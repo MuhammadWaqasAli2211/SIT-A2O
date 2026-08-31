@@ -23,26 +23,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SECTION_FIELDS, SECTION_SCHEMAS, type SectionKey } from '@/features/registration/schema'
+import { isAdult } from '@/lib/age'
 import { cn } from '@/lib/utils'
 
-/**
- * Whether the applicant is 18 or older on the day they apply.
- *
- * One definition, used by the CNIC requirement in three places: the unlock
- * gate, the submit-time schema, and the asterisk on the label. Calendar-correct
- * rather than `days / 365.25`, which drifts a day either side of a birthday.
- */
-export function isAdult(dateOfBirth: unknown): boolean {
-  if (typeof dateOfBirth !== 'string' || !dateOfBirth) return false
-  const dob = new Date(dateOfBirth)
-  if (Number.isNaN(dob.getTime())) return false
-
-  const today = new Date()
-  let age = today.getFullYear() - dob.getFullYear()
-  const monthDelta = today.getMonth() - dob.getMonth()
-  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < dob.getDate())) age -= 1
-  return age >= 18
-}
+export { isAdult }
 
 /** Pakistani mobile numbers are 11 digits: 0300-1234567. */
 const PHONE_DIGITS = 11
