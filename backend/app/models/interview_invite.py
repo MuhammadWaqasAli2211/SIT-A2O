@@ -115,6 +115,11 @@ class InterviewInvite(Base):
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )
 
+    # Set once an admin has been notified this candidate finished their AI
+    # interview. Prevents re-notifying on every subsequent poll of the
+    # candidate's own status — see candidate_score() in ai_interview_service.py.
+    admin_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     batch: Mapped[InterviewInviteBatch] = relationship(back_populates="invites")
 
     def __repr__(self) -> str:
