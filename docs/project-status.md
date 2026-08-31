@@ -1,6 +1,108 @@
-> **Branch:** `waqas` — last updated 2026-08-29
+> **Branch:** `waqas` — last updated 2026-08-31
 
 # Project Status
+
+## Where things stand — 2026-08-31 (Student's Folder: onboarding forms + Documents Hub)
+
+The 3 pixel-perfect onboarding form replicas (built earlier as an admin-only
+preview) are now a real, submittable candidate flow, plus a new Bank &
+Payment Details form and a 7-tab Documents Hub, plus the full admin review
+side. Built in this order: schema → backend endpoints → student-side flow →
+admin-side review, each phase reviewed and approved before the next started.
+
+**Gating.** "Student's Folder" (renamed from "Documents" in the candidate
+sidebar) stays locked until `application.stage` reaches `FORM` or
+`ONBOARDED` — i.e. once Physical Interview clears. Enforced twice: the
+sidebar row (`portal-nav.ts`'s `requires: 'onboarding'`) and a real route
+guard (`RequiresOnboardingUnlocked`), same double-layer pattern
+`RequiresApplication` already established — a locked nav row is not an
+access boundary on its own.
+
+**The 4-item sequence.** Background Verification → Employment Application →
+Half Nama → Bank & Payment Details, one at a time. Locking is derived, not
+stored: `onboarding_form_service.unlocked_map()` walks the fixed order and a
+form is reachable only while every predecessor is `SUBMITTED` — a `REOPENED`
+predecessor counts as not-submitted, which is the entire mechanism behind
+"reopening one form re-locks everything after it" with no extra state to
+keep in sync. The Documents Hub unlocks the same way, off all 4 being
+`SUBMITTED`.
+
+**PDF stays client-side, deliberately not stored.** Submitted data is the
+source of truth (JSONB), not a rendered PDF file — "download PDF" is the
+same `window.print()` + CSS approach already verified for A4 fidelity,
+applied to a read-only render of the submitted data. Avoids a server-side
+headless-browser dependency (Playwright) purely to re-render what the
+browser already renders correctly, and never goes stale relative to what was
+actually submitted.
+
+**Documents Hub: 7 tabs, age-reactive.** Personal ID (CNIC vs B-Form) and
+Bank/Easypaisa proof swap which type is asked for based on
+`app.core.age.is_adult(date_of_birth)` — one function, mirrored in
+`frontend/src/lib/age.ts`, both replacing three near-duplicate copies of the
+same calendar-correct age formula that had accumulated across registration
+and this feature. Educational Documents and Experience Letters hold several
+files at once (`onboarding_documents` has no unique-per-type index, unlike
+every other type here); everything else supersedes on re-upload, same rule
+`document_service.upload()` used to enforce for the checklist this replaces.
+
+**Admin side.** `/admin/onboarding`: bootcamp-scoped candidate-folder list
+(search by code or name), a progress summary per row so admin can scan
+without opening every folder. Per candidate: the 4 forms read-only (view +
+print, no approve/reject — there's nothing on a candidate's own filled
+paperwork for an admin to accept or reject the way a blurry CNIC scan can
+be), each document approve/reject individually with a required rejection
+reason, and a "Reopen for correction" action with an optional note the
+candidate sees.
+
+**The old pre-onboarding document checklist is gone, not just replaced.**
+CNIC front/back, Photo, Qualification, Bank Letter — the `documents` table,
+`document_type` enum, `document_service.py`, both candidate and admin pages,
+and their routes. Zero rows existed in `documents` in production before
+removal (checked directly, not assumed), and nothing else in the codebase
+referenced any of it — confirmed with a full grep pass before deleting
+anything. `document_status` (PENDING/ACCEPTED/REJECTED) survives; it's
+shared with the new `onboarding_documents` table.
+
+**Migrations applied and verified live** (`20260831100000`,
+`20260831110000`): `onboarding_form_submissions`, `onboarding_documents`, 3
+new enum types, RLS on both new tables; `documents`/`document_type` dropped.
+All checked directly against the schema post-apply, not just the ledger.
+
+**Verified two ways, since the live database has exactly one real
+application row and it currently can't be read at all** (see the flagged
+issue below) — so no full browser click-through as a real candidate was
+possible this round:
+
+1. A real-DB, real-Storage integration pass: created a temporary application
+   for the real `thewaqasali59@gmail.com` profile under Bootcamp 07 (additive
+   only — never touched the existing broken row), ran the full cycle through
+   the actual service functions — sequential submit, out-of-order rejection,
+   reopen, re-lock, resubmit, re-unlock, single-file supersede vs multi-file
+   coexistence, approve, reject-with-reason, delete-blocked-when-accepted,
+   admin folder-list summary counts — 18/18 checks passed, everything
+   (including uploaded Storage objects) deleted afterward.
+2. Real HTTP against a running server via `TestClient`, auth bypassed only
+   at the token-verification step (no password available, so the actual
+   route/permission/serialization layer was exercised for real rather than
+   guessed at): `GET /bootcamps/{id}/onboarding/candidates` returns a clean,
+   correctly-shaped empty list for both bootcamps — confirming the one
+   broken application row is excluded by the stage filter before SQLAlchemy
+   ever tries to hydrate it, so this endpoint is unaffected by the issue
+   below.
+
+Backend: 305/305 tests pass (45 new). Frontend: build and `oxlint` clean.
+
+**Flagged, not fixed — explicitly left alone per instruction.** The live
+`application_stage` Postgres enum contains `AI-INTERVIEWED` where every
+migration file and `enums.py`/`types.ts` say `INTERVIEWED` — changed
+directly against the database outside the migration system at some point,
+by something not tracked in `supabase/migrations`. The one real application
+row (`B08-015`, the `thewaqasali59@gmail.com` account) sits at that value
+right now, which means `GET /applications/mine`, the admin candidates list,
+admin application detail, and dashboard stage-breakdown all 500 for that
+row today — confirmed directly, traced to `application_service.my_applications`,
+nothing to do with this round's changes. Left untouched on request; still
+open.
 
 ## Where things stand — 2026-08-30 (closing Phase 3)
 
