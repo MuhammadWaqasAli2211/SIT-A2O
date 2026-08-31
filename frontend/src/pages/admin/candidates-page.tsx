@@ -46,6 +46,7 @@ import { CandidateSheet } from '@/pages/admin/candidate-sheet'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
+import { downloadCsv } from '@/lib/csv-export'
 import {
   ApplicationStage,
   STAGE_LABEL,
@@ -68,30 +69,16 @@ function formatDate(iso: string) {
 /** Client-side CSV of the current page, for the spreadsheet workflows admins keep. */
 function exportCsv(rows: ApplicantRow[], filename: string) {
   const header = ['Code', 'Name', 'Email', 'Program', 'Stage', 'Status', 'Applied']
-  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`
-  const body = rows.map((row) =>
-    [
-      row.candidate_code,
-      row.full_name ?? '',
-      row.email,
-      row.program_title,
-      STAGE_LABEL[row.stage],
-      row.status,
-      formatDate(row.applied_at),
-    ]
-      .map(escape)
-      .join(','),
-  )
-
-  const blob = new Blob([[header.join(','), ...body].join('\n')], {
-    type: 'text/csv;charset=utf-8',
-  })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
+  const body = rows.map((row) => [
+    row.candidate_code,
+    row.full_name ?? '',
+    row.email,
+    row.program_title,
+    STAGE_LABEL[row.stage],
+    row.status,
+    formatDate(row.applied_at),
+  ])
+  downloadCsv(header, body, filename)
 }
 
 export default function AdminCandidatesPage() {
