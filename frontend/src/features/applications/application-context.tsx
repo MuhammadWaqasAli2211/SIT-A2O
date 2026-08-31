@@ -30,11 +30,6 @@ const ONBOARDING_UNLOCKED_STAGES: ApplicationStage[] = [
   ApplicationStage.ONBOARDED,
 ]
 
-// TEMP TESTING FLAG — mirrors the backend's _TESTING_UNLOCK_ALL. Forces
-// Student's Folder open regardless of stage, for UI testing. Flip back to
-// false to restore normal gating; not meant to ship set to true.
-const TESTING_UNLOCK_ALL = true
-
 export interface ApplicationContextValue extends MyApplicationState {
   /**
    * Whether the user has registered for a bootcamp.
@@ -101,7 +96,7 @@ export function ApplicationProvider({ children }: { children: ReactNode }) {
         hasClearedPhysicalInterview:
           !state.initialLoading &&
           state.application !== null &&
-          (TESTING_UNLOCK_ALL || ONBOARDING_UNLOCKED_STAGES.includes(state.application.stage)),
+          ONBOARDING_UNLOCKED_STAGES.includes(state.application.stage),
       }}
     >
       {children}
