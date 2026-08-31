@@ -138,7 +138,7 @@ class ApplicationOut(BaseModel):
 
     # None until the interview has been decided. The tracker uses it to tell
     # "waiting on a result" apart from "cleared it", which the stage alone
-    # cannot express while a candidate is still sitting at INTERVIEWED.
+    # cannot express while a candidate is still sitting at AI_INTERVIEWED.
     is_selected: bool | None = None
 
     statement: str | None = None
