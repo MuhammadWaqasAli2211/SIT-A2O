@@ -19,12 +19,18 @@ import {
   BootcampStatusBadge,
   CardsSkeleton,
 } from '@/features/admin/components'
-import { useAsync } from '@/hooks/use-async'
+import { LiveIndicator } from '@/features/live/live-indicator'
+import { useLiveResource } from '@/features/live/use-live-resource'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { STAGE_LABEL, type PlatformStats } from '@/lib/types'
 
 export default function SuperAdminDashboardPage() {
-  const { data, error, initialLoading, loading, refetch } = useAsync(
+  // Live rather than a one-shot fetch: a stage change made from any admin
+  // screen has no shared cache to invalidate, so the platform view needs to
+  // notice on its own rather than only showing what was true at mount. Backs
+  // off on its own when the tab is hidden, same contract as the AI
+  // Interviews screen.
+  const { data, error, initialLoading, lastUpdated, live, refresh } = useLiveResource(
     () => platformApi.stats(),
     [],
   )
@@ -40,17 +46,18 @@ export default function SuperAdminDashboardPage() {
               <BarChart3 className="size-4" />
               Analytics
             </Link>
-            <Button variant="outline" size="icon" onClick={refetch} aria-label="Refresh">
-              <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} />
+            <Button variant="outline" size="icon" onClick={refresh} aria-label="Refresh">
+              <RefreshCw className="size-4" />
             </Button>
           </>
         }
       />
 
+      <LiveIndicator lastUpdated={lastUpdated} live={live} className="mb-4" />
       <AsyncSection
         initialLoading={initialLoading}
         error={error}
-        onRetry={refetch}
+        onRetry={refresh}
         skeleton={<CardsSkeleton />}
       >
         {data && <Body stats={data} />}
