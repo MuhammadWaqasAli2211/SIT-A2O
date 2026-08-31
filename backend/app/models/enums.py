@@ -42,7 +42,7 @@ class ApplicationStage(StrEnum):
 
         Application -> Interview -> Physical Interview -> Form -> Onboarded
 
-    with INTERVIEW_SCHEDULED and INTERVIEWED both rendering as the single
+    with INTERVIEW_SCHEDULED and AI_INTERVIEWED both rendering as the single
     "Interview" node. They stay separate here because batching depends on the
     difference: an admin has to be able to list who holds a slot but has not
     yet been seen.
@@ -50,11 +50,17 @@ class ApplicationStage(StrEnum):
     Selection is not a stage. Clearing the interview is what moves a candidate
     to PHYSICAL_INTERVIEW; the decision itself is recorded on
     `applications.is_selected`.
+
+    AI_INTERVIEWED's *value* is "AI-INTERVIEWED" — deliberately not equal to
+    its member name, since a Postgres enum label may contain a hyphen but a
+    Python identifier cannot. `app/models/application.py`'s `_STAGE_ENUM`
+    binds by value (`values_callable`) specifically so this one member does
+    not silently fall back to matching by name against the database.
     """
 
     APPLIED = "APPLIED"
     INTERVIEW_SCHEDULED = "INTERVIEW_SCHEDULED"
-    INTERVIEWED = "INTERVIEWED"
+    AI_INTERVIEWED = "AI-INTERVIEWED"
     PHYSICAL_INTERVIEW = "PHYSICAL_INTERVIEW"
     FORM = "FORM"
     ONBOARDED = "ONBOARDED"
