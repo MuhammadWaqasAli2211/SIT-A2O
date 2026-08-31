@@ -6,10 +6,12 @@
  * proctoring detail, no recording, because the endpoint behind it cannot
  * return any of those. See `CandidateScore` in schemas/ai_interview.py.
  *
- * Deliberately *not* labelled pass or fail. InterviewerAI has not told us
- * what threshold separates the two, and telling a candidate they failed on a
- * number we invented would be worse than showing them the number plainly.
+ * Passed/not framing was added 2026-08-30 once a real threshold (50/100)
+ * existed to show it against. It stays factual rather than final — nothing
+ * here auto-rejects, so the copy says "the admissions team makes the final
+ * call" rather than a bare verdict a candidate cannot appeal.
  *
+
  * The deadline is shown as a live countdown rather than a date so the missed
  * deadline in `ExpiredCard` reads as a consequence the candidate watched
  * approaching, not as a surprise.
@@ -31,6 +33,7 @@ import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
 import { useMutation } from '@/hooks/use-async'
 import type { CandidateScore } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
 /** Matches the backend's `min_length=30` on the explanation. */
 const MIN_REASON = 30
@@ -109,20 +112,34 @@ function WaitingCard({ result }: { result: CandidateScore }) {
 /* ------------------------------------------------------------ finished -- */
 
 function CompletedCard({ result }: { result: CandidateScore }) {
+  const passed = result.passed
+
   return (
     <Reveal>
-      <Card className="border-primary/40">
-        <CardHeader className="flex-row items-start gap-3 space-y-0">
-          <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-            <BrainCircuit className="size-4" />
-          </span>
-          <div className="flex flex-col gap-1">
-            <CardTitle className="text-base">Your AI interview result</CardTitle>
-            <CardDescription>
-              This is your overall score. The admissions team reviews it alongside the rest
-              of your application.
-            </CardDescription>
+      <Card className={passed === false ? 'border-warning/40' : 'border-primary/40'}>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+              <BrainCircuit className="size-4" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <CardTitle className="text-base">Your AI interview result</CardTitle>
+              <CardDescription>
+                The admissions team reviews this alongside the rest of your application —
+                it is not the final decision.
+              </CardDescription>
+            </div>
           </div>
+          {passed !== null && (
+            <span
+              className={cn(
+                'shrink-0 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap',
+                passed ? 'bg-success/12 text-success' : 'bg-warning/12 text-warning',
+              )}
+            >
+              {passed ? 'Passed' : 'Below the pass mark'}
+            </span>
+          )}
         </CardHeader>
 
         <CardContent className="flex flex-col gap-4">
