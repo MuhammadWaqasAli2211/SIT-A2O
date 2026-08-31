@@ -31,6 +31,11 @@ class CandidateScore(BaseModel):
     scale: int = 100
     completed_at: datetime | None = None
 
+    # None until completed. Score >= PASS_THRESHOLD in ai_interview_service.py
+    # (decided 2026-08-30: 50/100) — a plain fact about the number, not a
+    # verdict: nothing here auto-rejects, an admin still decides.
+    passed: bool | None = None
+
     # The candidate's own deadline, so the portal can count down to it rather
     # than show a bare date. Safe to expose: it is the date they were emailed.
     deadline_at: datetime | None = None
@@ -83,6 +88,22 @@ class ExternalRecords(BaseModel):
     """A pass-through list from their API, shape unverified."""
 
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CompletedInterviewStats(BaseModel):
+    """The stat-card row above the Completed Interviews table. Always
+    computed over the full matched set, never the search/filter view — the
+    cards are a summary, not a reflection of what the toolbar currently
+    narrows the table to."""
+
+    total: int
+    completed_today: int
+    completed_this_week: int
+    average_score: float | None = None
+
+
+class CompletedInterviewsPage(ExternalRecords):
+    stats: CompletedInterviewStats
 
 
 class KeyScopes(BaseModel):

@@ -28,15 +28,25 @@ import { EmptyState } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { aiInterviewApi } from '@/features/admin/api'
 import { ConfirmDialog } from '@/features/admin/components'
 import {
+  AI_PASS_THRESHOLD,
   candidateCode,
+  candidateName,
   formatWhen,
   list,
   mediaUrl,
+  recordId,
   score,
   status,
   text,
@@ -47,14 +57,58 @@ import { useAsync, useMutation } from '@/hooks/use-async'
 import { AiScope, type ExternalRecord } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
+/**
+ * The dialog wrapper around `ReportView`. Pulled out so every list that opens
+ * a report — the Results tab, the Completed Interviews table — shares one
+ * dialog rather than each defining its own.
+ */
+export function EvidenceDialog({
+  record,
+  onClose,
+  onChanged,
+}: {
+  record: ExternalRecord | null
+  onClose: () => void
+  /** The underlying list should refresh — the interview was deleted, or the
+   * candidate's stage was moved from the actions below. */
+  onChanged: () => void
+}) {
+  const id = record ? recordId(record) : null
+
+  return (
+    <Dialog open={record !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{record ? candidateName(record) : 'Interview'}</DialogTitle>
+          <DialogDescription>
+            Score, per-question breakdown, and the proctoring evidence behind it.
+          </DialogDescription>
+        </DialogHeader>
+
+        {record !== null && id !== null && (
+          <ReportView interviewId={id} record={record} onChanged={onChanged} />
+        )}
+        {record !== null && id === null && (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertDescription>
+              This record arrived without an id, so its report cannot be fetched.
+            </AlertDescription>
+          </Alert>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ReportView({
   interviewId,
   record,
-  onDeleted,
+  onChanged,
 }: {
   interviewId: number
   record: ExternalRecord
-  onDeleted: () => void
+  onChanged: () => void
 }) {
   const report = useAsync(() => aiInterviewApi.report(interviewId), [interviewId])
 
@@ -89,7 +143,7 @@ export function ReportView({
         </TabsContent>
       </Tabs>
 
-      <DeleteFooter interviewId={interviewId} onDeleted={onDeleted} />
+      <DeleteFooter interviewId={interviewId} onChanged={onChanged} />
     </div>
   )
 }
@@ -107,6 +161,7 @@ function ScoreHeader({
 }) {
   const state = status(record)
   const code = candidateCode(record)
+  const passed = overall === null ? null : overall >= AI_PASS_THRESHOLD
 
   return (
     <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border border-border p-4">
@@ -133,6 +188,14 @@ function ScoreHeader({
         {code && (
           <Badge variant="outline" className="font-mono text-xs font-normal">
             {code}
+          </Badge>
+        )}
+        {passed !== null && (
+          <Badge
+            variant="outline"
+            className={cn('font-normal', passed ? 'bg-success/12 text-success' : 'bg-warning/12 text-warning')}
+          >
+            {passed ? 'Above pass mark' : 'Below pass mark'}
           </Badge>
         )}
         {state && (
@@ -318,10 +381,10 @@ function Evidence({ interviewId }: { interviewId: number }) {
 
 function DeleteFooter({
   interviewId,
-  onDeleted,
+  onChanged,
 }: {
   interviewId: number
-  onDeleted: () => void
+  onChanged: () => void
 }) {
   const { can } = useAiPermissions()
   const [confirming, setConfirming] = useState(false)
@@ -330,7 +393,7 @@ function DeleteFooter({
   const remove = useMutation(async () => {
     await aiInterviewApi.remove(interviewId)
     setConfirming(false)
-    onDeleted()
+    onChanged()
   })
 
   return (

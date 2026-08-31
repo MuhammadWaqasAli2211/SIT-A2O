@@ -22,6 +22,7 @@ Two scoping problems worth knowing about, both resolved conservatively:
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from html import escape
 from typing import Any
 
@@ -37,9 +38,10 @@ from app.core.exceptions import (
 )
 from app.integrations import interviewer_ai
 from app.models.application import Application
-from app.models.bootcamp import BootcampAdmin
+from app.models.bootcamp import Bootcamp, BootcampAdmin, Program
 from app.models.enums import AiScope, EmailStatus, UserRole
 from app.models.interview_invite import InterviewInvite, InterviewInviteBatch
+from app.models.notification import Notification
 from app.models.ops import EmailLog
 from app.models.user import Profile
 from app.services import audit_service, bootcamp_service, email_service, permission_service
@@ -61,6 +63,11 @@ _SCORE_KEYS = (
 _SCORE_CONTAINERS = ("scoring", "report", "result", "summary", "evaluation")
 
 _COMPLETED_STATUSES = {"completed", "complete", "finished", "done", "evaluated"}
+
+# Decided 2026-08-30: 50/100. A fact about the number, not an automated
+# verdict — nothing here rejects a candidate on its own account, an admin
+# still makes that call (see the stage-advance actions on the report screen).
+PASS_THRESHOLD = 50.0
 
 
 def _as_number(value: Any) -> float | None:
@@ -189,11 +196,18 @@ def _invited_index(
             InterviewInvite.full_name,
             Application.id,
             Application.candidate_code,
+            Application.stage,
+            Application.status,
             Profile.full_name,
+            InterviewInviteBatch.bootcamp_id,
+            Bootcamp.name,
+            Program.title,
         )
         .join(InterviewInviteBatch, InterviewInvite.batch_id == InterviewInviteBatch.id)
         .outerjoin(Application, Application.id == InterviewInvite.application_id)
         .outerjoin(Profile, Profile.id == Application.profile_id)
+        .outerjoin(Bootcamp, Bootcamp.id == InterviewInviteBatch.bootcamp_id)
+        .outerjoin(Program, Program.id == Application.program_id)
         # No bootcamp means every intake — used for the super admin's unscoped
         # view, where narrowing per intake would be one query per bootcamp.
         .where(
@@ -207,14 +221,35 @@ def _invited_index(
     emails: set[str] = set()
     index: dict[str, dict] = {}
 
-    for external_id, email, invite_name, application_id, code, profile_name in rows:
+    for (
+        external_id,
+        email,
+        invite_name,
+        application_id,
+        code,
+        app_stage,
+        app_status,
+        profile_name,
+        row_bootcamp_id,
+        bootcamp_name,
+        program_title,
+    ) in rows:
         # The profile is the most authoritative name we hold; the invite row's
         # copy covers manually-added rows that have no application behind them.
         known = {
             "candidate_name": profile_name or invite_name,
             "candidate_code": code,
             "application_id": str(application_id) if application_id else None,
+            # The application's live stage/status, so the report screen can
+            # offer "advance to Physical Interview" / "reject" without a
+            # second lookup — and so it knows when not to (already moved on,
+            # or no longer ACTIVE).
+            "application_stage": app_stage.value if app_stage else None,
+            "application_status": app_status.value if app_status else None,
             "email": email,
+            "bootcamp_id": str(row_bootcamp_id) if row_bootcamp_id else None,
+            "bootcamp_name": bootcamp_name,
+            "program_title": program_title,
         }
         if external_id is not None:
             ids.add(external_id)
@@ -272,6 +307,104 @@ def list_for_bootcamp(
             # in hand and the UI should never have to guess it.
             matched.append(_hydrate(interview, index))
     return matched
+
+
+# Matches analytics()'s own bound below, for the same reason: their list
+# endpoint has no bootcamp filter, so this is how much gets over-fetched and
+# discarded per request. Fine at current volumes; a tenant with thousands of
+# completed interviews needs their side to grow a real filter.
+_COMPLETED_FETCH_LIMIT = 200
+
+
+def list_completed(db: Session, actor: Profile, bootcamp_id: uuid.UUID | None = None) -> dict:
+    """Every completed AI interview visible to this actor, plus the summary
+    figures the Completed Interviews screen shows above the table.
+
+    One DB query (`_invited_index`) and one external HTTP call
+    (`interviewer_ai.list_interviews`), regardless of row count and whether
+    the view is bootcamp-scoped or platform-wide — the same round-trip
+    discipline as the 2026-08-29 dashboard fix. Stats are computed here, over
+    the same fetch, rather than as a second call: the alternative would be a
+    second external round trip to answer figures this screen already has the
+    data for.
+
+    Status filtering happens on our side with `is_completed()`, not by
+    passing `status=` to their API. Their real spelling is unverified — their
+    docs say "completed", a live batch once returned "complete" (see
+    interview_invite_service.py) — and trusting their filter to interpret
+    ours correctly risks silently returning nothing.
+    """
+    if bootcamp_id is not None:
+        bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+        ids, emails, index = _invited_index(db, bootcamp_id)
+    elif actor.role == UserRole.SUPER_ADMIN:
+        # Unscoped: every intake in one query, not one query per bootcamp.
+        ids, emails, index = _invited_index(db)
+    else:
+        raise NotFoundError("Select an intake to see its completed interviews.")
+
+    empty_stats = {
+        "total": 0,
+        "completed_today": 0,
+        "completed_this_week": 0,
+        "average_score": None,
+    }
+    if not ids and not emails:
+        return {"items": [], "stats": empty_stats}
+
+    interviews, _ = interviewer_ai.list_interviews(limit=_COMPLETED_FETCH_LIMIT)
+    matched = []
+    for interview in interviews:
+        if not is_completed(interview):
+            continue
+        external_id, email = _identity_of(interview)
+        if external_id in ids or (email and email.strip().lower() in emails):
+            matched.append(_hydrate(interview, index))
+
+    return {"items": matched, "stats": _completed_stats(matched)}
+
+
+def _completed_at(item: dict) -> datetime | None:
+    raw = item.get("completed_at") or item.get("updated_at") or item.get("created_at")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    # Their timestamps are not guaranteed to carry a timezone; treat a naive
+    # one as UTC rather than let the "today"/"this week" comparison below
+    # raise on comparing naive and aware datetimes.
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _completed_stats(items: list[dict]) -> dict:
+    """The stat-card row: computed in Python over an already-fetched list, not
+    a second query or a second external call."""
+    now = datetime.now(UTC)
+    week_ago = now - timedelta(days=7)
+
+    completed_today = 0
+    completed_this_week = 0
+    scores: list[float] = []
+
+    for item in items:
+        when = _completed_at(item)
+        if when is not None:
+            if when.date() == now.date():
+                completed_today += 1
+            if when >= week_ago:
+                completed_this_week += 1
+        score = extract_score(item)
+        if score is not None:
+            scores.append(score)
+
+    return {
+        "total": len(items),
+        "completed_today": completed_today,
+        "completed_this_week": completed_this_week,
+        "average_score": round(sum(scores) / len(scores), 1) if scores else None,
+    }
 
 
 def get_interview(db: Session, interview_id: int, actor: Profile) -> dict:
@@ -536,7 +669,13 @@ def candidate_score(db: Session, user: Profile) -> dict:
     empty = {"status": "not_invited", "score": None, "scale": 100, "completed_at": None}
 
     row = db.execute(
-        select(InterviewInvite, InterviewInviteBatch, Application.id)
+        select(
+            InterviewInvite,
+            InterviewInviteBatch,
+            Application.id,
+            Application.bootcamp_id,
+            Application.candidate_code,
+        )
         .join(InterviewInviteBatch, InterviewInvite.batch_id == InterviewInviteBatch.id)
         .join(Application, Application.id == InterviewInvite.application_id)
         .where(Application.profile_id == user.id)
@@ -545,7 +684,7 @@ def candidate_score(db: Session, user: Profile) -> dict:
     ).first()
     if row is None:
         return empty
-    invite, batch, application_id = row
+    invite, batch, application_id, bootcamp_id, candidate_code = row
 
     # Everything from here carries the deadline, so the portal can count down
     # to it rather than show a bare date.
@@ -597,14 +736,76 @@ def candidate_score(db: Session, user: Profile) -> dict:
         # Reporting "in progress" is honest; inventing a 0 is not.
         return {**base, "status": "in_progress"}
 
+    if invite.admin_notified_at is None:
+        # Detected here rather than by a background job: this backend has no
+        # scheduler and InterviewerAI sends no webhook, so "a candidate just
+        # finished" is only knowable when something asks their own status —
+        # which the candidate's own interview page already polls every 10s.
+        # Traded off honestly: an admin is notified the next time that poll
+        # runs after completion, not the instant it happens. Marked so a
+        # second poll does not notify a second time.
+        _notify_admins_of_completion(
+            db,
+            bootcamp_id=bootcamp_id,
+            candidate_name=user.full_name or user.email,
+            candidate_code=candidate_code,
+            application_id=application_id,
+            score=score,
+        )
+        invite.admin_notified_at = datetime.now(UTC)
+        db.flush()
+
     # A completed interview outranks the deadline: someone who finished in
     # time keeps their result even when the phase has since closed.
     return {
         **base,
         "status": "completed",
         "score": round(score, 1),
+        "passed": score >= PASS_THRESHOLD,
         "completed_at": best.get("completed_at") or best.get("updated_at"),
     }
+
+
+def _notify_admins_of_completion(
+    db: Session,
+    *,
+    bootcamp_id: uuid.UUID,
+    candidate_name: str,
+    candidate_code: str,
+    application_id: uuid.UUID,
+    score: float,
+) -> None:
+    """One notification per active admin assigned to the bootcamp, falling
+    back to active super admins if none are assigned — same fallback
+    `submit_deadline_explanation` uses, so an intake with nobody assigned
+    still reaches someone rather than notifying no one."""
+    admin_ids = list(
+        db.scalars(
+            select(Profile.id)
+            .join(BootcampAdmin, BootcampAdmin.profile_id == Profile.id)
+            .where(BootcampAdmin.bootcamp_id == bootcamp_id, Profile.is_active.is_(True))
+        )
+    )
+    if not admin_ids:
+        admin_ids = list(
+            db.scalars(
+                select(Profile.id).where(
+                    Profile.role == UserRole.SUPER_ADMIN, Profile.is_active.is_(True)
+                )
+            )
+        )
+
+    title = "AI interview completed"
+    body = f"{candidate_name} ({candidate_code}) finished their AI interview — score {score:.0f}/100."
+    for admin_id in admin_ids:
+        db.add(
+            Notification(
+                profile_id=admin_id,
+                application_id=application_id,
+                title=title,
+                body=body,
+            )
+        )
 
 
 _EXPLANATION_TEMPLATE = "interview_deadline_explanation"

@@ -46,6 +46,7 @@ import {
 import { useNotifications } from '@/features/notifications/use-notifications'
 import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
+import { relativeTime } from '@/lib/format'
 import { LOCKED_HINT, navForRole, ROLE_LABEL, type PortalNavItem } from '@/lib/portal-nav'
 import { UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -155,7 +156,10 @@ function PortalShell() {
               Website
             </Button>
 
-            {profile.role === UserRole.CANDIDATE && <NotificationBell />}
+            {/* Every signed-in role now has a notification source: candidates
+                on stage change, admins when a candidate in their bootcamp
+                completes an AI interview (2026-08-30). */}
+            <NotificationBell />
 
             <ThemeToggle />
 
@@ -304,18 +308,6 @@ function RegisterAction() {
 
 /* -------------------------------------------------------- notifications -- */
 
-function formatWhen(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const minutes = Math.round(diffMs / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.round(hours / 24)
-  if (days < 7) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
-}
-
 function NotificationBell() {
   const { items, unreadCount, markRead, markAllRead } = useNotifications()
 
@@ -357,7 +349,7 @@ function NotificationBell() {
 
         {items.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-            Nothing yet — you'll see updates here when your application moves.
+            Nothing yet — you'll see updates here as things happen.
           </p>
         ) : (
           <DropdownMenuGroup>
@@ -376,7 +368,7 @@ function NotificationBell() {
                   </span>
                   <span className="text-xs text-muted-foreground">{n.body}</span>
                   <span className="text-[0.68rem] text-muted-foreground/70">
-                    {formatWhen(n.created_at)}
+                    {relativeTime(n.created_at)}
                   </span>
                 </DropdownMenuItem>
               ))}

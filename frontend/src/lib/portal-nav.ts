@@ -117,6 +117,7 @@ const SUPER_ADMIN_NAV: PortalNavGroup[] = [
       { label: 'Bootcamps', href: '/super-admin/bootcamps', icon: Building2 },
       { label: 'Administrators', href: '/super-admin/admins', icon: ShieldCheck },
       { label: 'AI permissions', href: '/super-admin/permissions', icon: KeyRound },
+      { label: 'AI interviews', href: '/super-admin/ai-interviews', icon: BrainCircuit },
       { label: 'Programs', href: '/super-admin/programs', icon: GraduationCap },
     ],
   },
