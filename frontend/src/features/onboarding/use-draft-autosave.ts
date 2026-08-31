@@ -20,12 +20,20 @@ export function useDraftAutosave<T>({
   onRestore,
   localDelayMs = 1500,
   backendIntervalMs = 30_000,
+  disabled = false,
 }: {
   key: string
   value: T
   onRestore: (restored: T) => void
   localDelayMs?: number
   backendIntervalMs?: number
+  /**
+   * Makes the hook inert: no restore, no local or backend save. For a
+   * read-only view of an already-submitted form — the data on screen came
+   * from the server, and there is nothing to protect against an accidental
+   * reload of a page nobody is editing.
+   */
+  disabled?: boolean
 }) {
   const [savedAt, setSavedAt] = React.useState<number | null>(null)
   const restored = React.useRef(false)
@@ -35,7 +43,7 @@ export function useDraftAutosave<T>({
   // Restore once, before the first autosave can overwrite the draft with the
   // form's blank initial state.
   React.useEffect(() => {
-    if (restored.current) return
+    if (disabled || restored.current) return
     restored.current = true
     try {
       const raw = localStorage.getItem(key)
@@ -49,9 +57,10 @@ export function useDraftAutosave<T>({
     // component's own useState and is expected to be stable enough not to
     // need re-running this effect on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
+  }, [key, disabled])
 
   React.useEffect(() => {
+    if (disabled) return
     const timer = window.setTimeout(() => {
       try {
         localStorage.setItem(key, JSON.stringify(value))
@@ -64,14 +73,15 @@ export function useDraftAutosave<T>({
       }
     }, localDelayMs)
     return () => window.clearTimeout(timer)
-  }, [key, value, localDelayMs])
+  }, [key, value, localDelayMs, disabled])
 
   React.useEffect(() => {
+    if (disabled) return
     const interval = window.setInterval(() => {
       saveDraft(key, latestValue.current)
     }, backendIntervalMs)
     return () => window.clearInterval(interval)
-  }, [key, backendIntervalMs])
+  }, [key, backendIntervalMs, disabled])
 
   const clearDraft = React.useCallback(() => {
     localStorage.removeItem(key)
