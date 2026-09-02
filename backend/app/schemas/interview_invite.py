@@ -21,6 +21,16 @@ InviteCategory = Literal[
     "Instructor",
 ]
 
+# The question-difficulty ranges InterviewerAI accepts, verbatim. Documented
+# on their single-candidate invite endpoint only; verified 2026-09-01 that
+# their bulk worker honours the same key per row (a probe row sent
+# MEDIUM_TO_HARD came back as question_difficulty_range MEDIUM_TO_HARD).
+#
+# Not our own wording: sending anything outside these three is accepted by
+# their untyped body and then silently ignored, which would leave us showing
+# an admin a difficulty that was never applied.
+InviteDifficulty = Literal["EASY_TO_MEDIUM", "MEDIUM_TO_HARD", "EASY_TO_HARD"]
+
 
 class ManualInviteRow(BaseModel):
     """One recipient added by hand or from an uploaded file, rather than
@@ -44,6 +54,20 @@ class BulkInviteRequest(BaseModel):
     subject: str = Field(min_length=3, max_length=200)
     batch_name: str | None = Field(default=None, max_length=100)
     personalize: bool = True
+
+    question_difficulty: InviteDifficulty | None = None
+
+    # Optional, and bounded by the intake's INTERVIEW phase deadline rather
+    # than free-floating: an invite that outlived the phase it belongs to
+    # would be honoured by our own expiry check while the phase gate refused
+    # everything else. Omitted means "use the phase deadline", which is what
+    # every batch did before this field existed.
+    deadline_at: datetime | None = None
+
+    # Body of the covering email we send ourselves, with $candidate_name-style
+    # merge fields. None means no covering email — InterviewerAI's own
+    # credentials mail still goes out either way.
+    message: str | None = Field(default=None, max_length=20_000)
 
     application_ids: list[uuid.UUID] = Field(default_factory=list)
     manual_rows: list[ManualInviteRow] = Field(default_factory=list)
@@ -80,6 +104,8 @@ class InviteBatchOut(BaseModel):
     failed_count: int
     created_at: datetime
     last_polled_at: datetime | None
+    question_difficulty: str | None = None
+    deadline_at: datetime | None = None
 
 
 class InviteBatchDetail(InviteBatchOut):

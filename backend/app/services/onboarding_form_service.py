@@ -36,12 +36,6 @@ _ONBOARDING_STAGES = (ApplicationStage.FORM, ApplicationStage.ONBOARDED)
 _ADULT_BANK_FIELDS = ("bank_name", "account_title", "iban")
 _MINOR_WALLET_FIELDS = ("wallet_provider", "wallet_number")
 
-# TEMP TESTING FLAG — bypasses every Student's Folder gate: the Physical
-# Interview stage check, the sequential form lock, and the Documents Hub
-# unlock-after-4-forms check. Flip back to False to restore normal locking;
-# not meant to ship set to True.
-_TESTING_UNLOCK_ALL = True
-
 
 def assert_onboarding_unlocked(application: Application) -> None:
     """The Student's Folder gate: locked until Physical Interview is cleared.
@@ -50,8 +44,6 @@ def assert_onboarding_unlocked(application: Application) -> None:
     reasoning as RequiresApplication on the frontend: a locked tab is not a
     permissions boundary on its own.
     """
-    if _TESTING_UNLOCK_ALL:
-        return
     if application.stage not in _ONBOARDING_STAGES:
         raise ConflictError("Onboarding is not open yet for this application.")
 
@@ -74,8 +66,6 @@ def assert_in_order(form_type: OnboardingFormType, rows: dict) -> None:
     A REOPENED predecessor blocks this too — that is precisely what re-locks
     the downstream forms when an admin sends an earlier one back.
     """
-    if _TESTING_UNLOCK_ALL:
-        return
     for earlier in FORM_ORDER:
         if earlier == form_type:
             return
@@ -92,9 +82,6 @@ def unlocked_map(rows: dict) -> dict[OnboardingFormType, bool]:
     — this is the whole "reopening re-locks what follows" behaviour, derived
     rather than stored.
     """
-    if _TESTING_UNLOCK_ALL:
-        return {form_type: True for form_type in FORM_ORDER}
-
     unlocked: dict[OnboardingFormType, bool] = {}
     blocked = False
     for form_type in FORM_ORDER:
@@ -108,8 +95,6 @@ def unlocked_map(rows: dict) -> dict[OnboardingFormType, bool]:
 def hub_unlocked(rows: dict) -> bool:
     """The Documents Hub opens only once all 4 forms are SUBMITTED — a form
     sent back for correction closes it again until resubmitted."""
-    if _TESTING_UNLOCK_ALL:
-        return True
     return all(
         (row := rows.get(form_type)) is not None and row.status == OnboardingFormStatus.SUBMITTED
         for form_type in FORM_ORDER

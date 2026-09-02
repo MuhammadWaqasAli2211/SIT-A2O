@@ -62,13 +62,31 @@ def send_bulk_invite(
     rows: list[dict[str, str]],
     batch_name: str | None = None,
     personalize: bool = True,
+    question_difficulty: str | None = None,
 ) -> dict:
     """POST /bulk-invites. Returns the batch object from the response.
 
     Validation failures are all-or-nothing on InterviewerAI's side — a single
     bad row refuses the whole batch, none of it sent — so a 400 here means
     nothing went out, not a partial send.
+
+    `question_difficulty` is stamped onto every row as `questionDifficulty`.
+    Their spec documents that key on `/candidates/{id}/invite` only and says
+    nothing about it here — the documented row shape is
+    `{name, email, cnic, category, course_status}`. It is sent anyway because
+    it was **verified working**: a probe batch on 2026-09-01 carrying
+    `questionDifficulty: MEDIUM_TO_HARD` produced a candidate whose
+    `question_difficulty_range` read back `MEDIUM_TO_HARD`. Their request body
+    is `additionalProperties: true`, so the 200 alone proved nothing — the
+    read-back is what settled it.
+
+    Per row rather than top-level because that is the placement that was
+    actually tested; a top-level key was never confirmed and would be
+    silently ignored if wrong.
     """
+    if question_difficulty:
+        rows = [{**row, "questionDifficulty": question_difficulty} for row in rows]
+
     body: dict = {"subject": subject, "personalize": personalize, "rows": rows}
     if batch_name:
         body["batch_name"] = batch_name

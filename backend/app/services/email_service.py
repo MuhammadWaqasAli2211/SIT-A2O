@@ -58,6 +58,19 @@ def render(template: str, context: dict[str, str]) -> str:
     )
 
 
+def render_partial(template: str, context: dict[str, str]) -> str:
+    """Substitute only the keys given, leaving every other placeholder intact.
+
+    The same `string.Template` mechanism as `render()`, not a second one — the
+    difference is that `render()` blanks any known merge field the context is
+    missing, which is right for the final pass and wrong for an earlier one.
+    This exists for values that are the same for a whole batch (an interview
+    deadline, say): substituted once up front, with the per-candidate fields
+    left for `render()` to fill in per recipient.
+    """
+    return Template(template).safe_substitute(context)
+
+
 def _plain_text(html_body: str) -> str:
     """A readable text/plain fallback, since we only ever author HTML."""
     text = re.sub(r"<br\s*/?>|</p>|</div>|</h[1-6]>", "\n", html_body, flags=re.I)

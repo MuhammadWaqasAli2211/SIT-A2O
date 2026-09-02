@@ -56,6 +56,19 @@ class InterviewInviteBatch(Base):
     # not a live read: see the migration for why.
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # InterviewerAI's `questionDifficulty` for this batch: EASY_TO_MEDIUM,
+    # MEDIUM_TO_HARD or EASY_TO_HARD. Undocumented on their bulk endpoint —
+    # only on the single-candidate invite — but verified 2026-09-01 to be
+    # honoured per row by the shared worker, so it is sent in bulk and
+    # recorded here. Their batch object does not echo it back, which is why
+    # this column is the only record of what was asked for.
+    question_difficulty: Mapped[str | None] = mapped_column(Text)
+
+    # The covering email we send ourselves. InterviewerAI's own mail carries
+    # the credentials and is not templatable by us; this one carries the
+    # deadline and difficulty, neither of which their mail knows about.
+    message: Mapped[str | None] = mapped_column(Text)
+
     @property
     def is_expired(self) -> bool:
         """Past its deadline. A batch sent before deadlines were recorded has
