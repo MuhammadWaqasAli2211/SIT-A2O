@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/table'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { emailApi } from '@/features/admin/api'
+import { MERGE_FIELDS } from '@/features/admin/email-merge-fields'
 import {
   AsyncSection,
   BootcampSwitcher,
@@ -98,13 +99,8 @@ const TEMPLATES = [
   },
 ] as const
 
-const MERGE_FIELDS = [
-  '$candidate_name',
-  '$candidate_code',
-  '$program',
-  '$bootcamp',
-  '$email',
-] as const
+// Shared with the interview-invite composer rather than kept private here —
+// see features/admin/email-merge-fields.ts.
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString(undefined, {
