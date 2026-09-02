@@ -278,6 +278,36 @@ export const InviteCategory = {
 } as const
 export type InviteCategory = (typeof InviteCategory)[keyof typeof InviteCategory]
 
+/**
+ * InterviewerAI's question-difficulty ranges, verbatim.
+ *
+ * Verified against their live API on 2026-09-01: documented only on their
+ * single-candidate invite endpoint, but their bulk worker honours the same
+ * `questionDifficulty` key per row — a probe batch sent MEDIUM_TO_HARD and the
+ * created candidate read back `question_difficulty_range: "MEDIUM_TO_HARD"`.
+ *
+ * These three keys are theirs and cannot be renamed here. Mirrors
+ * `InviteDifficulty` in backend/app/schemas/interview_invite.py.
+ */
+export const InviteDifficulty = {
+  EASY_TO_MEDIUM: 'EASY_TO_MEDIUM',
+  MEDIUM_TO_HARD: 'MEDIUM_TO_HARD',
+  EASY_TO_HARD: 'EASY_TO_HARD',
+} as const
+export type InviteDifficulty = (typeof InviteDifficulty)[keyof typeof InviteDifficulty]
+
+export const INVITE_DIFFICULTY_LABEL: Record<InviteDifficulty, string> = {
+  EASY_TO_MEDIUM: 'Easy to Medium',
+  MEDIUM_TO_HARD: 'Medium to Hard',
+  EASY_TO_HARD: 'Easy to Hard',
+}
+
+export const INVITE_DIFFICULTY_HINT: Record<InviteDifficulty, string> = {
+  EASY_TO_MEDIUM: 'Gentler screening — suits a first intake or a fresh cohort.',
+  MEDIUM_TO_HARD: 'Tighter screening — suits a competitive intake.',
+  EASY_TO_HARD: 'Full range — the widest spread of question difficulty.',
+}
+
 export type InviteBatchStatus = 'PENDING' | 'SENDING' | 'COMPLETED' | 'FAILED'
 export type InviteStatus = 'PENDING' | 'SENT' | 'FAILED'
 
@@ -304,6 +334,9 @@ export interface InviteBatch {
   failed_count: number
   created_at: string
   last_polled_at: string | null
+  question_difficulty: InviteDifficulty | null
+  /** Ours, not theirs — their API has no invite-deadline concept at all. */
+  deadline_at: string | null
 }
 
 export interface InviteBatchDetail extends InviteBatch {
