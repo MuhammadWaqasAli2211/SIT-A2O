@@ -305,10 +305,19 @@
  * guessed): the Background Verification Form printed as 3 pages instead of
  * 1, the Employment Application Form as 5 instead of 2, Half Nama as 3
  * instead of 2.
+ *
+ * margin: 0, not 10mm — Chromium only reserves room for its own print
+ * header/footer (date, page title, URL) inside the @page margin box; a
+ * zero margin leaves it nowhere to draw them, which is what actually
+ * suppresses that browser chrome (the "Headers and footers" print-dialog
+ * checkbox is not something a page can toggle from CSS). The 10mm inset the
+ * zoom ratios below were calibrated against still exists — it moved to
+ * `print:p-[10mm]` on the layout's <main>, so the effective printable width
+ * (190mm) is unchanged.
  */
 @page {
   size: A4;
-  margin: 10mm;
+  margin: 0;
 }
 
 @media print {
