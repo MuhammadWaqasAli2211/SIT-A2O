@@ -225,7 +225,7 @@ function PortalShell() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8 print:p-0">
+        <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8 print:p-[10mm]">
           <div className="mx-auto max-w-7xl">
             {/* Keyed on the path so a page that failed does not leave its
                 fallback showing over every route the user visits next — the
