@@ -31,7 +31,13 @@ import { candidateApi } from '@/features/candidate/api'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
 import { isAdult } from '@/lib/age'
-import { ONBOARDING_FORM_BY_SLUG, ONBOARDING_FORM_LABEL, OnboardingFormType } from '@/lib/types'
+import {
+  ONBOARDING_FORM_BY_SLUG,
+  ONBOARDING_FORM_LABEL,
+  ONBOARDING_FORM_ORDER,
+  ONBOARDING_FORM_SLUG,
+  OnboardingFormType,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export default function OnboardingFormPage() {
@@ -46,12 +52,14 @@ export default function OnboardingFormPage() {
     <>
       <Link
         to="/dashboard/documents"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline"
+        className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline print:hidden"
       >
         <ArrowLeft className="size-3.5" />
         Back to Student's Folder
       </Link>
-      <PageHeader title={ONBOARDING_FORM_LABEL[formType]} />
+      <div className="print:hidden">
+        <PageHeader title={ONBOARDING_FORM_LABEL[formType]} />
+      </div>
       {application && (
         <FormBody
           applicationId={application.id}
@@ -91,7 +99,9 @@ function FormBody({
         if (!row?.unlocked) {
           return (
             <div className="flex flex-col gap-6">
-              <OnboardingStepIndicator rows={rows.data} active={formType} />
+              <div className="print:hidden">
+                <OnboardingStepIndicator rows={rows.data} active={formType} />
+              </div>
               <EmptyState
                 icon={Lock}
                 title="Not available yet"
@@ -114,16 +124,25 @@ function FormBody({
           if (await submit.run(draft)) {
             toast.success(`${ONBOARDING_FORM_LABEL[formType]} submitted`)
             await rows.refetch()
-            navigate('/dashboard/documents')
+            // Advance in place to the next form in the sequence rather than
+            // bouncing back out to the folder screen — only the last form
+            // (nothing left to advance to) still returns there.
+            const next = ONBOARDING_FORM_ORDER[ONBOARDING_FORM_ORDER.indexOf(formType) + 1]
+            navigate(
+              next ? `/dashboard/documents/forms/${ONBOARDING_FORM_SLUG[next]}` : '/dashboard/documents',
+              { replace: true },
+            )
           }
         }
 
         return (
           <div className="flex flex-col gap-6">
-            <OnboardingStepIndicator rows={rows.data} active={formType} />
+            <div className="print:hidden">
+              <OnboardingStepIndicator rows={rows.data} active={formType} />
+            </div>
 
             <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-5 py-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-5 py-3.5 print:hidden">
                 <span className="text-sm font-medium">{ONBOARDING_FORM_LABEL[formType]}</span>
                 <span
                   className={cn(
@@ -138,7 +157,7 @@ function FormBody({
               </div>
 
               {reopened && (
-                <Alert>
+                <Alert className="print:hidden">
                   <AlertTriangle className="size-4" />
                   <AlertTitle>Sent back for correction</AlertTitle>
                   <AlertDescription>
@@ -147,14 +166,14 @@ function FormBody({
                 </Alert>
               )}
               {submit.error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="print:hidden">
                   <AlertTriangle className="size-4" />
                   <AlertDescription>{submit.error}</AlertDescription>
                 </Alert>
               )}
 
-              <Card className="border-border/80 shadow-sm">
-                <CardContent className="p-5 sm:p-8">
+              <Card className="border-border/80 shadow-sm print:border-0 print:bg-transparent print:shadow-none print:ring-0">
+                <CardContent className="p-5 sm:p-8 print:p-0">
                   <RenderForm
                     formType={formType}
                     initialData={initialData}
