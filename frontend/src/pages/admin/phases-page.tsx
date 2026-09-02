@@ -59,6 +59,23 @@ function effectivelyOpen(phase: Phase, now = Date.now()): boolean {
   return true
 }
 
+/**
+ * Why a flagged-open phase is nonetheless closed right now — distinct from
+ * `effectivelyOpen`'s plain boolean because "hasn't started yet" and "its
+ * deadline passed" are different situations an admin needs to tell apart,
+ * not one generic "expired" state.
+ */
+function closedReason(phase: Phase, now = Date.now()): 'not-yet-open' | 'window-passed' | null {
+  if (!phase.is_open) return null
+  if (phase.opens_at && now < new Date(phase.opens_at).getTime()) return 'not-yet-open'
+  if (phase.deadline_at && now > new Date(phase.deadline_at).getTime()) return 'window-passed'
+  return null
+}
+
+function formatMoment(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 export default function AdminPhasesPage() {
   const { selected, selectedId, refresh } = useBootcamp()
 
@@ -146,7 +163,7 @@ function PhaseCard({
     opensAt !== toLocalInput(phase.opens_at) || deadlineAt !== toLocalInput(phase.deadline_at)
 
   const open = effectivelyOpen(phase)
-  const expired = phase.is_open && !open
+  const reason = closedReason(phase)
 
   const save = useMutation(async () => {
     // Only the changed keys are sent, so editing the open date cannot clear
@@ -203,7 +220,15 @@ function PhaseCard({
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
-        {expired && (
+        {reason === 'not-yet-open' && phase.opens_at && (
+          <Alert>
+            <AlertTriangle className="size-4" />
+            <AlertDescription>
+              This phase hasn't opened yet — opens at {formatMoment(phase.opens_at)}.
+            </AlertDescription>
+          </Alert>
+        )}
+        {reason === 'window-passed' && (
           <Alert>
             <AlertTriangle className="size-4" />
             <AlertDescription>
