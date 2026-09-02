@@ -19,7 +19,15 @@ from app.models.enums import ApplicationStage, InviteBatchStatus, InviteStatus, 
 from app.models.interview_invite import InterviewInvite, InterviewInviteBatch
 from app.models.user import Profile
 from app.schemas.interview_invite import BulkInviteRequest, ManualInviteRow
-from app.services import application_service, audit_service, bootcamp_service
+from app.services import application_service, audit_service, bootcamp_service, email_service
+
+# Their three `questionDifficulty` values, in the wording a candidate should
+# read. The keys are InterviewerAI's, verbatim — see InviteDifficulty.
+DIFFICULTY_LABEL: dict[str, str] = {
+    "EASY_TO_MEDIUM": "Easy to Medium",
+    "MEDIUM_TO_HARD": "Medium to Hard",
+    "EASY_TO_HARD": "Easy to Hard",
+}
 
 # Our program slugs don't split the same way InterviewerAI's categories do —
 # Web and Mobile Development is one category on their side, two programs on
@@ -57,6 +65,36 @@ def _batch_status_from(raw: str | None, fallback: InviteBatchStatus) -> InviteBa
         return InviteBatchStatus(upper)
     except ValueError:
         return fallback
+
+
+def _resolve_deadline(chosen: datetime | None, phase_deadline: datetime) -> datetime:
+    """The batch's own deadline, bounded by the phase it belongs to.
+
+    Nothing is sent to InterviewerAI here: verified 2026-09-01 that their API
+    has no invite-deadline concept at all — not date-and-time, not date-only.
+    Their entire spec mentions no `deadline`/`expires_at`/`due_date`, and the
+    batch object they return carries none. This is *our* deadline, enforced by
+    our own expiry check and told to the candidate in our covering email.
+
+    Bounded rather than free: an invite outliving its phase would still pass
+    `is_expired` while `assert_phase_open` refused everything around it, which
+    is a contradiction an admin would reasonably read as a bug. Omitted means
+    the phase deadline, which is what every batch used before this was
+    selectable.
+    """
+    if chosen is None:
+        return phase_deadline
+
+    at = chosen if chosen.tzinfo else chosen.replace(tzinfo=UTC)
+    if at <= datetime.now(UTC):
+        raise ConflictError("The interview deadline must be in the future.")
+    if at > phase_deadline:
+        raise ConflictError(
+            "The interview deadline cannot be later than the intake's INTERVIEW "
+            f"phase deadline ({phase_deadline:%d %b %Y %H:%M} UTC). Extend the "
+            "phase on the Phases screen first."
+        )
+    return at
 
 
 def _category_for(program_slug: str) -> str:
@@ -107,6 +145,8 @@ def send_bulk(
             "The interview phase has no deadline set. Add one on the Phases "
             "screen before sending invites — it is what expires the interview link."
         )
+
+    deadline_at = _resolve_deadline(payload.deadline_at, phase.deadline_at)
 
     applications: list[Application] = []
     if payload.application_ids:
@@ -216,6 +256,7 @@ def send_bulk(
         rows=rows,
         batch_name=payload.batch_name,
         personalize=payload.personalize,
+        question_difficulty=payload.question_difficulty,
     )
 
     batch = InterviewInviteBatch(
@@ -229,7 +270,9 @@ def send_bulk(
         failed_count=external.get("failed_count", 0),
         created_by=actor.id,
         last_polled_at=datetime.now(UTC),
-        deadline_at=phase.deadline_at,
+        deadline_at=deadline_at,
+        question_difficulty=payload.question_difficulty,
+        message=payload.message,
     )
     db.add(batch)
     db.flush()
@@ -259,6 +302,14 @@ def send_bulk(
             except ConflictError:
                 continue
 
+    _send_covering_email(
+        db,
+        bootcamp_id=bootcamp_id,
+        application_ids=[a.id for a in applications],
+        batch=batch,
+        actor=actor,
+    )
+
     audit_service.record(
         db,
         actor=actor,
@@ -274,6 +325,72 @@ def send_bulk(
     )
     db.flush()
     return batch
+
+
+def _send_covering_email(
+    db: Session,
+    *,
+    bootcamp_id: uuid.UUID,
+    application_ids: list[uuid.UUID],
+    batch: InterviewInviteBatch,
+    actor: Profile,
+) -> None:
+    """Send our own email alongside InterviewerAI's credentials mail.
+
+    Why a second email at all: InterviewerAI composes and sends the one
+    carrying the login credentials, and their bulk endpoint takes a `subject`
+    and nothing else — there is no body we can supply. The deadline in
+    particular *cannot* come from them, because their API has no deadline
+    concept at all (verified 2026-09-01); it is ours and only we can state it.
+
+    Applicants only. A manual row — an Instructor, typically — has no
+    application, and the whole admin email path is addressed by application id
+    precisely so an admin cannot mail outside their own intake. Rather than
+    open a second path that takes raw addresses, manual rows get
+    InterviewerAI's mail and nothing from us.
+
+    Best-effort by design: the invites have already gone out and cannot be
+    recalled, so a mail failure is logged per recipient by the shared dispatch
+    and must never roll the batch back.
+    """
+    if not batch.message or not application_ids:
+        return
+
+    # Batch-level fields are substituted here, once, before the per-candidate
+    # pass — they are the same for every recipient, so they do not belong in
+    # the per-recipient context. `safe_substitute` leaves $candidate_name and
+    # friends untouched for email_service.render() to fill in downstream.
+    body = email_service.render_partial(
+        batch.message,
+        {
+            "interview_deadline": _format_deadline(batch.deadline_at),
+            "interview_difficulty": DIFFICULTY_LABEL.get(
+                batch.question_difficulty or "", "Standard"
+            ),
+        },
+    )
+
+    try:
+        email_service.send_to_applications(
+            db,
+            bootcamp_id,
+            application_ids=application_ids,
+            subject=batch.subject,
+            body_html=body,
+            template="ai_interview_invite",
+            actor=actor,
+        )
+    except AppError:
+        # Already-sent invites outrank a covering email that did not go.
+        return
+
+
+def _format_deadline(deadline: datetime | None) -> str:
+    """Date *and* time, spelled out. The time half is the whole point: a
+    candidate told only the date will assume they have until midnight."""
+    if deadline is None:
+        return "the date in your invitation email"
+    return f"{deadline:%d %B %Y} at {deadline:%H:%M} UTC"
 
 
 def refresh_batch(db: Session, batch_id: uuid.UUID, actor: Profile) -> InterviewInviteBatch:
