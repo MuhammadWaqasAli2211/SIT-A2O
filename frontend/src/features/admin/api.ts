@@ -32,6 +32,7 @@ import type {
   InviteBatch,
   InviteBatchDetail,
   InviteCategory,
+  InviteDifficulty,
   KeyScopes,
   OnboardingCandidateSummary,
   OnboardingDocumentLink,
@@ -437,6 +438,11 @@ export const interviewInviteApi = {
       subject: string
       batch_name?: string
       personalize?: boolean
+      question_difficulty?: InviteDifficulty
+      /** ISO instant. Ours to enforce — InterviewerAI has no deadline field. */
+      deadline_at?: string
+      /** Covering-email body, with $candidate_name-style merge fields. */
+      message?: string
       application_ids?: string[]
       manual_rows?: ManualInviteRow[]
       advance_stage?: boolean
