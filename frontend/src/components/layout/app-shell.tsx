@@ -1,6 +1,7 @@
-import { GraduationCap, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
 
+import { BRAND_ACCENT, BRAND_PRIMARY, BrandMark } from '@/features/marketing/brand'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -18,8 +19,12 @@ export function AppShell() {
       <header className="border-b">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <GraduationCap className="size-5 text-primary" />
-            <span className="font-semibold">Saylani Bootcamp</span>
+            <span className="grid size-6 place-items-center text-primary">
+              <BrandMark />
+            </span>
+            <span className="font-semibold">
+              {BRAND_PRIMARY} <span className="text-primary">{BRAND_ACCENT}</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-4">
