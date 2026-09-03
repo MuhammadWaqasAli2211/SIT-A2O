@@ -32,10 +32,15 @@ def _is_duplicate_application(exc: IntegrityError) -> bool:
     return constraint == _DUPLICATE_APPLICATION_CONSTRAINT
 
 
-# The two stored stages that render as the single "Interview" node.
-_INTERVIEW_STAGES = (
+# Stages from which a REJECTED move means the candidate's selection is being
+# reversed, not merely recorded for the first time — see the is_selected
+# reset below. PHYSICAL_INTERVIEW belongs here too: is_selected is set True
+# on *entering* that stage (below), so a rejection out of it must flip it
+# back, the same as falling at either interview round does.
+_SELECTION_STAGES = (
     ApplicationStage.INTERVIEW_SCHEDULED,
     ApplicationStage.AI_INTERVIEWED,
+    ApplicationStage.PHYSICAL_INTERVIEW,
 )
 
 
@@ -347,7 +352,7 @@ def advance_stage(
         # Only record a verdict when the interview is the round they fell at.
         # Somebody rejected later was still selected, and overwriting that
         # would lose which gate actually stopped them.
-        if previous in _INTERVIEW_STAGES:
+        if previous in _SELECTION_STAGES:
             application.is_selected = False
 
     db.add(
