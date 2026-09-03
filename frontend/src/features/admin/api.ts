@@ -41,6 +41,8 @@ import type {
   OnboardingFormSubmission,
   Page,
   PhaseType,
+  PhysicalInterviewBatch,
+  PhysicalInterviewBatchDetail,
   PlatformStats,
   Profile,
   Program,
@@ -459,6 +461,47 @@ export const interviewInviteApi = {
 
   async refresh(batchId: string) {
     const { data } = await api.post<InviteBatchDetail>(`/interview-invites/${batchId}/refresh`)
+    return data
+  },
+}
+
+export const physicalInterviewApi = {
+  listForBootcamp: (bootcampId: string) =>
+    get<PhysicalInterviewBatch[]>(`/bootcamps/${bootcampId}/physical-interviews`),
+
+  async sendBulk(
+    bootcampId: string,
+    payload: {
+      venue: string
+      /** YYYY-MM-DD. */
+      interview_date: string
+      /** HH:mm, optional — a batch may cover a whole day rather than one slot. */
+      start_time?: string
+      /** ISO instant. The deadline for recording a result, not for attending. */
+      deadline_at: string
+      subject: string
+      /** Covering email, with $venue/$interview_date/$interview_day/
+       * $interview_time/$deadline plus the usual $candidate_name-style
+       * merge fields. Required — there is no second channel telling the
+       * candidate where to go, unlike the AI-invite's credentials mail. */
+      message: string
+      application_ids: string[]
+    },
+  ) {
+    const { data } = await api.post<PhysicalInterviewBatchDetail>(
+      `/bootcamps/${bootcampId}/physical-interviews`,
+      payload,
+    )
+    return data
+  },
+
+  detail: (batchId: string) => get<PhysicalInterviewBatchDetail>(`/physical-interviews/${batchId}`),
+
+  async recordResult(inviteId: string, payload: { result: 'SELECTED' | 'REJECTED'; rejection_note?: string }) {
+    const { data } = await api.post<PhysicalInterviewBatchDetail>(
+      `/physical-interviews/invites/${inviteId}/result`,
+      payload,
+    )
     return data
   },
 }

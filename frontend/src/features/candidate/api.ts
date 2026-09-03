@@ -11,6 +11,7 @@
 import { api } from '@/lib/api-client'
 import type {
   ApplicationDetail,
+  CandidatePhysicalInterview,
   CandidateScore,
   InterviewRow,
   OnboardingDocumentLink,
@@ -74,6 +75,13 @@ export const candidateApi = {
   async explainMissedDeadline(reason: string) {
     await api.post('/me/ai-interview/explanation', { reason })
   },
+
+  /**
+   * The candidate's own latest Physical Interview invite — venue, date,
+   * time, and the outcome once one is recorded. Not reachable until the AI
+   * Interview has been cleared.
+   */
+  myPhysicalInterview: () => get<CandidatePhysicalInterview>('/me/physical-interview'),
 
   /* ----------------------------------------------- onboarding: forms hub -- */
 
