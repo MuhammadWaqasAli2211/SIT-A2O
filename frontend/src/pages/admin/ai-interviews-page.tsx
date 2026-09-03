@@ -46,6 +46,7 @@ import {
   BootcampSwitcher,
   NoBootcampSelected,
 } from '@/features/admin/components'
+import { AnnounceResultsControl } from '@/features/ai-interview/announce-control'
 import { useAiPermissions } from '@/features/ai-interview/use-permissions'
 import { CompletedInterviewsPanel } from '@/features/ai-interview/completed-interviews'
 import { EvidenceDialog } from '@/features/ai-interview/report-view'
@@ -82,7 +83,12 @@ export default function AdminAiInterviewsPage() {
       <PageHeader
         title="AI interviews"
         description="Results, evidence and reinterview decisions from InterviewerAI."
-        actions={<BootcampSwitcher />}
+        actions={
+          <>
+            {selectedId && <AnnounceResultsControl bootcampId={selectedId} />}
+            <BootcampSwitcher />
+          </>
+        }
       />
 
       {!selectedId ? (
