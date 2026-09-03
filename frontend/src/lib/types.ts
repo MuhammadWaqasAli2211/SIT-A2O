@@ -350,6 +350,74 @@ export const INVITE_BATCH_STATUS_LABEL: Record<InviteBatchStatus, string> = {
   FAILED: 'Failed',
 }
 
+/* --------------------------------------------------------- Physical Interview --
+ * Bulk invite (venue/date/time), and the in-person result an admin records
+ * afterwards. Deliberately not the interviews.ts types above — same
+ * reasoning as the backend migration: that table serves a different, earlier
+ * round. Mirrors backend/app/schemas/physical_interview.py.
+ */
+
+export const PhysicalInterviewResult = {
+  SELECTED: 'SELECTED',
+  REJECTED: 'REJECTED',
+} as const
+export type PhysicalInterviewResult =
+  (typeof PhysicalInterviewResult)[keyof typeof PhysicalInterviewResult]
+
+/** Derived at read time, never stored — see PhysicalInterviewBatch.is_expired
+ * on the backend. "missed" only appears once a batch's deadline has passed
+ * with no result recorded. */
+export type PhysicalInterviewRowStatus = 'pending' | 'selected' | 'rejected' | 'missed'
+
+export interface PhysicalInterviewInviteRow {
+  id: string
+  application_id: string
+  candidate_code: string
+  candidate_name: string | null
+  sent_at: string | null
+  send_failed: boolean
+  result: PhysicalInterviewResult | null
+  /** Admin's own record only, never shown to the candidate. */
+  rejection_note: string | null
+  decided_at: string | null
+  status: PhysicalInterviewRowStatus
+}
+
+export interface PhysicalInterviewBatch {
+  id: string
+  bootcamp_id: string
+  venue: string
+  interview_date: string
+  start_time: string | null
+  deadline_at: string
+  subject: string
+  message: string | null
+  created_at: string
+  invite_count: number
+}
+
+export interface PhysicalInterviewBatchDetail extends PhysicalInterviewBatch {
+  invites: PhysicalInterviewInviteRow[]
+}
+
+export interface PhysicalInterviewFunnel {
+  invited: number
+  selected: number
+  rejected: number
+  pending: number
+  missed: number
+}
+
+export type CandidatePhysicalInterviewStatus = 'not_invited' | 'invited' | 'selected' | 'rejected' | 'missed'
+
+export interface CandidatePhysicalInterview {
+  status: CandidatePhysicalInterviewStatus
+  venue: string | null
+  interview_date: string | null
+  start_time: string | null
+  deadline_at: string | null
+}
+
 /* ------------------------------------------- AI Interviewer: results side --
  * The invite types above cover *sending*. These cover reading back what the
  * external service produced — scores, evidence, reinterview requests.
@@ -412,6 +480,8 @@ export interface CompletedInterviewStats {
   completed_today: number
   completed_this_week: number
   average_score: number | null
+  passed: number
+  failed: number
 }
 
 export interface CompletedInterviewsPage {
@@ -558,6 +628,7 @@ export interface BootcampStats {
   by_program: ProgramCount[]
   applications_over_time: DailyCount[]
   upcoming_interviews: UpcomingInterview[]
+  physical_interview_funnel: PhysicalInterviewFunnel
 }
 
 export interface CityCount {
