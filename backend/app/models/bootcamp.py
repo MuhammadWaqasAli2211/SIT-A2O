@@ -150,6 +150,19 @@ class BootcampPhase(Base, TimestampMixin):
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # When this phase's results were made visible to candidates; null means
+    # hidden. Only the INTERVIEW phase uses it today — that is where the AI
+    # interview lives, and where the deadline the announce action is gated
+    # behind already sits.
+    results_announced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    results_announced_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
+    )
+
+    @property
+    def results_announced(self) -> bool:
+        return self.results_announced_at is not None
+
     bootcamp: Mapped[Bootcamp] = relationship(back_populates="phases")
 
     def __repr__(self) -> str:
