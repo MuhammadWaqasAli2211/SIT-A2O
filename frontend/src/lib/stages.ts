@@ -105,6 +105,28 @@ export const JOURNEY_STEPS: readonly JourneyStep[] = [
 export const TOTAL_STEPS = JOURNEY_STEPS.length
 
 /**
+ * The step count as a word, for headings like "Five stages, clearly defined".
+ *
+ * Derived rather than typed out, because "Four stages" outliving a five-stage
+ * pipeline is exactly what happened here once already: the marketing pages
+ * advertised a four-step process for as long as the retired `ADMISSION_STEPS`
+ * data survived beside this one. A heading that counts itself cannot drift.
+ *
+ * Falls back to the digits outside the range a spelled-out number reads well
+ * in — a journey with twelve steps has a bigger problem than its heading.
+ */
+const NUMBER_WORD: Record<number, string> = {
+  3: 'Three',
+  4: 'Four',
+  5: 'Five',
+  6: 'Six',
+  7: 'Seven',
+  8: 'Eight',
+}
+
+export const TOTAL_STEPS_WORD = NUMBER_WORD[TOTAL_STEPS] ?? String(TOTAL_STEPS)
+
+/**
  * Which step a stored stage belongs to, or -1 for REJECTED.
  *
  * -1 rather than undefined so callers can compare numerically without a null
