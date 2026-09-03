@@ -67,6 +67,8 @@ def test_stats_on_an_empty_list():
         "completed_today": 0,
         "completed_this_week": 0,
         "average_score": None,
+        "passed": 0,
+        "failed": 0,
     }
 
 
@@ -112,6 +114,20 @@ def test_average_score_ignores_items_with_no_recognisable_score():
         {"completed_at": now},  # no score at all — must not become a 0
     ]
     assert _completed_stats(items)["average_score"] == 70.0
+
+
+def test_passed_and_failed_split_on_the_50_point_threshold():
+    now = iso(datetime.now(UTC))
+    items = [
+        {"completed_at": now, "overall_score": 50},  # exactly at threshold: passes
+        {"completed_at": now, "overall_score": 49.9},
+        {"completed_at": now, "overall_score": 90},
+        {"completed_at": now},  # no score — counted in total, in neither bucket
+    ]
+    stats = _completed_stats(items)
+    assert stats["total"] == 4
+    assert stats["passed"] == 2
+    assert stats["failed"] == 1
 
 
 def test_average_score_is_none_when_nothing_has_a_score():
