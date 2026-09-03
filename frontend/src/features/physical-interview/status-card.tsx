@@ -17,7 +17,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { candidateApi } from '@/features/candidate/api'
-import { useAsync } from '@/hooks/use-async'
+import { useLiveResource } from '@/features/live/use-live-resource'
 import { cn } from '@/lib/utils'
 
 function formatDate(iso: string) {
@@ -30,7 +30,15 @@ function formatDate(iso: string) {
 }
 
 export function PhysicalInterviewCard() {
-  const { data, initialLoading } = useAsync(() => candidateApi.myPhysicalInterview(), [])
+  // Polled, not fetched once: a Physical Interview result is recorded by an
+  // admin while the candidate may already have this page open, and unlike the
+  // AI round there is no announce step to wait for — recording it is the
+  // reveal. Same cadence as AiScoreCard.
+  const { data, initialLoading } = useLiveResource(
+    () => candidateApi.myPhysicalInterview(),
+    [],
+    { activeMs: 10_000, hiddenMs: 60_000 },
+  )
 
   if (initialLoading) return <Skeleton className="h-40 w-full rounded-xl" />
 
