@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from app.models.enums import ApplicationStage, BootcampStatus, InterviewStatus
+from app.schemas.physical_interview import PhysicalInterviewFunnel
 
 
 class StageCount(BaseModel):
@@ -64,6 +65,9 @@ class BootcampStats(BaseModel):
     by_program: list[ProgramCount] = Field(default_factory=list)
     applications_over_time: list[DailyCount] = Field(default_factory=list)
     upcoming_interviews: list[UpcomingInterview] = Field(default_factory=list)
+    physical_interview_funnel: PhysicalInterviewFunnel = Field(
+        default_factory=PhysicalInterviewFunnel
+    )
 
 
 class CityCount(BaseModel):

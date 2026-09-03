@@ -36,7 +36,7 @@ from app.schemas.dashboard import (
     StageCount,
     UpcomingInterview,
 )
-from app.services import bootcamp_service
+from app.services import bootcamp_service, physical_interview_service
 
 _TREND_DAYS = 30
 _UPCOMING_LIMIT = 8
@@ -180,6 +180,12 @@ def bootcamp_stats(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> Bootc
         by_stage=_stage_breakdown(db, scoped),
         by_program=_program_breakdown(db, scoped),
         applications_over_time=[DailyCount(day=day, count=count) for day, count in trend_rows],
+        # A pure DB aggregate (see funnel_stats), not an external call — safe
+        # to fold into this already-optimised round trip. The AI-interview
+        # side of the funnel is not: it costs an InterviewerAI HTTP call, so
+        # it stays its own separate, lazily-fetched widget instead of adding
+        # that cost to every dashboard load — see the 2026-08-29 fix above.
+        physical_interview_funnel=physical_interview_service.funnel_stats(db, bootcamp_id, actor),
         upcoming_interviews=[
             UpcomingInterview(
                 id=interview.id,
