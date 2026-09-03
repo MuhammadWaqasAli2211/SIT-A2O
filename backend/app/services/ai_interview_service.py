@@ -38,13 +38,21 @@ from app.core.exceptions import (
 )
 from app.integrations import interviewer_ai
 from app.models.application import Application, StageTransition
-from app.models.bootcamp import Bootcamp, BootcampAdmin, Program
-from app.models.enums import AiScope, ApplicationStage, ApplicationStatus, EmailStatus, UserRole
+from app.models.bootcamp import Bootcamp, BootcampAdmin, BootcampPhase, Program
+from app.models.enums import (
+    AiScope,
+    ApplicationStage,
+    ApplicationStatus,
+    EmailStatus,
+    PhaseType,
+    UserRole,
+)
 from app.models.interview_invite import InterviewInvite, InterviewInviteBatch
 from app.models.notification import Notification
 from app.models.ops import EmailLog
 from app.models.user import Profile
 from app.services import (
+    application_service,
     audit_service,
     bootcamp_service,
     email_service,
@@ -370,6 +378,226 @@ def list_completed(db: Session, actor: Profile, bootcamp_id: uuid.UUID | None = 
             matched.append(_hydrate(interview, index))
 
     return {"items": matched, "stats": _completed_stats(matched)}
+
+
+# ------------------------------------------------------------- announcing --
+
+
+def _interview_phase(db: Session, bootcamp_id: uuid.UUID) -> BootcampPhase:
+    phase = db.scalar(
+        select(BootcampPhase).where(
+            BootcampPhase.bootcamp_id == bootcamp_id,
+            BootcampPhase.phase == PhaseType.INTERVIEW,
+        )
+    )
+    if phase is None:
+        raise NotFoundError("This intake has no INTERVIEW phase to announce results for.")
+    return phase
+
+
+def _results_announced(db: Session, bootcamp_id: uuid.UUID) -> bool:
+    """Whether this intake's AI interview results are visible to candidates."""
+    return (
+        db.scalar(
+            select(BootcampPhase.results_announced_at).where(
+                BootcampPhase.bootcamp_id == bootcamp_id,
+                BootcampPhase.phase == PhaseType.INTERVIEW,
+            )
+        )
+        is not None
+    )
+
+
+def _best_scores_by_application(
+    db: Session, bootcamp_id: uuid.UUID
+) -> dict[uuid.UUID, float | None]:
+    """Every invited application in this intake, mapped to its best score.
+
+    None means no score we can read — never took it, took it and never
+    finished, or finished with a payload carrying nothing recognisable. Those
+    are present in the mapping rather than absent from it, because announcing
+    has to make a decision about them too.
+
+    One DB query plus one external call regardless of size, the same
+    round-trip discipline as `list_completed`.
+    """
+    ids, emails, index = _invited_index(db, bootcamp_id)
+    if not ids and not emails:
+        return {}
+
+    scores: dict[uuid.UUID, float | None] = {}
+    for known in index.values():
+        application_id = known.get("application_id")
+        # A manually-added invite row (an Instructor, typically) has no
+        # application behind it and so no stage to move.
+        if application_id:
+            scores.setdefault(uuid.UUID(application_id), None)
+
+    interviews, _ = interviewer_ai.list_interviews(limit=_COMPLETED_FETCH_LIMIT)
+    for interview in interviews:
+        if not is_completed(interview):
+            continue
+        known = _hydrate(interview, index).get("local")
+        if not known or not known.get("application_id"):
+            continue
+        application_id = uuid.UUID(known["application_id"])
+        if application_id not in scores:
+            continue
+        score = extract_score(interview)
+        if score is None:
+            continue
+        current = scores[application_id]
+        # Best attempt, not most recent — matching candidate_score's own rule,
+        # so an admin's announce cannot contradict what the candidate is shown.
+        if current is None or score > current:
+            scores[application_id] = score
+
+    return scores
+
+
+def _summarise(
+    phase: BootcampPhase, scores: dict[uuid.UUID, float | None], now: datetime
+) -> dict:
+    passed = sum(1 for s in scores.values() if s is not None and s >= PASS_THRESHOLD)
+    failed = sum(1 for s in scores.values() if s is not None and s < PASS_THRESHOLD)
+    no_score = sum(1 for s in scores.values() if s is None)
+    deadline_passed = phase.deadline_at is not None and now > phase.deadline_at
+    return {
+        "invited": len(scores),
+        "completed": passed + failed,
+        "passed": passed,
+        "failed": failed,
+        "no_score": no_score,
+        "announced": phase.results_announced,
+        "announced_at": phase.results_announced_at,
+        "deadline_at": phase.deadline_at,
+        "deadline_passed": deadline_passed,
+        "can_announce": deadline_passed,
+    }
+
+
+def announce_summary(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> dict:
+    """The figures an admin confirms against before announcing, and the
+    current state of the toggle."""
+    bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+    phase = _interview_phase(db, bootcamp_id)
+    scores = _best_scores_by_application(db, bootcamp_id)
+    return _summarise(phase, scores, datetime.now(UTC))
+
+
+def set_results_visible(
+    db: Session, bootcamp_id: uuid.UUID, *, visible: bool, actor: Profile
+) -> dict:
+    """Announce this intake's AI interview results, or hide them again.
+
+    Showing is the side-effecting direction. Every invited application is
+    moved on in the same pass — scored at or above the threshold to
+    PHYSICAL_INTERVIEW, everything else (below the threshold, and anyone with
+    no readable score) to REJECTED — through `application_service.advance_stage`,
+    which is what already sets `is_selected`, writes the stage transition,
+    records the audit row and notifies the candidate. No transition logic is
+    reimplemented here.
+
+    Only after the deadline: the gate exists so nobody can still be sitting
+    the interview when everyone else's result lands.
+
+    **Hiding is not an undo.** It clears the flag, so scores and verdicts stop
+    being shown — but the stage moves already made stand, and the
+    notifications `advance_stage` already sent cannot be recalled. A candidate
+    moved to REJECTED stays rejected and their journey stepper still says so.
+    The button is "stop showing the score", not "pretend this never happened".
+    """
+    bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+    phase = _interview_phase(db, bootcamp_id)
+    now = datetime.now(UTC)
+
+    if visible:
+        if phase.results_announced:
+            raise ConflictError("Results are already announced for this intake.")
+        if phase.deadline_at is None:
+            raise ConflictError(
+                "The interview phase has no deadline set. Add one on the Phases "
+                "screen first — results are only announced once the window has closed."
+            )
+        if now <= phase.deadline_at:
+            raise ConflictError(
+                "Results can only be announced after the interview deadline has "
+                f"passed ({phase.deadline_at:%d %b %Y %H:%M} UTC)."
+            )
+        scores = _best_scores_by_application(db, bootcamp_id)
+        _advance_on_announce(db, scores, actor)
+        phase.results_announced_at = now
+        phase.results_announced_by = actor.id
+    else:
+        if not phase.results_announced:
+            raise ConflictError("Results are already hidden for this intake.")
+        phase.results_announced_at = None
+        phase.results_announced_by = None
+        scores = _best_scores_by_application(db, bootcamp_id)
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="ai_interview.announce" if visible else "ai_interview.unannounce",
+        entity_type="bootcamp",
+        entity_id=bootcamp_id,
+        summary=(
+            f"{'Announced' if visible else 'Hid'} AI interview results "
+            f"({len(scores)} candidate(s))"
+        ),
+        metadata={"visible": visible, "candidates": len(scores)},
+    )
+    db.flush()
+    return _summarise(phase, scores, now)
+
+
+def _advance_on_announce(
+    db: Session, scores: dict[uuid.UUID, float | None], actor: Profile
+) -> None:
+    """Move every invited application on, in one pass.
+
+    A row that cannot move — already at that stage, or no longer ACTIVE —
+    is skipped rather than failing the announce for everybody else. That is
+    the only reason ConflictError is swallowed here.
+    """
+    for application_id, score in scores.items():
+        if score is not None and score >= PASS_THRESHOLD:
+            to_stage = ApplicationStage.PHYSICAL_INTERVIEW
+            reason = f"AI interview score: {score:.0f}/100"
+        elif score is not None:
+            to_stage = ApplicationStage.REJECTED
+            reason = f"AI interview score: {score:.0f}/100"
+        else:
+            to_stage = ApplicationStage.REJECTED
+            reason = "AI interview not completed before the deadline"
+
+        try:
+            application_service.advance_stage(
+                db, application_id, to_stage=to_stage, actor=actor, reason=reason
+            )
+        except (ConflictError, NotFoundError):
+            continue
+
+
+def mark_result_seen(db: Session, user: Profile) -> None:
+    """Stamp the candidate's latest invite the first time they see their
+    announced result.
+
+    Called by the portal once the reveal popup has rendered, deliberately not
+    from `candidate_score`: the read that delivers the result would otherwise
+    mark it seen before anything had been shown, and the popup would never
+    fire at all.
+    """
+    invite = db.scalar(
+        select(InterviewInvite)
+        .join(Application, Application.id == InterviewInvite.application_id)
+        .where(Application.profile_id == user.id)
+        .order_by(InterviewInvite.created_at.desc())
+        .limit(1)
+    )
+    if invite is not None and invite.result_seen_at is None:
+        invite.result_seen_at = datetime.now(UTC)
+        db.flush()
 
 
 def _completed_at(item: dict) -> datetime | None:
@@ -780,12 +1008,25 @@ def candidate_score(db: Session, user: Profile) -> dict:
 
     # A completed interview outranks the deadline: someone who finished in
     # time keeps their result even when the phase has since closed.
+    completed_at = best.get("completed_at") or best.get("updated_at")
+
+    # Finishing is not the same as being told. Until an admin announces this
+    # intake's results, the candidate learns only that their interview is
+    # complete — no score, no verdict — so that everyone finds out together
+    # rather than each person the moment they happen to finish.
+    if not _results_announced(db, bootcamp_id):
+        return {**base, "status": "completed", "completed_at": completed_at}
+
     return {
         **base,
         "status": "completed",
         "score": round(score, 1),
         "passed": score >= PASS_THRESHOLD,
-        "completed_at": best.get("completed_at") or best.get("updated_at"),
+        "completed_at": completed_at,
+        "announced": True,
+        # Drives the one-time reveal popup; stamped by mark_result_seen once
+        # the popup has actually rendered, never by this read.
+        "result_seen": invite.result_seen_at is not None,
     }
 
 
