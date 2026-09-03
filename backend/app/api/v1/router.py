@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     notifications,
     onboarding,
     permissions,
+    physical_interviews,
     profile,
     programs,
     users,
@@ -34,3 +35,4 @@ api_router.include_router(profile.router)
 api_router.include_router(notifications.router)
 api_router.include_router(ai_interviews.router)
 api_router.include_router(permissions.router)
+api_router.include_router(physical_interviews.router)
