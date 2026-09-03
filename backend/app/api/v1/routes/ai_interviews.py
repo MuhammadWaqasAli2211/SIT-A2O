@@ -13,6 +13,8 @@ from fastapi import APIRouter, Query, status
 from app.api.deps import AdminUser, CandidateUser, CurrentUser, DbSession
 from app.schemas.ai_interview import (
     AiAnalytics,
+    AnnounceRequest,
+    AnnounceSummary,
     CandidateScore,
     CompletedInterviewsPage,
     DeadlineExplanation,
@@ -50,6 +52,16 @@ def explain_missed_deadline(
     does that, and that move is audited on its own.
     """
     ai_interview_service.submit_deadline_explanation(db, user, payload.reason)
+
+
+@router.post("/me/ai-interview/result-seen", status_code=status.HTTP_204_NO_CONTENT)
+def mark_result_seen(user: CandidateUser, db: DbSession) -> None:
+    """Record that the candidate has been shown their announced result.
+
+    Called by the portal once the reveal popup has rendered. Idempotent: a
+    second call after the first leaves the original timestamp alone.
+    """
+    ai_interview_service.mark_result_seen(db, user)
 
 
 # ----------------------------------------------------------- admin reads --
@@ -109,6 +121,43 @@ def list_ai_interview_snapshots(
     interview_id: int, user: AdminUser, db: DbSession
 ) -> ExternalRecords:
     return ExternalRecords(items=ai_interview_service.list_snapshots(db, interview_id, user))
+
+
+@router.get(
+    "/bootcamps/{bootcamp_id}/ai-interviews/announce", response_model=AnnounceSummary
+)
+def announce_summary(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AnnounceSummary:
+    """The figures behind the confirm dialog, and whether results are
+    currently announced. `can_announce` is false until the interview
+    deadline has passed."""
+    return AnnounceSummary.model_validate(
+        ai_interview_service.announce_summary(db, bootcamp_id, user)
+    )
+
+
+@router.post(
+    "/bootcamps/{bootcamp_id}/ai-interviews/announce", response_model=AnnounceSummary
+)
+def set_results_visible(
+    bootcamp_id: uuid.UUID, payload: AnnounceRequest, user: AdminUser, db: DbSession
+) -> AnnounceSummary:
+    """Announce this intake's AI interview results, or hide them again.
+
+    Announcing also moves every invited candidate on — passed to
+    PHYSICAL_INTERVIEW, everyone else to REJECTED — through the same
+    advance_stage path an admin's own stage control uses. Hiding stops the
+    scores being shown; it does not reverse those moves.
+
+    ADMIN, not super admin: announcing results is routine, recurring work for
+    whoever runs the intake.
+    """
+    return AnnounceSummary.model_validate(
+        ai_interview_service.set_results_visible(
+            db, bootcamp_id, visible=payload.visible, actor=user
+        )
+    )
 
 
 # ---------------------------------------------------------- admin writes --
