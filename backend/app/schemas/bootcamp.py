@@ -27,6 +27,9 @@ class PhaseOut(BaseModel):
     opens_at: datetime | None = None
     deadline_at: datetime | None = None
     is_open: bool
+    # Only the INTERVIEW phase uses this today — when its AI interview
+    # results were announced to candidates. Null means not announced.
+    results_announced_at: datetime | None = None
 
 
 class PhaseUpdate(BaseModel):
