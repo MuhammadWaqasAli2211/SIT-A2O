@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   ChevronRight,
   Download,
   MoreHorizontal,
@@ -33,7 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState, PageHeader, StageBadge } from '@/components/shared/portal-ui'
-import { applicationApi } from '@/features/admin/api'
+import { applicationApi, bootcampApi } from '@/features/admin/api'
 import {
   AsyncSection,
   BootcampSwitcher,
@@ -42,10 +43,12 @@ import {
   Pagination,
   useConfirm,
 } from '@/features/admin/components'
+import { FunnelWidget } from '@/features/admin/funnel-widget'
 import { CandidateSheet } from '@/pages/admin/candidate-sheet'
+import { PhysicalInterviewInviteDialog } from '@/pages/admin/physical-interview-invite-dialog'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
-import { useMutation } from '@/hooks/use-async'
+import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
@@ -90,6 +93,7 @@ export default function AdminCandidatesPage() {
   const [stage, setStage] = useState<string>(ALL)
   const [offset, setOffset] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   // Debounced so typing a name does not fire a request per keystroke.
   const debouncedSearch = useDebounced(search, 300)
@@ -114,6 +118,14 @@ export default function AdminCandidatesPage() {
 
   const rows = useMemo(() => data?.items ?? [], [data])
   const remove = useConfirm<ApplicantRow>()
+
+  // Own fetch, not shared with the table's live-resource query: the funnel
+  // needs bootcamp-wide totals regardless of the current search/stage
+  // filter, which listForBootcamp does not return.
+  const { data: stats } = useAsync(
+    () => (selectedId ? bootcampApi.stats(selectedId) : Promise.resolve(undefined)),
+    [selectedId],
+  )
 
   const deleteMutation = useMutation(async (row: ApplicantRow) => {
     await applicationApi.remove(row.id)
@@ -158,6 +170,12 @@ export default function AdminCandidatesPage() {
               <Download className="size-4" />
               Export CSV
             </Button>
+            {selectedId && (
+              <Button onClick={() => setInviteOpen(true)}>
+                <CalendarClock className="size-4" />
+                Invite to Physical Interview
+              </Button>
+            )}
           </>
         }
       />
@@ -167,6 +185,14 @@ export default function AdminCandidatesPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <LiveIndicator lastUpdated={lastUpdated} live={live} />
+
+          {stats && (
+            <FunnelWidget
+              bootcampId={stats.bootcamp_id}
+              physicalInterviewFunnel={stats.physical_interview_funnel}
+              compact
+            />
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
@@ -288,6 +314,17 @@ export default function AdminCandidatesPage() {
         onClose={() => setOpenId(null)}
         onChanged={refresh}
       />
+
+      {selectedId && (
+        <PhysicalInterviewInviteDialog
+          open={inviteOpen}
+          onOpenChange={(open) => {
+            setInviteOpen(open)
+            if (!open) refresh()
+          }}
+          bootcampId={selectedId}
+        />
+      )}
 
       <ConfirmDialog
         open={remove.open}
