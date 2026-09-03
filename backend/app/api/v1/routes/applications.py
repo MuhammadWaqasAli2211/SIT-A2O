@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, status
 
-from app.api.deps import AdminUser, CandidateUser, DbSession
+from app.api.deps import AdminUser, CandidateUser, DbSession, SuperAdminUser
 from app.schemas.application import (
     AdminApplicationDetail,
     ApplicationCreate,
@@ -84,9 +84,18 @@ def get_my_application(
 
 @router.post("/{application_id}/stage", response_model=ApplicationDetail)
 def advance_stage(
-    application_id: uuid.UUID, payload: StageAdvance, user: AdminUser, db: DbSession
+    application_id: uuid.UUID, payload: StageAdvance, user: SuperAdminUser, db: DbSession
 ) -> ApplicationDetail:
-    """Move a candidate to another stage. Scope is checked in the service."""
+    """Move a candidate to any stage, by hand. Scope is checked in the service.
+
+    Super admin only (2026-09-03). This is the unrestricted override — it can
+    put any application at any stage, skipping every gate the ordinary flow
+    enforces. The routine paths an ADMIN needs all have their own endpoints
+    that move stages as a *consequence* of a real decision: announcing AI
+    interview results, and recording a Physical Interview outcome. Both call
+    `application_service.advance_stage` internally, so restricting this route
+    restricts the manual override without touching those.
+    """
     application_service.advance_stage(
         db, application_id, to_stage=payload.to_stage, actor=user, reason=payload.reason
     )
@@ -95,13 +104,16 @@ def advance_stage(
 
 @router.post("/{application_id}/reinstate", response_model=ApplicationDetail)
 def reinstate(
-    application_id: uuid.UUID, payload: StageAdvance, user: AdminUser, db: DbSession
+    application_id: uuid.UUID, payload: StageAdvance, user: SuperAdminUser, db: DbSession
 ) -> ApplicationDetail:
     """Reopen a rejected or withdrawn application at the given stage.
 
     Without this a mistaken rejection was permanent: the candidate could not
     reapply either, because one application per person per intake is a unique
     index.
+
+    Super admin only, alongside the stage override above: they are the two
+    halves of the same manual control and are driven by the same dropdown.
     """
     application_service.reinstate(
         db, application_id, to_stage=payload.to_stage, actor=user, reason=payload.reason
