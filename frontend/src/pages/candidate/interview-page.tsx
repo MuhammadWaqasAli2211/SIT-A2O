@@ -32,9 +32,15 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
+import { useApplication } from '@/features/applications/application-context'
 import { candidateApi } from '@/features/candidate/api'
 import { useAsync } from '@/hooks/use-async'
-import { INTERVIEW_STATUS_LABEL, type InterviewRow, type InterviewStatus } from '@/lib/types'
+import {
+  ApplicationStage,
+  INTERVIEW_STATUS_LABEL,
+  type InterviewRow,
+  type InterviewStatus,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const STATUS_TONE: Record<InterviewStatus, string> = {
@@ -76,6 +82,16 @@ export default function CandidateInterviewPage() {
 
   const interviews = data ?? []
 
+  // Nothing to show at all is a narrower case than "no scheduled slots": both
+  // cards above self-hide, and the only stage where neither of them has
+  // anything to say is before any invite has gone out. Being invited to the AI
+  // round is what moves an application off APPLIED, so that stage is exactly
+  // the "not yet" case — and using it avoids a third fetch here purely to ask
+  // the two cards what they decided to render.
+  const { application } = useApplication()
+  const nothingScheduledYet =
+    interviews.length === 0 && application?.stage === ApplicationStage.APPLIED
+
   return (
     <>
       <PageHeader
@@ -85,10 +101,28 @@ export default function CandidateInterviewPage() {
 
       <div className="flex flex-col gap-5">
         {/* Ahead of the schedule: a candidate who has taken the AI round is
-            usually here to look for that result, not for a past slot. Renders
-            nothing at all when they were never invited to it. */}
+            usually here to look for that result, not for a past slot. Each of
+            these renders nothing at all when it has nothing to say. */}
         <AiScoreCard />
         <PhysicalInterviewCard />
+
+        {nothingScheduledYet && (
+          <Reveal>
+            <EmptyState
+              icon={CalendarClock}
+              title="No interview yet"
+              description="Once registration closes, candidates are invited to the AI screening interview. You will get an email, and it will appear here."
+              action={
+                <Link
+                  to="/dashboard"
+                  className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                >
+                  Back to overview
+                </Link>
+              }
+            />
+          </Reveal>
+        )}
 
         <AsyncSection
           initialLoading={initialLoading}
@@ -97,21 +131,14 @@ export default function CandidateInterviewPage() {
           skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
         >
           {interviews.length === 0 ? (
-            <Reveal>
-              <EmptyState
-                icon={CalendarClock}
-                title="No interview scheduled yet"
-                description="Once registration closes, we schedule screening interviews in batches. You will get an email with your slot."
-                action={
-                  <Link
-                    to="/dashboard"
-                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
-                  >
-                    Back to overview
-                  </Link>
-                }
-              />
-            </Reveal>
+            // Deliberately nothing. This used to be a "No interview scheduled
+            // yet" empty state, but it reads off `/me/interviews` — the old
+            // admin-scheduled slot table, which nothing writes to for the AI
+            // and Physical rounds. It therefore showed to almost everybody,
+            // including candidates who *did* have an AI interview and a
+            // Physical Interview card sitting directly above it, contradicting
+            // both. The genuinely-nothing-to-show case is handled below.
+            null
           ) : (
             <div className="flex flex-col gap-5">
               {upcoming.length > 0 && (
