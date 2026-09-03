@@ -150,6 +150,15 @@ class InviteStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class PhysicalInterviewResult(StrEnum):
+    """In-person outcome, recorded by an admin. There is no MISSED member —
+    a missed window is derived at read time (now() > batch.deadline_at with
+    no result recorded), the same way an AI Interview invite's expiry is."""
+
+    SELECTED = "SELECTED"
+    REJECTED = "REJECTED"
+
+
 class AiScope(StrEnum):
     """Write scopes on the AI Interviewer API key that a super admin may
     delegate to an individual admin.
