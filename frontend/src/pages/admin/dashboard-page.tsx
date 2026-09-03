@@ -23,6 +23,7 @@ import {
   NoBootcampSelected,
 } from '@/features/admin/components'
 import { bootcampApi } from '@/features/admin/api'
+import { FunnelWidget } from '@/features/admin/funnel-widget'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
 import { useBootcamp } from '@/hooks/use-bootcamp'
@@ -177,6 +178,8 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
           hint="Last 7 days"
         />
       </div>
+
+      <FunnelWidget bootcampId={stats.bootcamp_id} physicalInterviewFunnel={stats.physical_interview_funnel} />
 
       <Suspense fallback={<Skeleton className="h-80 w-full rounded-xl" />}>
         <DashboardCharts stats={stats} />
