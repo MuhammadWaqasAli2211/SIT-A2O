@@ -9,19 +9,25 @@
 import {
   Award,
   BookOpen,
+  Bot,
   Braces,
   Building2,
+  CalendarClock,
+  ClipboardCheck,
   Cloud,
   Database,
-  GraduationCap,
   HeartHandshake,
+  Info,
+  LayoutGrid,
   LifeBuoy,
+  LogIn,
   Newspaper,
   Palette,
   Phone,
   ScrollText,
+  ShieldCheck,
   Smartphone,
-  Sparkles,
+  Star,
   Target,
   Users,
   type LucideIcon,
@@ -40,11 +46,14 @@ export interface NavItem {
   children?: NavChild[]
   /** Renders the dropdown as a two-column feature panel rather than a list. */
   featured?: boolean
+  /** Small leading glyph in the header row. */
+  icon?: LucideIcon
 }
 
 export const NAV_ITEMS: NavItem[] = [
   {
     label: 'Programs',
+    icon: LayoutGrid,
     featured: true,
     children: [
       {
@@ -87,10 +96,11 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'Admissions',
+    icon: ScrollText,
     children: [
       {
         label: 'How to Apply',
-        description: 'The four stages, start to finish',
+        description: 'Every stage, start to finish',
         href: '/admissions',
         icon: ScrollText,
       },
@@ -116,6 +126,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     label: 'About',
+    icon: Info,
     children: [
       {
         label: 'Our Mission',
@@ -143,7 +154,37 @@ export const NAV_ITEMS: NavItem[] = [
       },
     ],
   },
-  { label: 'Success Stories', href: '/success-stories' },
+  { label: 'Success Stories', href: '/success-stories', icon: Star },
+  {
+    label: 'Resources',
+    icon: LifeBuoy,
+    children: [
+      {
+        label: 'FAQs',
+        description: 'Answers to the questions we get most',
+        href: '/faq',
+        icon: LifeBuoy,
+      },
+      {
+        label: 'Important Dates',
+        description: 'Deadlines for the current intake',
+        href: '/admissions#dates',
+        icon: Newspaper,
+      },
+      {
+        label: 'Contact Us',
+        description: 'Talk to the admissions team',
+        href: '/contact',
+        icon: Phone,
+      },
+      {
+        label: 'Student Portal',
+        description: 'Sign in to track your application',
+        href: '/login',
+        icon: LogIn,
+      },
+    ],
+  },
 ]
 
 /* -------------------------------------------------------------- programs -- */
@@ -162,6 +203,19 @@ export interface Program {
   outcomes: string[]
   curriculum: { module: string; topics: string[] }[]
   accent: string
+  /**
+   * The track's own accent, as a CSS variable reference.
+   *
+   * A `var(...)` string rather than a Tailwind class because the "Choose
+   * your track" section feeds it to `color-mix()` in an inline style to
+   * build each panel's tint — a class name cannot be mixed. Kept beside
+   * `accent` (a Tailwind gradient pair, used by the hover wash on the
+   * /programs grid) rather than replacing it: the two are consumed by
+   * different components in different ways.
+   *
+   * Defined in index.css as --track-1..5, in track order.
+   */
+  accentVar: string
 }
 
 export const PROGRAMS: Program[] = [
@@ -192,6 +246,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Capstone', topics: ['Team project', 'Code review', 'CI/CD basics', 'Deployment'] },
     ],
     accent: 'from-emerald-500/20 to-teal-500/5',
+    accentVar: 'var(--color-track-1)',
   },
   {
     slug: 'mobile-development',
@@ -219,6 +274,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Release', topics: ['App signing', 'Store listings', 'Crash reporting', 'Versioning'] },
     ],
     accent: 'from-sky-500/20 to-blue-500/5',
+    accentVar: 'var(--color-track-2)',
   },
   {
     slug: 'data-science',
@@ -246,6 +302,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Applied AI', topics: ['NLP basics', 'Intro to deep learning', 'Model deployment'] },
     ],
     accent: 'from-violet-500/20 to-purple-500/5',
+    accentVar: 'var(--color-track-3)',
   },
   {
     slug: 'cloud-devops',
@@ -272,6 +329,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Cloud', topics: ['AWS core services', 'IAM', 'Infrastructure as code', 'Cost basics'] },
     ],
     accent: 'from-amber-500/20 to-orange-500/5',
+    accentVar: 'var(--color-track-4)',
   },
   {
     slug: 'ui-ux-design',
@@ -298,6 +356,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Design Systems', topics: ['Tokens', 'Documentation', 'Consistency at scale'] },
     ],
     accent: 'from-pink-500/20 to-rose-500/5',
+    accentVar: 'var(--color-track-5)',
   },
 ]
 
@@ -307,6 +366,26 @@ export function getProgram(slug: string) {
 
 /* ----------------------------------------------------------------- stats -- */
 
+/**
+ * The headline figures shown on the home page, About and Success Stories.
+ *
+ * **These are illustrative.** Nothing in this codebase produces them and no
+ * source was supplied for them — the 78% placement rate and the 4.5-month
+ * time-to-hire on the Success Stories page in particular are not numbers
+ * anything here can substantiate. Confirmed with the project owner on
+ * 2026-09-03 and labelled rather than removed, on the same footing as the
+ * hero's dashboard preview (see `features/marketing/preview-data.ts`, which
+ * already reasons this through at length).
+ *
+ * Every surface that renders these must show `ILLUSTRATIVE_NOTE` as visible
+ * text — not as an aria-label or a tooltip, so the caveat reaches sighted
+ * visitors by the same route as everyone else. `<StatCaveat />` in
+ * `<StatCaveat />` in `features/marketing/caveat.tsx` is the one component
+ * that does it.
+ *
+ * Replace with real reporting figures when the programme team supplies them,
+ * and drop the caveat at the same time — not before.
+ */
 export const STATS = [
   { label: 'Students trained', value: 250000, suffix: '+', icon: Users },
   { label: 'Courses offered', value: 25, suffix: '', icon: BookOpen },
@@ -314,46 +393,53 @@ export const STATS = [
   { label: 'Placement rate', value: 78, suffix: '%', icon: Award },
 ]
 
+/** The exact wording, so six surfaces cannot caveat the same numbers six ways. */
+export const ILLUSTRATIVE_NOTE =
+  'Figures shown are illustrative and pending confirmation from programme reporting.'
+
 /* ------------------------------------------------------------- admission -- */
 
-export const ADMISSION_STEPS = [
-  {
-    step: '01',
-    title: 'Submit your application',
-    description:
-      'Create an account and complete the online form before the registration deadline. You receive a unique candidate code that follows you through every stage.',
-    icon: ScrollText,
-  },
-  {
-    step: '02',
-    title: 'Screening interview',
-    description:
-      'Shortlisted applicants are grouped into timed batches and invited by email. The screening assesses aptitude and commitment, not prior experience.',
-    icon: Sparkles,
-  },
-  {
-    step: '03',
-    title: 'On-campus assessment',
-    description:
-      'A one-to-one session with our team to confirm your fit for the track, discuss your goals, and answer your questions in person.',
-    icon: Users,
-  },
-  {
-    step: '04',
-    title: 'Enrolment & onboarding',
-    description:
-      'Selected candidates complete the onboarding form, receive their class schedule, and join the cohort. Everything is free of charge.',
-    icon: GraduationCap,
-  },
-]
+/**
+ * The 4-stage version of this list (registration -> screening -> on-campus
+ * assessment -> enrolment) was retired 2026-09-03: it quietly disagreed with
+ * `JOURNEY_STEPS` (lib/stages.ts), the real 5-stage pipeline every candidate
+ * and admin screen already reads from. Every place that rendered
+ * ADMISSION_STEPS — the homepage's process band and /admissions — now maps
+ * `JOURNEY_STEPS` directly, so a stage can no longer be described two
+ * different ways on two different pages.
+ */
 
 /* ---------------------------------------------------------------- social -- */
 
+/**
+ * Graduate quotes.
+ *
+ * **These are illustrative, and every surface that renders them says so.**
+ *
+ * They are not transcripts of interviews with named alumni — nothing in this
+ * project holds consent, attribution, or a source for any of them. Shown as
+ * genuine, they would be fabricated testimonials attributed to identifiable
+ * people at real, named employers, which is a materially worse thing to
+ * publish than an unsourced percentage.
+ *
+ * Two changes were made on 2026-09-03 rather than deleting the section
+ * outright (decided with the project owner):
+ *
+ *   - Surnames were dropped. A full name plus a real employer and job title
+ *     reads as one specific, findable person; a first name beside an explicit
+ *     "representative example" label does not.
+ *   - `TESTIMONIAL_NOTE` is rendered as visible text wherever these appear,
+ *     via `<TestimonialCaveat />` in `features/marketing/caveat.tsx`.
+ *
+ * Replace with real, consented graduate stories when the programme team
+ * supplies them — restoring full names at the same time, and dropping the
+ * caveat only once every quote in the array is genuinely sourced.
+ */
 export const TESTIMONIALS = [
   {
     quote:
       'I applied with no coding background at all. Six months later I was writing production React. The instructors never once made me feel behind.',
-    name: 'Ayesha Siddiqui',
+    name: 'Ayesha S.',
     role: 'Frontend Engineer',
     company: 'Systems Ltd',
     initials: 'AS',
@@ -361,7 +447,7 @@ export const TESTIMONIALS = [
   {
     quote:
       'The batch interview process was the most organised thing I have been through. I knew my slot, my code, and my status at every step.',
-    name: 'Bilal Ahmed',
+    name: 'Bilal A.',
     role: 'Full-Stack Developer',
     company: 'Careem',
     initials: 'BA',
@@ -369,7 +455,7 @@ export const TESTIMONIALS = [
   {
     quote:
       'What surprised me was the project work. We built and deployed real applications, so my portfolio was ready before I graduated.',
-    name: 'Fatima Khan',
+    name: 'Fatima K.',
     role: 'Data Analyst',
     company: 'Telenor',
     initials: 'FK',
@@ -377,7 +463,7 @@ export const TESTIMONIALS = [
   {
     quote:
       'Completely free, and yet more rigorous than paid courses I had tried. The physical assessment made sure everyone in the room was serious.',
-    name: 'Usman Tariq',
+    name: 'Usman T.',
     role: 'DevOps Engineer',
     company: 'Netsol',
     initials: 'UT',
@@ -385,79 +471,257 @@ export const TESTIMONIALS = [
   {
     quote:
       'I was working days and studying evenings. The schedule made that possible, and the mentors were reachable when I got stuck.',
-    name: 'Zainab Ali',
+    name: 'Zainab A.',
     role: 'Mobile Developer',
     company: 'Bazaar',
     initials: 'ZA',
   },
 ]
 
-export const HIRING_PARTNERS = [
-  'Systems Ltd', 'Careem', 'Telenor', 'Netsol', 'Bazaar', 'Daraz',
-  '10Pearls', 'Arbisoft', 'Contour', 'Folio3', 'TPS', 'Tkxel',
+/** The exact wording, so every surface caveats these the same way. */
+export const TESTIMONIAL_NOTE =
+  'Quotes shown are representative examples of graduate feedback, not statements from named individuals. Real, consented alumni stories replace these when available.'
+
+export interface HiringPartner {
+  name: string
+  slug: string
+  /**
+   * The company's real logo asset (SVG preferred), and the URL its mark
+   * should open. Both undefined until supplied: these are real, named,
+   * trademarked companies with no stored evidence of an actual placement or
+   * logo license on this codebase's side, so a logo file and destination are
+   * data this project has to be handed, not guessed or fetched from the web.
+   * Until then `PartnerStrip` renders a plain wordmark and skips the link —
+   * see its own header comment for exactly how it degrades.
+   */
+  logo?: string
+  url?: string
+}
+
+/**
+ * Real logos, fetched 2026-09-03 directly from each company's own site (or
+ * Wikimedia Commons, for the five with a proper Wikipedia entry) and checked
+ * byte-for-byte with `file` before being trusted — never generated, guessed,
+ * or pulled from an unrelated stock/logo-pack source. Saved under
+ * `public/logos/` so the page serves them itself rather than hot-linking a
+ * third party on every visitor's page load.
+ *
+ * `url` is each company's real homepage, verified via search and (where the
+ * company's own WAF allowed it) a live HTTP check, not assumed from the name.
+ *
+ * Tkxel has no `logo`: their site's WAF rate-limited this fetch mid-session
+ * and returned a 403 for every subsequent attempt, including a retry after a
+ * cooldown. Left as the styled wordmark fallback — see partner-strip.tsx —
+ * rather than ship a broken image or a guessed substitute. Its `url` is real
+ * and still links out.
+ *
+ * Daraz and 10Pearls use each company's small colour favicon rather than the
+ * wordmark pulled from their own navbar: both navbar marks turned out to be
+ * solid white with a transparent background (checked pixel-by-pixel, not
+ * assumed) — meant for a dark header, and invisible against this strip's
+ * light background. Their favicons carry the same brand mark in an actual
+ * visible colour (Daraz's orange, 10Pearls' near-black), confirmed the same
+ * way before use.
+ *
+ * Netsol links to netsolpk.com (their Pakistan operation) rather than the
+ * NASDAQ-listed US parent's netsoltech.com: the audience here is a Pakistani
+ * applicant, and the Pakistan site is the more relevant destination for
+ * "where our graduates work."
+ */
+export const HIRING_PARTNERS: HiringPartner[] = [
+  { name: 'Systems Ltd', slug: 'systems-ltd', logo: '/logos/systems-ltd.svg', url: 'https://www.systemsltd.com' },
+  { name: 'Careem', slug: 'careem', logo: '/logos/careem.svg', url: 'https://www.careem.com' },
+  { name: 'Telenor', slug: 'telenor', logo: '/logos/telenor.svg', url: 'https://www.telenor.com.pk' },
+  { name: 'Netsol', slug: 'netsol', logo: '/logos/netsol.svg', url: 'https://www.netsolpk.com' },
+  { name: 'Bazaar', slug: 'bazaar', logo: '/logos/bazaar.svg', url: 'https://www.bazaartech.com' },
+  { name: 'Daraz', slug: 'daraz', logo: '/logos/daraz.png', url: 'https://www.daraz.pk' },
+  { name: '10Pearls', slug: '10pearls', logo: '/logos/10pearls.png', url: 'https://10pearls.com' },
+  { name: 'Arbisoft', slug: 'arbisoft', logo: '/logos/arbisoft.svg', url: 'https://arbisoft.com' },
+  { name: 'Contour', slug: 'contour', logo: '/logos/contour.png', url: 'https://contour-software.com' },
+  { name: 'Folio3', slug: 'folio3', logo: '/logos/folio3.png', url: 'https://folio3.com' },
+  { name: 'TPS', slug: 'tps', logo: '/logos/tps.png', url: 'https://www.tpsworldwide.com' },
+  { name: 'Tkxel', slug: 'tkxel', url: 'https://tkxel.com' },
 ]
 
-export const FAQS = [
+/* -------------------------------------------------------------------- faq -- */
+
+export interface FaqGroup {
+  category: string
+  /** One line under the group heading, so a scanner knows what is in it. */
+  blurb: string
+  icon: LucideIcon
+  items: { q: string; a: string }[]
+}
+
+/**
+ * Answers to what applicants actually ask, written from what this platform
+ * actually does — not from a generic FAQ template.
+ *
+ * Rewritten 2026-09-03. The previous version had answers that contradicted
+ * the implementation, the worst being "each stage closes at its published
+ * deadline and cannot be reopened for individual applicants": the deadline
+ * flow does the opposite, holding the application and taking a written
+ * explanation that a staff member reads (see
+ * `POST /me/ai-interview/explanation` and `DeadlineExplanation`). An FAQ that
+ * tells an applicant their application is dead when it is merely paused is
+ * the most expensive kind of wrong copy there is.
+ *
+ * Every answer below traces to something in this codebase:
+ *
+ *   candidate code format          application_service.py (`B07-004`)
+ *   one application per intake     application_service.create (duplicate guard)
+ *   AI interview is recorded       ai_interview_service + the Terms text
+ *   second attempt is decided      ai_interview_service.decide_reinterview
+ *   missed deadline holds          ai_interviews.py explain_missed_deadline
+ *   physical interview is not      STAGE_GUIDANCE.PHYSICAL_INTERVIEW
+ *     a technical round
+ *   the document set               enums.OnboardingDocumentType
+ *   the four onboarding forms      enums.OnboardingFormType
+ *   a form can be sent back        enums.OnboardingFormStatus.REOPENED
+ *   Agilytic at the end            STAGE_GUIDANCE.ONBOARDED / JOURNEY_STEPS
+ *
+ * Deliberately absent, because nothing in this codebase or Saylani's public
+ * material substantiates them and inventing them would be worse than the gap:
+ * a completion certificate, placement statistics, stipend amounts, class
+ * timetables, and the withdrawal procedure. Those need the programme team's
+ * input before they go on a page applicants read as fact.
+ */
+export const FAQS: FaqGroup[] = [
   {
-    category: 'Admissions',
+    category: 'Cost and eligibility',
+    blurb: 'What it costs, who can apply, and what you need before you start.',
+    icon: HeartHandshake,
     items: [
       {
-        q: 'Is the bootcamp really free?',
-        a: 'Yes. Every Saylani Mass IT Training programme is completely free of charge. There are no tuition fees, registration fees, or hidden costs at any stage.',
+        q: 'Is it really free?',
+        a: 'Yes. There is no fee to register, no fee to apply, and no fee to attend. If a specific programme ever carried a cost, that would be stated on its own page before you applied to it — none currently does.',
       },
       {
-        q: 'What qualifications do I need to apply?',
-        a: 'Most tracks are beginner friendly and require only matriculation or equivalent, plus a genuine commitment to complete the course. Some advanced tracks list prerequisites on their programme page.',
+        q: 'What do I need in order to apply?',
+        a: 'A working email address, your CNIC number — or your B-Form number if you are under 18 — your father’s CNIC and phone number, your educational background, and a photograph you can upload. Most tracks are beginner friendly and assume no prior coding; the ones that expect some experience say so on their programme page.',
       },
       {
-        q: 'How many people are accepted per intake?',
-        a: 'It varies by programme, typically between 120 and 300 seats. Because demand exceeds capacity, we run a structured screening and assessment process for every intake.',
+        q: 'Can I apply if I am under 18?',
+        a: 'Yes. You give your B-Form number in place of a CNIC, and your father’s or guardian’s CNIC and phone number are recorded alongside your application. The application is still yours, submitted in your own name — there is no separate guardian account.',
       },
       {
         q: 'Can I apply to more than one programme?',
-        a: 'You may apply to one programme per intake so that seats are allocated fairly. If you are not selected, you are welcome to apply again in the next cycle.',
+        a: 'One application per person per open intake, so seats are allocated fairly. The platform will not let a second application through on the same account for the same intake. If you are not selected, you are welcome to apply again next cycle — intakes run several times a year.',
       },
     ],
   },
   {
-    category: 'The process',
+    category: 'Applying',
+    blurb: 'Creating an account, submitting an application, and your candidate code.',
+    icon: ScrollText,
     items: [
       {
+        q: 'Is creating an account the same as applying?',
+        a: 'No, and this catches people out. Signing up creates your account; you then complete a separate registration form to actually submit an application to an open intake. Until you finish that form you are not in the pool for anything.',
+      },
+      {
         q: 'What is a candidate code?',
-        a: 'When your application is submitted you receive a unique code in the format B07-001. It identifies you at every stage — interview, assessment, and enrolment — so nothing gets lost between steps.',
+        a: 'A unique reference issued the moment your application is submitted, in the form B07-004 — the intake number, then your position in it. It identifies you at every stage that follows, so quote it in any email you send us. Codes are never reused: if an application is removed, its number stays vacant rather than being handed to somebody else.',
+      },
+      {
+        q: 'Can I change my answers after submitting?',
+        a: 'Not directly. Contact the admissions team with your candidate code and explain what needs correcting — a staff member can amend the record, and the change is logged. Anything found to be deliberately false can end an application at any stage, including after selection.',
+      },
+      {
+        q: 'How do I know my application went through?',
+        a: 'Your candidate code appears immediately, and your portal shows your current stage from that point on. If you can sign in and see a stage, you are in the pool.',
+      },
+    ],
+  },
+  {
+    category: 'Interviews',
+    blurb: 'The AI screening round, results, and the in-person interview that follows.',
+    icon: Bot,
+    items: [
+      {
+        q: 'What is the AI interview, exactly?',
+        a: 'A recorded, proctored screening interview run by InterviewerAI, our screening partner. It captures video, your answers, and periodic snapshots during the session, and returns a score and report to us. You consent to that recording when you accept the Terms of Service before applying.',
       },
       {
         q: 'How will I know my interview slot?',
-        a: 'Shortlisted candidates are grouped into batches and emailed their date and time slot. Your status is also visible in your portal at all times.',
+        a: 'Shortlisted candidates are grouped into batches and emailed a slot and a deadline. The same details appear on your interview page in the portal, so a lost email is not a lost slot. Check spam — it is the single most common reason people miss theirs.',
       },
       {
-        q: 'What happens at the physical assessment?',
-        a: 'It is a one-to-one conversation with our team, held on campus. We discuss your goals, confirm the track suits you, and answer your questions. It is not a written exam.',
+        q: 'What happens after I sit it?',
+        a: 'Your interview is reviewed alongside the rest of your batch, and everyone in a batch is told at the same time. Clearing it moves you to the physical interview stage; not clearing it ends the application at that stage.',
       },
       {
-        q: 'What if I miss a deadline?',
-        a: 'Each stage closes at its published deadline and cannot be reopened for individual applicants. We recommend completing each step as soon as you are notified.',
+        q: 'Can I sit the interview a second time?',
+        a: 'A second attempt can be requested, but it is not automatic and it is not granted by the system. A staff member reviews each request individually and either approves or refuses it, and that decision is recorded.',
+      },
+      {
+        q: 'What happens at the physical interview?',
+        a: 'A one-to-one conversation with HR on campus. It is not a technical round and it is not a written exam — no coding questions. It is a chance for both sides to meet and confirm the track suits you. Your date and venue are emailed to you and shown in your portal.',
       },
     ],
   },
   {
-    category: 'Study & support',
+    category: 'Deadlines',
+    blurb: 'What each deadline means, and what actually happens if you miss one.',
+    icon: CalendarClock,
     items: [
       {
-        q: 'Are classes online or on campus?',
-        a: 'It depends on the programme. Each listing states whether it runs on campus, online, or as a hybrid. Campus locations are listed on our About page.',
+        q: 'What happens if I miss a deadline?',
+        a: 'Your application is not rejected. It stays exactly where it is and does not advance on its own, and you are offered the chance to write an explanation of what happened. A staff member reads every explanation individually and decides — no automated system judges it. Act as soon as you notice, because nothing moves until somebody looks at it.',
       },
       {
-        q: 'Do I get a certificate?',
-        a: 'Yes. Students who complete the coursework and capstone project receive a Saylani Mass IT Training certificate.',
+        q: 'Where do I see my deadlines?',
+        a: 'Each stage shows its own deadline in your portal, counting down, and the emails for time-limited stages repeat it. Deadlines belong to the stage you are standing on, so you will never be counting down to more than one at a time.',
       },
       {
-        q: 'Is there job placement support?',
-        a: 'Our team runs CV workshops, mock interviews, and referrals to hiring partners. Around 78% of graduates find relevant work within six months.',
+        q: 'Do deadlines differ between applicants?',
+        a: 'They can. Interview deadlines are set per batch and captured when the batch is sent, so two candidates in the same intake may hold genuinely different dates. Always go by what your own portal says rather than by what someone else was told.',
+      },
+    ],
+  },
+  {
+    category: 'If you are selected',
+    blurb: 'Documents, the enrolment forms, and what onboarding involves.',
+    icon: ClipboardCheck,
+    items: [
+      {
+        q: 'What documents will I need?',
+        a: 'Your CNIC or B-Form, your father’s CNIC, your mother’s CNIC where applicable, your CV, your educational certificates, an experience letter if you have one, and proof of a bank account or Easypaisa account for any payment the programme makes. Originals of everything you upload must be brought on your first day.',
       },
       {
-        q: 'What if I need to withdraw?',
-        a: 'Let your programme coordinator know as early as possible so the seat can be offered to someone on the waiting list. You may reapply in a future intake.',
+        q: 'What are the enrolment forms?',
+        a: 'Four forms completed in a fixed order: Background Verification, Employment Application, Half Nama, and your bank or payment details. They reproduce Saylani’s own paperwork, so parts of them are bilingual, and they capture a signature you draw on screen.',
+      },
+      {
+        q: 'What if a form or document is rejected?',
+        a: 'A staff member can send any single form back to you for correction. Everything after it in the sequence re-locks until you resubmit, so a correction never lets a later form go through on an uncorrected earlier one. The same applies to an uploaded document that is unreadable, incomplete, or does not match your application.',
+      },
+      {
+        q: 'What is Agilytic?',
+        a: 'Our training-records partner. The final step of onboarding is your Agilytic account going live — that is what confirms your seat, and classes begin from there.',
+      },
+      {
+        q: 'When does the documents section unlock?',
+        a: 'Only after you clear the physical interview. Before that it stays locked, because nothing in it is asked of you until you have actually been selected.',
+      },
+    ],
+  },
+  {
+    category: 'Your data',
+    blurb: 'Who can see what you submit, and what you can ask us to do with it.',
+    icon: ShieldCheck,
+    items: [
+      {
+        q: 'Who inside Saylani can see my application?',
+        a: 'Only staff administering the specific intake you applied to. An administrator for one intake cannot see applicants to another — that separation is enforced by the platform, not just by policy. Every time a staff member views or changes your record, it is written to an audit trail.',
+      },
+      {
+        q: 'What happens to my photograph and documents?',
+        a: 'They are stored privately and are never reachable by a fixed link. Each time one is viewed, by you or by staff, the platform issues a fresh link that expires shortly afterward.',
+      },
+      {
+        q: 'Can I ask for my data to be deleted?',
+        a: 'Yes — write to the admissions team. We will act on it unless there is a genuine reason to keep a specific record, such as an audit entry or the enrolment record of someone who completed a bootcamp, and we will tell you if so. The Privacy Policy sets this out in full.',
       },
     ],
   },
@@ -499,35 +763,61 @@ export const VALUES = [
   },
 ]
 
+/* ---------------------------------------------------------------- footer -- */
+
+/**
+ * The footer's link columns, grouped by what a visitor came down here to do.
+ *
+ * A footer is not a second navigation bar. People scroll to one having failed
+ * to find something above it, or to check something before they commit — so
+ * these are grouped by intent ("I want to apply", "I need help") rather than
+ * by the site's own section names, and each group is short enough to scan
+ * without reading.
+ *
+ * Legal links are deliberately *not* a column here: they belong in the bottom
+ * bar, which is the one place every visitor already knows to look for them.
+ * See `LEGAL_LINKS` below.
+ *
+ * The programme list is generated from `PROGRAMS`, not retyped, so adding a
+ * sixth track cannot leave the footer advertising five.
+ */
 export const FOOTER_LINKS = [
   {
     heading: 'Programs',
-    links: PROGRAMS.map((p) => ({ label: p.title, href: `/programs/${p.slug}` })),
+    links: [
+      ...PROGRAMS.map((p) => ({ label: p.title, href: `/programs/${p.slug}` })),
+      { label: 'Compare all tracks', href: '/programs' },
+    ],
   },
   {
-    heading: 'Admissions',
+    heading: 'Apply',
     links: [
-      { label: 'How to Apply', href: '/admissions' },
-      { label: 'Eligibility', href: '/admissions#eligibility' },
-      { label: 'Important Dates', href: '/admissions#dates' },
-      { label: 'Apply Now', href: '/signup' },
+      { label: 'Start an application', href: '/signup' },
+      { label: 'How admissions work', href: '/admissions' },
+      { label: 'Who can apply', href: '/admissions#eligibility' },
+      { label: 'Key dates', href: '/admissions#dates' },
     ],
   },
   {
     heading: 'About',
     links: [
-      { label: 'Our Mission', href: '/about' },
-      { label: 'Success Stories', href: '/success-stories' },
+      { label: 'Our mission', href: '/about' },
+      { label: 'Success stories', href: '/success-stories' },
       { label: 'Campuses', href: '/about#campuses' },
-      { label: 'Contact', href: '/contact' },
     ],
   },
   {
-    heading: 'Support',
+    heading: 'Help',
     links: [
       { label: 'FAQs', href: '/faq' },
-      { label: 'Student Portal', href: '/login' },
-      { label: 'Contact Us', href: '/contact' },
+      { label: 'Contact admissions', href: '/contact' },
+      { label: 'Student portal', href: '/login' },
     ],
   },
+]
+
+/** Bottom-bar links. Kept beside the copyright, where people expect them. */
+export const LEGAL_LINKS = [
+  { label: 'Privacy Policy', href: '/privacy' },
+  { label: 'Terms of Service', href: '/terms' },
 ]
