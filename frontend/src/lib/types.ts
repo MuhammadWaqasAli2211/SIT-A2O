@@ -179,6 +179,9 @@ export interface Phase {
   opens_at: string | null
   deadline_at: string | null
   is_open: boolean
+  /** Only the INTERVIEW phase uses this: when its AI interview results were
+   * announced to candidates. Null means not announced. */
+  results_announced_at: string | null
 }
 
 export interface Bootcamp {
@@ -450,9 +453,33 @@ export interface CandidateScore {
   can_explain: boolean
   /** Whether they have already written to the admins about missing it. */
   explanation_sent: boolean
-  /** None until completed. score >= AI_PASS_THRESHOLD (see records.ts) — a
-   * fact about the number, not an automated verdict. */
+  /** None until completed *and* announced. score >= AI_PASS_THRESHOLD (see
+   * records.ts) — a fact about the number, not an automated verdict. */
   passed: boolean | null
+  /** Whether this intake's results have been announced. False alongside
+   * status 'completed' is the "results will be announced soon" state — the
+   * candidate knows they finished, not how they did. */
+  announced: boolean
+  /** Whether the one-time reveal popup has already been shown to this
+   * candidate. Stamped by markResultSeen() after it renders. */
+  result_seen: boolean
+}
+
+export interface AnnounceSummary {
+  invited: number
+  completed: number
+  passed: number
+  failed: number
+  /** Invited but with no readable score. Rejected on announce, alongside
+   * the failures. */
+  no_score: number
+  announced: boolean
+  announced_at: string | null
+  deadline_at: string | null
+  deadline_passed: boolean
+  /** False until the deadline has passed — results are only announced once
+   * nobody can still be sitting the interview. */
+  can_announce: boolean
 }
 
 /** One record from the external service, shape unverified. */
