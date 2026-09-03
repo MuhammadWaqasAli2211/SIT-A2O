@@ -1,14 +1,32 @@
+/**
+ * The public site header.
+ *
+ * A solid --nav-shell bar rather than the transparent-over-hero treatment it
+ * used to have. That token is dark in *both* themes deliberately (see
+ * index.css), so every control inside reads on --nav-shell-ink and must not be
+ * styled with --foreground, which inverts underneath it.
+ *
+ * The signed-in cluster on the right is real, not decorative: the bell shows a
+ * candidate's actual unread count, and the user block shows the signed-in
+ * profile. Signed out, both are replaced by Sign in / Apply now rather than
+ * rendered as empty chrome.
+ */
+
 import { AnimatePresence, motion } from 'motion/react'
-import { ChevronDown, GraduationCap, LayoutDashboard, Menu, X } from 'lucide-react'
+import { Bell, ChevronDown, LayoutDashboard, Menu, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 
+import { BrandLockup } from '@/features/marketing/brand'
+import { SiteSearch } from '@/features/marketing/site-search'
+import { useNotifications } from '@/features/notifications/use-notifications'
 import { ThemeToggle } from '@/components/shared/theme-toggle'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { useScrolled } from '@/hooks/use-scrolled'
+import { ROLE_LABEL } from '@/lib/portal-nav'
 import { NAV_ITEMS, type NavItem } from '@/lib/site-data'
-import { HOME_BY_ROLE } from '@/lib/types'
+import { HOME_BY_ROLE, UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export function PublicHeader() {
@@ -55,27 +73,20 @@ export function PublicHeader() {
     <>
       <header
         className={cn(
-          'fixed inset-x-0 top-0 z-50 transition-all duration-300',
-          scrolled
-            ? 'border-b border-border/70 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65'
-            : 'border-b border-transparent bg-transparent',
+          'fixed inset-x-0 top-0 z-50 bg-nav-shell transition-shadow duration-300',
+          scrolled && 'shadow-lg shadow-black/20',
         )}
       >
-        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between gap-6 px-4 py-3 sm:px-6 lg:px-8">
-          <Link to="/" className="group flex shrink-0 items-center gap-2.5">
-            <span className="relative grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm transition-transform duration-300 group-hover:scale-105">
-              <GraduationCap className="size-5" />
-            </span>
-            <span className="flex flex-col leading-none">
-              <span className="text-[0.95rem] font-semibold tracking-tight">Saylani</span>
-              <span className="text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Mass IT Training
-              </span>
-            </span>
+        <div className="mx-auto flex h-18 max-w-[100rem] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <Link to="/" className="group shrink-0">
+            <BrandLockup tone="shell" />
           </Link>
 
           {/* ------------------------------------------------ desktop nav -- */}
-          <nav className="hidden items-center gap-1 lg:flex" onMouseLeave={scheduleClose}>
+          <nav
+            className="hidden items-center gap-0.5 xl:flex"
+            onMouseLeave={scheduleClose}
+          >
             {NAV_ITEMS.map((item) => (
               <DesktopNavItem
                 key={item.label}
@@ -90,29 +101,45 @@ export function PublicHeader() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
+          {/* Search takes the slack between the nav and the actions, so the
+              bar stays balanced from `lg` all the way up to the max width. */}
+          <SiteSearch className="ml-auto hidden w-full max-w-64 lg:block" />
+
+          {/* `ml-auto` pushes the actions right when the search is hidden;
+              from `lg` the search itself carries the auto margin, so this one
+              is released or the two would fight over the same slack. */}
+          <div className="ml-auto flex items-center gap-2 lg:ml-0">
+            <ThemeToggle className="border-nav-shell-ink/15 text-nav-shell-ink hover:bg-nav-shell-ink/10" />
+
+            {profile && <NotificationBell />}
 
             {profile ? (
-              <Button
-                render={<Link to={HOME_BY_ROLE[profile.role]} />}
-                size="sm"
-                className="hidden sm:inline-flex"
-              >
-                <LayoutDashboard className="size-4" />
-                Dashboard
-              </Button>
+              <>
+                <Button
+                  render={<Link to={HOME_BY_ROLE[profile.role]} />}
+                  size="sm"
+                  className="hidden rounded-full sm:inline-flex"
+                >
+                  <LayoutDashboard className="size-4" />
+                  Dashboard
+                </Button>
+                <UserBlock />
+              </>
             ) : (
               <>
                 <Button
                   render={<Link to="/login" />}
                   variant="ghost"
                   size="sm"
-                  className="hidden sm:inline-flex"
+                  className="hidden rounded-full text-nav-shell-ink hover:bg-nav-shell-ink/10 hover:text-nav-shell-ink sm:inline-flex"
                 >
                   Sign in
                 </Button>
-                <Button render={<Link to="/signup" />} size="sm" className="hidden sm:inline-flex">
+                <Button
+                  render={<Link to="/signup" />}
+                  size="sm"
+                  className="hidden rounded-full sm:inline-flex"
+                >
                   Apply now
                 </Button>
               </>
@@ -123,7 +150,7 @@ export function PublicHeader() {
               onClick={() => setMobileOpen((v) => !v)}
               aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={mobileOpen}
-              className="grid size-9 place-items-center rounded-lg border border-border text-foreground transition-colors hover:bg-muted lg:hidden"
+              className="grid size-9 place-items-center rounded-lg border border-nav-shell-ink/15 text-nav-shell-ink transition-colors hover:bg-nav-shell-ink/10 xl:hidden"
             >
               {mobileOpen ? <X className="size-4.5" /> : <Menu className="size-4.5" />}
             </button>
@@ -160,6 +187,8 @@ function DesktopNavItem({
   onOpen: () => void
   onScheduleClose: () => void
 }) {
+  const Icon = item.icon
+
   if (!item.children) {
     return (
       <NavLink
@@ -167,11 +196,12 @@ function DesktopNavItem({
         onMouseEnter={onScheduleClose}
         className={({ isActive }) =>
           cn(
-            'relative rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-            isActive ? 'text-primary' : 'text-foreground/75 hover:text-foreground',
+            'relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+            isActive ? 'text-primary' : 'text-nav-shell-ink/80 hover:text-nav-shell-ink',
           )
         }
       >
+        {Icon && <Icon className="size-4 shrink-0" />}
         {item.label}
       </NavLink>
     )
@@ -185,15 +215,82 @@ function DesktopNavItem({
       onClick={onOpen}
       aria-expanded={isOpen}
       className={cn(
-        'flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        isOpen ? 'text-primary' : 'text-foreground/75 hover:text-foreground',
+        'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+        isOpen ? 'text-primary' : 'text-nav-shell-ink/80 hover:text-nav-shell-ink',
       )}
     >
+      {Icon && <Icon className="size-4 shrink-0" />}
       {item.label}
       <ChevronDown
         className={cn('size-3.5 transition-transform duration-250', isOpen && 'rotate-180')}
       />
     </button>
+  )
+}
+
+/* ------------------------------------------------------ signed-in cluster -- */
+
+/**
+ * Unread count for the signed-in candidate.
+ *
+ * Candidate-only because that is the only role with a notification source —
+ * `/notifications` is candidate-scoped, and polling it as an admin would fetch
+ * an empty list every 30 seconds forever. Admins get no bell rather than a
+ * bell that is permanently zero.
+ */
+function NotificationBell() {
+  const { profile } = useAuth()
+  const isCandidate = profile?.role === UserRole.CANDIDATE
+  const { unreadCount } = useNotifications({ enabled: isCandidate })
+
+  if (!isCandidate) return null
+
+  return (
+    <Link
+      to="/dashboard"
+      aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+      className="relative hidden size-9 place-items-center rounded-lg border border-nav-shell-ink/15 text-nav-shell-ink transition-colors hover:bg-nav-shell-ink/10 sm:grid"
+    >
+      <Bell className="size-4" />
+      {unreadCount > 0 && (
+        <span className="absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full bg-destructive px-1 text-[0.6rem] font-bold text-destructive-foreground">
+          {unreadCount > 9 ? '9+' : unreadCount}
+        </span>
+      )}
+    </Link>
+  )
+}
+
+/** Avatar, name and role for the signed-in user. */
+function UserBlock() {
+  const { profile } = useAuth()
+  if (!profile) return null
+
+  const name = profile.full_name?.trim() || profile.email
+  // Initials from the name, capped at two so a four-part name still fits.
+  const initials =
+    name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || '?'
+
+  return (
+    <Link
+      to={HOME_BY_ROLE[profile.role]}
+      className="hidden items-center gap-2 rounded-full py-1 pr-2 pl-1 transition-colors hover:bg-nav-shell-ink/10 xl:flex"
+    >
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/20 text-[0.7rem] font-bold text-primary">
+        {initials}
+      </span>
+      <span className="flex flex-col leading-tight">
+        <span className="max-w-32 truncate text-[0.8rem] font-semibold text-nav-shell-ink">
+          {name}
+        </span>
+        <span className="text-[0.65rem] text-nav-shell-ink/60">{ROLE_LABEL[profile.role]}</span>
+      </span>
+      <ChevronDown className="size-3.5 shrink-0 text-nav-shell-ink/60" />
+    </Link>
   )
 }
 
@@ -214,9 +311,9 @@ function MegaPanel({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2, ease: [0.21, 0.47, 0.32, 0.98] }}
-      className="absolute inset-x-0 top-full hidden border-b border-border/70 bg-background/95 backdrop-blur-xl lg:block"
+      className="absolute inset-x-0 top-full hidden border-b border-border/70 bg-background/95 backdrop-blur-xl xl:block"
     >
-      <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[100rem] px-4 py-7 sm:px-6 lg:px-8">
         <div
           className={cn(
             'grid gap-2',
@@ -267,14 +364,14 @@ function MobileNav({ open, onClose }: { open: boolean; onClose: () => void }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm xl:hidden"
           />
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed inset-y-0 right-0 z-50 flex w-[min(22rem,88vw)] flex-col overflow-y-auto border-l border-border bg-background pt-20 pb-8 lg:hidden"
+            className="fixed inset-y-0 right-0 z-50 flex w-[min(22rem,88vw)] flex-col overflow-y-auto border-l border-border bg-background pt-20 pb-8 xl:hidden"
           >
             <nav className="flex flex-col gap-1 px-4">
               {NAV_ITEMS.map((item) =>
