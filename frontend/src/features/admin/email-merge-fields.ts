@@ -47,3 +47,30 @@ export const INVITE_MESSAGE_TEMPLATE =
   'working after this, and a missed deadline holds your application where it is.</p>' +
   '<p>Question difficulty for this round: $interview_difficulty.</p>' +
   '<p>— Saylani Admissions</p>'
+
+/**
+ * Filled once per Physical Interview batch — see `send_bulk` in
+ * physical_interview_service.py. Only offered on that composer: nothing
+ * else knows a venue, and there is no second channel telling a candidate
+ * where to go, unlike the AI invite's InterviewerAI credentials mail.
+ */
+export const PHYSICAL_INTERVIEW_MERGE_FIELDS = [
+  '$venue',
+  '$interview_date',
+  '$interview_day',
+  '$interview_time',
+  '$deadline',
+] as const
+
+export const PHYSICAL_INTERVIEW_MESSAGE_TEMPLATE =
+  '<p>Dear $candidate_name,</p>' +
+  '<p>Congratulations — you have cleared the AI screening interview for ' +
+  '<strong>$program</strong> ($bootcamp) and are invited to a Physical Interview.</p>' +
+  '<p><strong>Venue:</strong> $venue<br>' +
+  '<strong>Date:</strong> $interview_day, $interview_date<br>' +
+  '<strong>Time:</strong> $interview_time</p>' +
+  '<p>Please bring your CNIC/B-Form and arrive at least 15 minutes early. Your ' +
+  'candidate code is $candidate_code.</p>' +
+  '<p><strong>Deadline: $deadline.</strong> An outcome must be recorded by ' +
+  'this date, or your application will show as having missed this stage.</p>' +
+  '<p>— Saylani Admissions</p>'
