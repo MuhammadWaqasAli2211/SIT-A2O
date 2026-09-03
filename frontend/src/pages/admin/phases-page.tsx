@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { bootcampApi, phaseApi } from '@/features/admin/api'
 import {
@@ -195,6 +196,18 @@ function PhaseCard({
     }
   }
 
+  // Turning on flips the flag straight away; turning off still goes through
+  // the confirm dialog below — `checked` stays true until that's confirmed,
+  // since it reads `phase.is_open` directly rather than local optimistic
+  // state, so a cancelled confirm leaves the switch exactly where it was.
+  function onSwitchChange(next: boolean) {
+    if (next) {
+      void onToggle(true)
+    } else {
+      setConfirmClose(true)
+    }
+  }
+
   return (
     <Card className={cn(open && 'border-success/40')}>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
@@ -273,28 +286,18 @@ function PhaseCard({
             Save window
           </Button>
 
-          {phase.is_open ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setConfirmClose(true)}
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={phase.is_open}
+              onCheckedChange={onSwitchChange}
               disabled={toggle.pending}
-            >
-              <Lock className="size-4" />
-              Close phase
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onToggle(true)}
-              disabled={toggle.pending}
-            >
-              {toggle.pending && <Loader2 className="size-4 animate-spin" />}
-              <LockOpen className="size-4" />
-              Open phase
-            </Button>
-          )}
+              aria-label={phase.is_open ? 'Close phase' : 'Open phase'}
+            />
+            <span className="text-sm text-muted-foreground">
+              {toggle.pending && <Loader2 className="mr-1 inline size-3.5 animate-spin" />}
+              {phase.is_open ? 'Open' : 'Closed'}
+            </span>
+          </div>
 
           {dirty && (
             <span className="self-center text-xs text-muted-foreground">Unsaved changes</span>
