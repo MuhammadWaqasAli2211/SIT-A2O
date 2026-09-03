@@ -52,14 +52,23 @@ function AccordionContent({
   ...props
 }: AccordionPrimitive.Panel.Props) {
   return (
+    // `animate-accordion-down` / `animate-accordion-up` used to be here. They
+    // were never defined — no keyframes, no --animate-* entry in index.css —
+    // so Tailwind emitted nothing for either and the panel snapped open with
+    // no transition at all. The inner element already carries Base UI's own
+    // transition hooks (a measured --accordion-panel-height plus h-0 at the
+    // starting and ending styles); all that was missing was a transition to
+    // run between them, which is what `transition-[height]` below adds. That
+    // is the documented CSS-transition path for this primitive, and it needs
+    // no new keyframes.
     <AccordionPrimitive.Panel
       data-slot="accordion-content"
-      className="overflow-hidden text-sm data-open:animate-accordion-down data-closed:animate-accordion-up"
+      className="overflow-hidden text-sm"
       {...props}
     >
       <div
         className={cn(
-          "h-(--accordion-panel-height) pt-0 pb-2.5 data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+          "h-(--accordion-panel-height) pt-0 pb-2.5 transition-[height] duration-250 ease-out data-ending-style:h-0 data-starting-style:h-0 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
           className
         )}
       >
