@@ -12,6 +12,7 @@ import type {
   AdminGrants,
   AiAnalytics,
   AiScope,
+  AnnounceSummary,
   ApplicantRow,
   ApplicationStage,
   AuditEntry,
@@ -520,6 +521,22 @@ export const aiInterviewApi = {
    * backend refuses an admin who omits it. */
   completed: (bootcampId?: string) =>
     get<CompletedInterviewsPage>('/ai-interviews/completed', bootcampId ? { bootcamp_id: bootcampId } : undefined),
+
+  /** Figures behind the announce confirm dialog, plus whether results are
+   * currently announced. `can_announce` is false until the deadline passes. */
+  announceSummary: (bootcampId: string) =>
+    get<AnnounceSummary>(`/bootcamps/${bootcampId}/ai-interviews/announce`),
+
+  /** Announce this intake's results, or hide them again. Announcing also
+   * moves every invited candidate on — passed to Physical Interview,
+   * everyone else to Rejected. Hiding does not reverse that. */
+  async setResultsVisible(bootcampId: string, visible: boolean) {
+    const { data } = await api.post<AnnounceSummary>(
+      `/bootcamps/${bootcampId}/ai-interviews/announce`,
+      { visible },
+    )
+    return data
+  },
 
   detail: (interviewId: number) => get<ExternalRecord>(`/ai-interviews/${interviewId}`),
 
