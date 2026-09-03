@@ -1,6 +1,153 @@
-> **Branch:** `waqas` — last updated 2026-08-31
+> **Branch:** `huzaifa` — last updated 2026-09-03
 
 # Project Status
+
+## Where things stand — 2026-09-03 (homepage hero rebuild + "Bootcamp Flows" rebrand)
+
+**Rebrand, UI surfaces only.** The wordmark, browser-tab title, and meta/OG
+tags now read "Bootcamp Flows" instead of "Saylani Mass IT Training" — the
+navbar, footer, portal sidebar, and the legacy admin `AppShell` all render
+from one new shared component (`features/marketing/brand.tsx`:
+`BrandLockup` + `BrandMark`, an original inline SVG mark) so the four
+cannot drift back out of sync the way the old copy-pasted markup would
+have let them. **Deliberately not touched:** the email "from" name
+candidates already recognise mid-intake, and the Privacy Policy / Terms of
+Service legal text, which names *Saylani Welfare International Trust* as
+the actual operating entity — renaming that would make it factually wrong
+unless the trust itself is renamed. Flagged back to the user rather than
+decided silently; the request had asked for three mutually exclusive
+scopes at once (UI-only, +email, +legal text).
+
+**Homepage hero rebuilt to a supplied reference design.** New
+`features/marketing/` module:
+
+- `use-open-bootcamp.ts` — the "Admissions open for Bootcamp NN" badge now
+  reads the real, currently-open intake from the existing public
+  `/bootcamps/open` endpoint (the same one `registration-form.tsx` and the
+  registration-closed dialog already trust) instead of a hardcoded string.
+  Absent entirely, not shown stale, when nothing is open.
+- `dashboard-preview.tsx` / `preview-charts.tsx` / `preview-data.ts` — a
+  floating preview of the real admin dashboard: icon rail, stat cards that
+  count up via the existing `Counter` primitive, a real Recharts area
+  chart with a working period dropdown, and a donut chart whose legend
+  rows and ring segments highlight together. **The figures inside are
+  illustrative**, not live aggregates — decided explicitly with the user
+  rather than assumed either way, because `/bootcamps/open`'s own schema
+  comment says it is "deliberately narrower ... no counts," and a new
+  public endpoint would mean publishing a quiet week's low application
+  count to anyone. `preview-data.ts`'s header documents the exact
+  real/illustrative split. The card carries an on-screen "figures shown
+  are illustrative" line, not just an aria-label, so the caveat reaches
+  everyone, not only screen-reader users.
+- `journey-scene.tsx` — the "student life → professional life" transition
+  panel is original, hand-authored inline SVG, not a photo, stock asset,
+  or generative-tool output. Both figures are deliberately featureless
+  silhouettes (a head is a plain circle — no face, no skin tone, no hair)
+  so the panel depicts a role, not a real, identifiable person.
+- `application-flow-card.tsx` — the bottom "Application Status" card
+  renders the *same* `JOURNEY_STEPS` data and `JourneyStepper` component a
+  candidate sees on their own tracking page, not a re-typed copy, so it
+  cannot silently advertise a process the `ApplicationStage` enum no
+  longer runs.
+- `site-search.tsx` — the navbar's "Search anything…" pill is a real
+  client-side search over the programme catalogue and page index, not
+  decorative chrome; a box that takes text and does nothing was judged
+  worse than not having one.
+
+**`JourneyStepper` gained two additive props**, both off by default so the
+three existing call sites (candidate track page, empty-dashboard demo,
+registration form-stepper) are unaffected: `numbered` (position pips +
+per-segment checkmarks, for the marketing explainer) and `startOnView`
+(hold the one-shot demo sequence until scrolled into view, for a stepper
+that sits below the fold).
+
+**Three new theme tokens**, following the existing `--auth-pane` pattern
+(deliberately fixed-dark in both light and dark mode, so a bar that must
+stay dark under white text can't invert): `--hero-canvas`, `--hero-ink`,
+`--nav-shell` / `--nav-shell-ink`. The gold/blue/red accents the hero also
+needed were **not** duplicated — `--chart-3`, `--chart-2`, and `--chart-5`
+already are those exact colors.
+
+**Two layout bugs found during the build, not shipped:**
+
+- The transition illustration originally used `preserveAspectRatio="...
+  slice"` on a fixed-height band, which crops *more* content as the
+  viewport widens — at a 2560px screen it would have scaled by ~2.1x and
+  cut both figures off at the neck. Rewritten at a 1600×380 viewBox with a
+  matching `aspect-[1600/380]` container and `meet`, so the scene is never
+  cropped at any width; the 26-tower skyline was verified programmatically
+  to close at exactly x=1600 with no gaps.
+- The dashboard preview's internal grid was originally keyed to viewport
+  breakpoints (`lg:grid-cols-4`), but its actual width comes from its grid
+  *column*, which does not track viewport breakpoints — at 1280px it is
+  ~600px wide (hero split in two) while at 1024px it is ~960px (hero
+  already stacked), so the old breakpoint would have laid out four stat
+  cards exactly where the card is narrowest. Switched to CSS container
+  queries (`@container` / `@lg:` / `@2xl:`) so the card's own rendered
+  width governs, verified present in the built CSS output.
+
+**Not built, flagged rather than assumed:** scroll-triggered parallax
+between hero → transition scene → step-flow card was listed in the
+request as an idea needing explicit sign-off, and no sign-off was given —
+only the existing `Reveal`/`Stagger`/`startOnView` scroll-into-view
+entrances were used. Also surfaced: the homepage's `ProcessSection`
+further down the page still reads from the older `ADMISSION_STEPS` data
+(4 stages, "Four stages, clearly defined") while the new hero card reads
+from the real 5-stage `JOURNEY_STEPS` — a pre-existing duplication this
+change made newly visible. Not resolved without the user's steer on which
+side should give way.
+
+**Verified:** 324 backend tests pass (untouched — frontend-only change),
+clean production build, 0 type errors, 0 lint errors. Nothing committed
+or pushed — a `main`→`huzaifa` merge from 2026-09-01 also remains local
+and unpushed, pending explicit instruction on both.
+
+---
+
+## Where things stand — 2026-09-01 (real Privacy Policy / Terms of Service)
+
+**The registration-time policy dialogs no longer show placeholder text.**
+`features/registration/policy-dialog.tsx` previously described its own
+content as "not written as binding legal language" and showed applicants an
+in-dialog banner saying so, while a candidate accepted it and submitted a
+CNIC. Both are now real, tailored to what this platform actually does —
+every field the registration form and onboarding stage actually collect,
+named individually (down to father's CNIC, the B-Form substitution under
+18, and the signature captured on the Half Nama form); the three outside
+providers that process candidate data on Saylani's behalf, named
+individually (Supabase for hosting/storage, Gmail for delivery,
+InterviewerAI for the recorded, proctored AI screening interview) rather
+than left as an unspecified "third parties"; per-intake admin scoping and
+the audit trail, both of which already exist in this codebase, stated as
+what they are; the deadline/missed-deadline-explanation flow already built
+for interview invites, described accurately rather than glossed over; and
+real contact details (`admissions@saylaniwelfare.com`, the phone number and
+head-office address already shown on the public Contact page) rather than
+invented ones.
+
+**Deliberately not claimed: legal review.** This is accurate, plain-language
+description of the platform's real practices, not attorney-reviewed
+language — the file's own top comment says so. Recorded here as an honest
+open item, not silently glossed over: a document real applicants accept
+while submitting a national ID number is worth a lawyer's pass before this
+goes live to the public, particularly given Pakistan's evolving personal
+data protection legal landscape and that minors' data is in scope.
+
+**A version-tracking gap was found, not fixed.** `terms.ts`'s
+`TERMS_VERSION` is recorded per-application and governs the three
+declaration checkboxes, but the Privacy Policy / Terms of Service text
+itself has no equivalent — `POLICY_EFFECTIVE_DATE` is shown in the dialog
+today but not persisted per-applicant. If this policy text changes after
+real applicants have accepted it, there will be no record of which wording
+a given applicant actually saw. Not built here: it needs a new backend
+column and is a schema change, not a copy change — flagged for a decision
+rather than assumed.
+
+**Verified:** 324 backend tests pass (untouched — this was a frontend-only,
+static-content change), clean production build, 0 type errors, 0 lint
+errors.
+
+---
 
 ## Where things stand — 2026-08-31 (Student's Folder: onboarding forms + Documents Hub)
 
@@ -1000,9 +1147,10 @@ Unanswered questions carried forward:
 
 ## Next
 
-1. **Supply the real Privacy Policy and Terms of Service text** — the
-   dialogs shown at registration are placeholders and say so; this is the one
-   item that blocks a public launch rather than merely improving it
+1. ~~Supply the real Privacy Policy and Terms of Service text~~ — **done
+   2026-09-01**, see today's entry above. Still worth a lawyer's pass before
+   public launch given CNIC and minors' data are involved, but the dialogs no
+   longer show placeholder copy or say they're unreviewed
 2. **Unify the two `ApplicationStage` sources** — `lib/types.ts` and
    `lib/stages.ts` — onto one definition; see *Known issue* above
 3. **Check back around 2026-09-03** on whether the Gmail refresh token
