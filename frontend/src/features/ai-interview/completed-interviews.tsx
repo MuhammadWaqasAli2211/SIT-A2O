@@ -32,16 +32,12 @@ import {
   MoreHorizontal,
   RefreshCw,
   Search,
-  UserCheck,
-  UserX,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Counter } from '@/components/motion/counter'
 import { Reveal } from '@/components/motion/reveal'
 import { EmptyState } from '@/components/shared/portal-ui'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
@@ -65,8 +61,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { aiInterviewApi, applicationApi } from '@/features/admin/api'
-import { AsyncSection, ConfirmDialog, useConfirm } from '@/features/admin/components'
+import { aiInterviewApi } from '@/features/admin/api'
+import { AsyncSection } from '@/features/admin/components'
 import { EvidenceDialog } from '@/features/ai-interview/report-view'
 import {
   AI_PASS_THRESHOLD,
@@ -80,7 +76,7 @@ import {
   score,
   timestamp,
 } from '@/features/ai-interview/records'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { useAsync } from '@/hooks/use-async'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
 import { relativeTime } from '@/lib/format'
@@ -103,34 +99,6 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
   const [track, setTrack] = useState(ALL)
   const [bootcamp, setBootcamp] = useState(ALL)
   const [open, setOpen] = useState<ExternalRecord | null>(null)
-  const rejectConfirm = useConfirm<ExternalRecord>()
-
-  const reasonFor = (item: ExternalRecord) => {
-    const value = score(item)
-    return value !== null ? `AI interview score: ${value}/100` : 'AI interview reviewed'
-  }
-
-  // Same endpoint the Candidates screen's own stage control already uses
-  // (applicationApi.advanceStage) — no new backend action, no new permission
-  // model. `refetch` afterward is what makes the row's status/actions catch
-  // up without a manual reload.
-  const advance = useMutation(async (item: ExternalRecord) => {
-    const app = applicationInfo(item)
-    if (!app) return
-    await applicationApi.advanceStage(app.id, 'PHYSICAL_INTERVIEW', reasonFor(item))
-    toast.success(`${candidateName(item)} advanced to Physical Interview`)
-    refetch()
-  })
-
-  const reject = useMutation(async () => {
-    const item = rejectConfirm.target
-    const app = item ? applicationInfo(item) : null
-    if (!item || !app) return
-    await applicationApi.advanceStage(app.id, 'REJECTED', reasonFor(item))
-    toast.success(`${candidateName(item)} rejected`)
-    rejectConfirm.close()
-    refetch()
-  })
 
   // Memoized so its identity is stable across renders where `data` has not
   // actually changed — the `?? []` fallback would otherwise be a fresh array
@@ -325,7 +293,6 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
                                     variant="ghost"
                                     size="icon"
                                     aria-label={`Actions for ${candidateName(item)}`}
-                                    disabled={advance.pending}
                                   />
                                 }
                               >
@@ -342,22 +309,16 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
                                   <FileText className="size-4" />
                                   View full report
                                 </DropdownMenuItem>
-                                {eligible && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => void advance.run(item)}>
-                                      <UserCheck className="size-4" />
-                                      Advance to Physical Interview
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      variant="destructive"
-                                      onClick={() => rejectConfirm.ask(item)}
-                                    >
-                                      <UserX className="size-4" />
-                                      Reject
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
+                                {/* No per-candidate advance/reject here any
+                                    more (2026-09-03). Announcing results does
+                                    both, for everybody, in one action — see
+                                    AnnounceResultsControl. Deciding one
+                                    candidate ahead of the announcement would
+                                    reveal their outcome early, which is the
+                                    exact thing the announcement exists to
+                                    prevent. The manual override still exists
+                                    for a super admin on the Candidates
+                                    screen. */}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
@@ -372,31 +333,7 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
         )}
       </AsyncSection>
 
-      {advance.error && (
-        <Alert variant="destructive">
-          <AlertDescription>{advance.error}</AlertDescription>
-        </Alert>
-      )}
-
       <EvidenceDialog record={open} onClose={() => setOpen(null)} onChanged={refetch} />
-
-      <ConfirmDialog
-        open={rejectConfirm.open}
-        onOpenChange={(next) => !next && rejectConfirm.close()}
-        title="Reject this candidate?"
-        description={
-          rejectConfirm.target
-            ? `${candidateName(rejectConfirm.target)}${
-                candidateCode(rejectConfirm.target) ? ` (${candidateCode(rejectConfirm.target)})` : ''
-              } will be moved to Rejected. This can be undone from the Candidates screen if needed.`
-            : ''
-        }
-        confirmLabel="Reject"
-        destructive
-        pending={reject.pending}
-        error={reject.error}
-        onConfirm={() => void reject.run()}
-      />
     </div>
   )
 }
