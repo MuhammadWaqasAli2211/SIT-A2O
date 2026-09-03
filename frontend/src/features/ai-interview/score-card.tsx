@@ -17,7 +17,7 @@
  * approaching, not as a surprise.
  */
 
-import { AlertTriangle, BrainCircuit, CheckCircle2, Clock, Loader2, Send } from 'lucide-react'
+import { AlertTriangle, BrainCircuit, CheckCircle2, Clock, Eye, Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -27,7 +27,9 @@ import { Countdown } from '@/components/shared/countdown'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ResultReveal } from '@/features/ai-interview/result-reveal'
 import { candidateApi } from '@/features/candidate/api'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
@@ -54,17 +56,83 @@ export function AiScoreCard() {
   // empty card explaining an absence would only add noise.
   if (!data || data.status === 'not_invited') return null
 
+  const completed = data.status === 'completed'
+  // Announced, and this candidate has not been shown it yet — the one moment
+  // the reveal popup fires.
+  const revealing = completed && data.announced && !data.result_seen
+
   return (
     <div className="flex flex-col gap-2">
-      {data.status === 'completed' ? (
-        <CompletedCard result={data} />
+      {completed ? (
+        data.announced ? (
+          <CompletedCard result={data} />
+        ) : (
+          <AwaitingAnnouncementCard />
+        )
       ) : data.status === 'expired' ? (
         <ExpiredCard result={data} onSent={refresh} />
       ) : (
         <WaitingCard result={data} />
       )}
       <LiveIndicator lastUpdated={lastUpdated} live={live} className="self-end" />
+
+      {revealing && <ResultReveal result={data} onSeen={refresh} />}
     </div>
+  )
+}
+
+/* --------------------------------------------- finished, not yet told -- */
+
+function AwaitingAnnouncementCard() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Reveal>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-success/12 text-success">
+              <CheckCircle2 className="size-4" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <CardTitle className="text-base">AI Interview — Completed</CardTitle>
+              <CardDescription>
+                Your interview is finished and recorded. Results for this intake are announced
+                to everyone at the same time.
+              </CardDescription>
+            </div>
+          </div>
+          <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground">
+            Completed
+          </span>
+        </CardHeader>
+
+        <CardContent>
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            <Eye className="size-4" />
+            View result
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <div className="flex flex-col items-center gap-3 py-2 text-center">
+            <span className="grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
+              <Clock className="size-5" />
+            </span>
+            <DialogTitle className="text-lg">Results will be announced soon</DialogTitle>
+            <DialogDescription>
+              Stay updated — your result will appear here as soon as this intake&apos;s results
+              are released, and we will email you too.
+            </DialogDescription>
+            <Button className="mt-1 w-full" onClick={() => setOpen(false)}>
+              Got it
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Reveal>
   )
 }
 
