@@ -25,6 +25,7 @@ import { Link } from 'react-router-dom'
 import { Reveal, Stagger, StaggerItem } from '@/components/motion/reveal'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { AiScoreCard } from '@/features/ai-interview/score-card'
+import { PhysicalInterviewCard } from '@/features/physical-interview/status-card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
@@ -87,6 +88,7 @@ export default function CandidateInterviewPage() {
             usually here to look for that result, not for a past slot. Renders
             nothing at all when they were never invited to it. */}
         <AiScoreCard />
+        <PhysicalInterviewCard />
 
         <AsyncSection
           initialLoading={initialLoading}
