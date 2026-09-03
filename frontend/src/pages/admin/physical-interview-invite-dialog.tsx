@@ -52,7 +52,10 @@ import {
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-const PAGE_SIZE = 200
+// The applicants endpoint caps `limit` at 100 (bootcamps.py's list_applicants).
+// Asking for more is a 422 that surfaces as a bare "Some fields are invalid"
+// where the candidate list should be.
+const PAGE_SIZE = 100
 const CONFIRM_THRESHOLD = 25
 
 const ROW_STATUS_LABEL: Record<PhysicalInterviewRowStatus, string> = {
