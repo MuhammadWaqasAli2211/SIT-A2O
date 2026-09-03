@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { PageTransition } from '@/components/motion/page-transition'
 import { ThemeToggle } from '@/components/shared/theme-toggle'
@@ -66,6 +66,8 @@ function PortalShell() {
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [headerSearch, setHeaderSearch] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => setMobileOpen(false), [location.pathname])
 
@@ -138,15 +140,38 @@ function PortalShell() {
             <Menu className="size-4.5" />
           </button>
 
-          <div className="relative hidden max-w-sm flex-1 sm:block">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search candidates, codes..."
-              aria-label="Search"
-              className="pl-9"
-            />
-          </div>
+          {/* Staff only. This was previously an Input with no `value`, no
+              `onChange` and no handler — decoration that typed but did
+              nothing, shown to every role including candidates, who have a
+              single application and nothing to search through. It is now a
+              real jump-to-search for staff, and gone entirely for
+              candidates rather than kept as a control that lies. */}
+          {profile.role !== UserRole.CANDIDATE && (
+            <form
+              role="search"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const term = headerSearch.trim()
+                if (!term) return
+                // Deliberately a jump, not a live filter: this sits in the
+                // chrome above every screen, so it has no list of its own to
+                // narrow. It hands the term to the Candidates screen, which
+                // is the one built to search candidates and codes.
+                navigate(`/admin/candidates?search=${encodeURIComponent(term)}`)
+              }}
+              className="relative hidden max-w-sm flex-1 sm:block"
+            >
+              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={headerSearch}
+                onChange={(event) => setHeaderSearch(event.target.value)}
+                placeholder="Search candidates, codes..."
+                aria-label="Search candidates"
+                className="pl-9"
+              />
+            </form>
+          )}
 
           <div className="ml-auto flex items-center gap-2">
             {profile.role === UserRole.CANDIDATE && <RegisterAction />}
