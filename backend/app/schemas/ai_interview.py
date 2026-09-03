@@ -26,15 +26,28 @@ class CandidateScore(BaseModel):
 
     status: Literal["not_invited", "invited", "in_progress", "completed", "expired"]
 
-    # None until an interview is finished and carries a score we recognise.
+    # None until an interview is finished and carries a score we recognise —
+    # and, since 2026-09-03, until the intake's results have been announced.
+    # A completed-but-unannounced candidate gets status "completed" with no
+    # score and no verdict, which is the whole point of the announce step:
+    # results land for everyone at once, not the moment each person finishes.
     score: float | None = None
     scale: int = 100
     completed_at: datetime | None = None
 
-    # None until completed. Score >= PASS_THRESHOLD in ai_interview_service.py
-    # (decided 2026-08-30: 50/100) — a plain fact about the number, not a
-    # verdict: nothing here auto-rejects, an admin still decides.
+    # None until completed *and* announced. Score >= PASS_THRESHOLD in
+    # ai_interview_service.py (decided 2026-08-30: 50/100).
     passed: bool | None = None
+
+    # Whether this intake's results have been announced yet. False with
+    # status "completed" is the "results will be announced soon" state.
+    announced: bool = False
+
+    # Whether this candidate has already been shown the one-time reveal
+    # popup. Stamped by an explicit call after the popup renders, never by
+    # the read itself — otherwise the read that delivers the result would
+    # mark it seen before anything had been shown.
+    result_seen: bool = False
 
     # The candidate's own deadline, so the portal can count down to it rather
     # than show a bare date. Safe to expose: it is the date they were emailed.
@@ -52,6 +65,40 @@ class CandidateScore(BaseModel):
     # explanation does it by moving the candidate's stage, which is recorded
     # in the audit trail rather than here.
     explanation_sent: bool = False
+
+
+class AnnounceRequest(BaseModel):
+    """Show or hide this intake's AI interview results, all-or-nothing.
+
+    Hiding is not an undo: the stage moves showing caused, and the
+    notifications they sent, both stand. It hides the score and verdict from
+    the candidate's portal and nothing more — see set_results_visible.
+    """
+
+    visible: bool
+
+
+class AnnounceSummary(BaseModel):
+    """What an admin is shown before confirming an announce, and the state of
+    the toggle afterwards."""
+
+    invited: int = 0
+    completed: int = 0
+    passed: int = 0
+    failed: int = 0
+    # Invited but with no score we can read — never took it, or took it and
+    # their record carries nothing recognisable. These are rejected on
+    # announce along with the failures.
+    no_score: int = 0
+
+    announced: bool = False
+    announced_at: datetime | None = None
+
+    deadline_at: datetime | None = None
+    deadline_passed: bool = False
+    # False until the deadline has passed: results are only ever announced
+    # once nobody can still be sitting the interview.
+    can_announce: bool = False
 
 
 class ReinterviewDecision(BaseModel):
