@@ -25,10 +25,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StageBadge, Timeline } from '@/components/shared/portal-ui'
 import { applicationApi } from '@/features/admin/api'
 import { useAsync, useMutation } from '@/hooks/use-async'
+import { useAuth } from '@/hooks/use-auth'
 import {
   INTERVIEW_STATUS_LABEL,
   STAGE_LABEL,
   STAGE_ORDER,
+  UserRole,
   type AdminApplicationDetail,
   type ApplicationStage,
   type InterviewRow,
@@ -122,6 +124,9 @@ function Body({
   interviews: InterviewRow[]
   onChanged: () => void
 }) {
+  const { profile } = useAuth()
+  const isSuperAdmin = profile?.role === UserRole.SUPER_ADMIN
+
   const [target, setTarget] = useState<ApplicationStage>(application.stage)
   const [reason, setReason] = useState('')
 
@@ -197,7 +202,16 @@ function Body({
           </section>
         )}
 
-        {/* -------------------------------------------------- stage control -- */}
+        {/* -------------------------------------------------- stage control --
+            Super admin only (2026-09-03). This control can put any
+            application at any stage, skipping every gate the ordinary flow
+            enforces — including the AI interview announcement, which is what
+            moves candidates on now. An ADMIN does not need it: announcing
+            results and recording a Physical Interview outcome both move
+            stages as a consequence of a real decision. The backend refuses
+            these two routes for anyone else independently; this only stops
+            the click. */}
+        {isSuperAdmin && (
         <section className="flex flex-col gap-3 rounded-xl border border-border p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">
@@ -263,6 +277,7 @@ function Body({
             {isClosed ? 'Reinstate' : `Move to ${STAGE_LABEL[target]}`}
           </Button>
         </section>
+        )}
 
         {/* ---------------------------------------------------- interviews -- */}
         <section className="flex flex-col gap-2">
