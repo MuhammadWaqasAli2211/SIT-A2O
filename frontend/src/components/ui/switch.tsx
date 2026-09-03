@@ -40,7 +40,16 @@ export function Switch({
     >
       <span
         className={cn(
-          'absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform',
+          // `left-0` is load-bearing, not decoration. Without a horizontal
+          // anchor an absolutely-positioned element falls back to its *static*
+          // position — and a <button> centres its content — so the thumb
+          // started mid-pill and the checked translate pushed it clean off the
+          // right edge. It then sat on top of whatever followed the switch:
+          // the phase toggle's "Open" label rendered as "pen", because a white
+          // thumb on a white background covers a letter without looking like
+          // anything. Anchoring left makes both translate values exact:
+          // 2px in (off) and 22px in (on) inside a 44px track.
+          'absolute top-0.5 left-0 size-5 rounded-full bg-white shadow-sm transition-transform',
           'motion-reduce:transition-none',
           checked ? 'translate-x-[1.375rem]' : 'translate-x-0.5',
         )}
