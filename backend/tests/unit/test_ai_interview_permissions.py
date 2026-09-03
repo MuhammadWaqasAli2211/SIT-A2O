@@ -175,6 +175,10 @@ def test_candidate_score_cannot_carry_evidence():
     dumped = leaked.model_dump()
     # Pinned deliberately: widening what a candidate can see should fail here
     # first and be changed on purpose, not drift in behind a serializer edit.
+    #
+    # Widened once, on purpose, 2026-09-03: `announced` and `result_seen` were
+    # added for the bulk result announcement. Both are booleans about this
+    # candidate's own reveal state — neither can carry interview content.
     assert set(dumped) == {
         "status",
         "score",
@@ -184,6 +188,8 @@ def test_candidate_score_cannot_carry_evidence():
         "can_explain",
         "explanation_sent",
         "passed",
+        "announced",
+        "result_seen",
     }
     for forbidden in ("recording_url", "proctor_snapshots", "questions", "transcript", "audit"):
         assert forbidden not in dumped
