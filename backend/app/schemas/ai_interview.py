@@ -100,6 +100,10 @@ class CompletedInterviewStats(BaseModel):
     completed_today: int
     completed_this_week: int
     average_score: float | None = None
+    # "Attempted" is `total` — every completed interview has a score, so
+    # passed + failed always sums back to it.
+    passed: int = 0
+    failed: int = 0
 
 
 class CompletedInterviewsPage(ExternalRecords):

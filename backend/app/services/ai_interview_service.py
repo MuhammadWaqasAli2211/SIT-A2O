@@ -354,6 +354,8 @@ def list_completed(db: Session, actor: Profile, bootcamp_id: uuid.UUID | None = 
         "completed_today": 0,
         "completed_this_week": 0,
         "average_score": None,
+        "passed": 0,
+        "failed": 0,
     }
     if not ids and not emails:
         return {"items": [], "stats": empty_stats}
@@ -393,6 +395,7 @@ def _completed_stats(items: list[dict]) -> dict:
     completed_today = 0
     completed_this_week = 0
     scores: list[float] = []
+    passed = 0
 
     for item in items:
         when = _completed_at(item)
@@ -404,12 +407,18 @@ def _completed_stats(items: list[dict]) -> dict:
         score = extract_score(item)
         if score is not None:
             scores.append(score)
+            if score >= PASS_THRESHOLD:
+                passed += 1
 
     return {
         "total": len(items),
         "completed_today": completed_today,
         "completed_this_week": completed_this_week,
         "average_score": round(sum(scores) / len(scores), 1) if scores else None,
+        # Only scored items can be judged pass/fail; an item with no score we
+        # could extract is counted in `total` but neither bucket.
+        "passed": passed,
+        "failed": len(scores) - passed,
     }
 
 
