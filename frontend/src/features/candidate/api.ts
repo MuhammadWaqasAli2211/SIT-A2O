@@ -67,6 +67,15 @@ export const candidateApi = {
   myAiInterview: () => get<CandidateScore>('/me/ai-interview'),
 
   /**
+   * Record that the reveal popup has been shown, so it fires once and not on
+   * every later visit. Called after the popup renders, never before — the
+   * backend deliberately does not stamp this on read.
+   */
+  async markAiResultSeen() {
+    await api.post('/me/ai-interview/result-seen')
+  },
+
+  /**
    * Write to the intake's administrators about a missed interview deadline.
    *
    * Accepted only once the deadline has actually passed, and only once. No
