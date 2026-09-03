@@ -3,7 +3,6 @@ import {
   Bell,
   ChevronsLeft,
   ClipboardPen,
-  GraduationCap,
   Home,
   LogOut,
   Lock,
@@ -43,6 +42,7 @@ import {
   ApplicationProvider,
   useApplication,
 } from '@/features/applications/application-context'
+import { BRAND_ACCENT, BRAND_PRIMARY, BrandMark } from '@/features/marketing/brand'
 import { useNotifications } from '@/features/notifications/use-notifications'
 import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
@@ -525,13 +525,15 @@ function SidebarBody({
     <>
       <div className="flex h-16 items-center justify-between border-b border-border px-4">
         <Link to="/" className="flex items-center gap-2.5 overflow-hidden">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
-            <GraduationCap className="size-5" />
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary p-1.5 text-primary-foreground">
+            <BrandMark />
           </span>
           {!collapsed && (
             <span className="flex flex-col leading-none whitespace-nowrap">
-              <span className="text-sm font-semibold tracking-tight">Saylani</span>
-              <span className="text-[0.65rem] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="text-sm font-semibold tracking-tight">
+                {BRAND_PRIMARY} <span className="text-primary">{BRAND_ACCENT}</span>
+              </span>
+              <span className="text-[0.65rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
                 {profile ? ROLE_LABEL[profile.role] : 'Portal'}
               </span>
             </span>
