@@ -1,8 +1,182 @@
-> **Branch:** `waqas` — last updated 2026-08-31
+> **Branch:** `huzaifa` — last updated 2026-09-03
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-09-03 — Homepage hero rebuild + "Bootcamp Flows" rebrand
+
+**Branch:** `huzaifa`
+
+Rebuilt the public homepage hero to a supplied reference design (navbar,
+headline, floating admin-dashboard preview, "student life → professional
+life" transition illustration, animated 5-step Application Status card) and
+rebranded the product's visible UI from "Saylani Mass IT Training" to
+"Bootcamp Flows."
+
+### Step 0: rebrand scope decided before touching anything beyond UI
+
+The request explicitly asked for confirmation before extending the rebrand
+past visible UI (navbar, page titles, tab title, meta tags, footer) into the
+package/repo name, the email "from" name, or legal-document text — each a
+bigger and more consequential change than a label swap. Asked via
+`AskUserQuestion`; the answer selected three mutually exclusive options at
+once (UI-only, +email, +legal text). Rather than guess, did the UI-only
+scope — common to all three answers and unambiguously wanted — and left the
+other two open rather than deciding by default. On the legal-text option
+specifically: the Privacy Policy / Terms of Service name *Saylani Welfare
+International Trust* as the actual operating entity, not a product-name
+placeholder — extending the rebrand there would make the document factually
+wrong unless the trust itself changes name, which is not this task's call to
+make.
+
+One shared component, not four copy-pasted markups. `BrandLockup` +
+`BrandMark` (`features/marketing/brand.tsx`, an original inline SVG mark)
+replaced the wordmark independently duplicated across the public header, the
+public footer, the portal sidebar, and the legacy `AppShell` — the previous
+state was exactly the kind of drift risk that made this rebrand necessary to
+do carefully.
+
+### Real capability check before building any hero data
+
+Two design decisions the request explicitly flagged as needing sign-off
+before building, rather than assumed:
+
+- **What drives the "Admissions open for Bootcamp NN" badge.** Confirmed:
+  the real, currently-open intake, read from the existing public
+  `/bootcamps/open` endpoint — the same source `registration-form.tsx` and
+  the registration-closed dialog already trust, so the badge cannot claim
+  admissions are open when the actual phase-open check would reject the
+  application. New `use-open-bootcamp.ts` hook; the badge is simply absent,
+  not stale, when nothing is open.
+- **What data the floating dashboard preview shows.** Confirmed: illustrative
+  marketing numbers, not live aggregates. `/bootcamps/open`'s own schema
+  docstring says it is "deliberately narrower [than the admin schema] — no
+  internal status, no counts," so a live-aggregate preview would have meant
+  standing up a new public endpoint and deciding to publish a quiet week's
+  low application count to the world. `preview-data.ts`'s header documents
+  the exact split — bootcamp identity and deadline are real, the numbers
+  inside the card are not — and the card carries that caveat as visible text,
+  not just an `aria-label`, so it reaches every visitor rather than only
+  screen-reader users.
+
+### Reused what already existed instead of re-solving it
+
+- The bottom "Application Status" card renders the *existing*
+  `JOURNEY_STEPS` data through the *existing* `JourneyStepper` component —
+  not a re-typed marketing copy of either. `JourneyStepper` gained two
+  additive props (`numbered`: position pips + per-segment checkmark
+  animation; `startOnView`: hold the one-shot demo sequence until scrolled
+  into view), both off by default, so the three pre-existing call sites
+  (candidate track page, empty-dashboard demo, registration form-stepper)
+  are unaffected.
+- Three new theme tokens (`--hero-canvas`, `--hero-ink`, `--nav-shell` /
+  `--nav-shell-ink`), following the already-established `--auth-pane`
+  pattern — fixed dark in both themes, because a bar that must stay dark
+  under white text breaks the moment it inverts for dark mode. The
+  gold/blue/red accents the reference design also called for were **not**
+  given new tokens: `--chart-3`, `--chart-2`, and `--chart-5` already are
+  those exact colors, and the real admin dashboard charts already read from
+  the same set — a fourth name for an existing color is how a palette
+  drifts.
+- The Recharts panels inside the preview (`preview-charts.tsx`) mirror the
+  real admin dashboard's `BootcampStats` shape (`applications_over_time`, a
+  status split) and are lazy-loaded exactly the way
+  `pages/admin/dashboard-charts.tsx` already is, keeping the marketing entry
+  chunk clear of the charting library.
+
+### The transition illustration is original artwork, deliberately anonymous
+
+`journey-scene.tsx` is hand-authored inline SVG — not a photo, not a stock
+asset, not generative-tool output. Both figures are drawn as featureless
+silhouettes (a head is a plain circle: no face, no skin tone, no hair) so the
+panel depicts a *role* — student, professional — rather than any real,
+identifiable person, which a marketing page showing a "graduate" cannot
+otherwise guarantee.
+
+### Two bugs found before shipping, not after
+
+- The illustration originally used `preserveAspectRatio="... slice"` on a
+  fixed-height band. `slice` scales to *cover* the container, so a wider
+  viewport implies more vertical crop under a fixed height — at 2560px
+  against the original band it would have scaled ~2.1x and cut both figures
+  off at the neck. Rewritten at a 1600×380 viewBox matched to an
+  `aspect-[1600/380]` container with `meet`, so the scene is never cropped
+  at any width. Verified programmatically (not by eye) that the 26-tower
+  skyline's x-ranges have no gaps or overlaps and close at exactly x=1600,
+  and that every window rect falls inside its tower's bounds.
+- The dashboard preview's internal grid was originally keyed to viewport
+  breakpoints (`lg:grid-cols-4`), which is wrong for a card whose actual
+  rendered width tracks its grid *column*, not the viewport: at a 1280px
+  viewport the hero splits into two columns and the card is ~600px wide,
+  while at 1024px the hero has already stacked and the same card is
+  ~960px — so a `lg:` breakpoint would lay out four stat cards exactly where
+  the card is narrowest. Switched to CSS container queries (`@container` /
+  `@lg:` / `@2xl:`); confirmed present in the built CSS output rather than
+  assumed from the source.
+- A `role="img"` on the preview card's wrapper was caught and replaced with
+  `role="group"` before shipping: `role="img"` collapses its entire subtree
+  to one label for assistive tech, but the period dropdown inside is a real,
+  focusable control — a screen-reader user would still be able to tab to it
+  while it had no accessible name.
+
+### Left open, not decided silently
+
+Parallax/scroll-triggered reveal between hero → transition scene → step-flow
+card was listed in the request as an idea needing explicit sign-off before
+building; none was given, so only the pre-existing
+`Reveal`/`Stagger`/`startOnView` scroll-into-view entrances were used.
+Surfaced but not resolved: the homepage's separate `ProcessSection` further
+down the page still reads from the older 4-item `ADMISSION_STEPS` data
+("Four stages, clearly defined"), which now visibly disagrees with the new
+hero card's 5-stage `JOURNEY_STEPS` — a pre-existing duplication this change
+made newly visible rather than newly created.
+
+**Verified:** 324 backend tests pass (untouched — frontend-only), clean
+production build, 0 type errors, 0 lint errors. Nothing committed or pushed.
+
+---
+
+## 2026-09-01 — Real Privacy Policy / Terms of Service, replacing self-flagged placeholder text
+
+**Branch:** `huzaifa`
+
+`features/registration/policy-dialog.tsx` previously described its own
+content as "not written as binding legal language" in its own top comment
+and showed applicants an in-dialog banner saying so — while a candidate
+accepted it and then submitted a CNIC. Rewrote both documents to be real and
+platform-accurate: every field the registration form and onboarding stage
+actually collect, named individually rather than summarized (down to
+father's CNIC, the B-Form substitution for applicants under 18, and the
+signature captured on the Half Nama form); the three outside providers that
+process candidate data, named individually — Supabase for hosting/storage,
+Gmail for delivery, InterviewerAI for the recorded, proctored AI screening
+interview — rather than left as an unspecified "third parties"; per-intake
+admin scoping and the audit trail, both of which already exist in this
+codebase, described as what they actually are; the deadline and
+missed-deadline-explanation flow already built for interview invites,
+described accurately; and real contact details pulled from the public
+Contact page rather than invented.
+
+**Deliberately not claimed: legal review.** The file's own top comment says
+so directly — this is accurate, plain-language description of real
+practices, not attorney-reviewed language. Recorded as an open item rather
+than glossed over: a document real applicants accept while submitting a
+national ID number is worth a lawyer's pass before public launch, given
+minors' data is in scope.
+
+**A version-tracking gap found, not fixed.** `terms.ts`'s `TERMS_VERSION` is
+recorded per-application and governs the three declaration checkboxes, but
+the policy text itself has no equivalent — the new `POLICY_EFFECTIVE_DATE`
+is shown in the dialog but not persisted per-applicant. If the wording
+changes after real applicants have accepted it, there is no record of which
+version a given applicant actually saw. Not built: a schema change, not a
+copy change, flagged for a decision rather than assumed.
+
+**Verified:** 324 backend tests pass (untouched — frontend-only, static
+content), clean production build, 0 type errors, 0 lint errors.
 
 ---
 
