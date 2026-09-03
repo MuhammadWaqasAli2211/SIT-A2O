@@ -9,6 +9,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -89,7 +90,12 @@ function exportCsv(rows: ApplicantRow[], filename: string) {
 export default function AdminCandidatesPage() {
   const { selected, selectedId } = useBootcamp()
 
-  const [search, setSearch] = useState('')
+  // Seeded from `?search=`, which is how the header's jump-to-search hands a
+  // term over. Read once as the initial value rather than watched: after
+  // landing, this box owns the term, and re-syncing from the URL would fight
+  // the user's own typing.
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
   const [stage, setStage] = useState<string>(ALL)
   const [offset, setOffset] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
