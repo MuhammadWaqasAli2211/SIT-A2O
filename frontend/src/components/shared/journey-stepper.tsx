@@ -17,9 +17,9 @@
  * the database is finer-grained than the stepper.
  */
 
-import { motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion, useInView, useReducedMotion } from 'motion/react'
 import { Check } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   JOURNEY_STEPS,
@@ -53,6 +53,30 @@ export interface JourneyStepperProps {
   steps?: readonly JourneyStep[]
   /** Show each stage's one-line explanation. Defaults on in demo mode. */
   showBlurbs?: boolean
+  /**
+   * The explainer treatment: a 1-based pip on each node, and a tick on each
+   * segment as it completes.
+   *
+   * One flag rather than two because they are one visual idea — "here is a
+   * numbered process, and here is how far it has got" — and no caller has
+   * wanted half of it.
+   *
+   * Off by default. A candidate looking at their own application is told where
+   * they are by the ring; numbering it invites "why am I only on 2 of 5" about
+   * a process whose pace is not theirs to set. On the marketing page the count
+   * is the whole point.
+   */
+  numbered?: boolean
+  /**
+   * Hold the `demo` sequence until the stepper is scrolled into view.
+   *
+   * The default (start on mount) is right where the stepper is above the fold.
+   * A stepper further down the page has otherwise finished playing before the
+   * visitor ever reaches it, so they arrive at a static, already-complete row
+   * and see none of the sequence. Ignored in `real` mode, which never
+   * sequences.
+   */
+  startOnView?: boolean
   className?: string
 }
 
@@ -63,9 +87,22 @@ export function JourneyStepper({
   timestamps,
   steps = JOURNEY_STEPS,
   showBlurbs = mode === 'demo',
+  numbered = false,
+  startOnView = false,
   className,
 }: JourneyStepperProps) {
   const reduceMotion = useReducedMotion()
+  const listRef = useRef<HTMLOListElement>(null)
+
+  /**
+   * Gate for `startOnView`. `once` because the sequence is a one-shot
+   * explainer — scrolling back up must not replay it from zero.
+   *
+   * The hook runs unconditionally (hooks always do); `startOnView` only
+   * decides whether its answer is consulted below.
+   */
+  const inView = useInView(listRef, { once: true, margin: '-100px' })
+  const started = !startOnView || inView
 
   /**
    * How far the demo sequence has advanced. `-1` is "nothing lit yet";
@@ -78,7 +115,7 @@ export function JourneyStepper({
   useEffect(() => {
     // Reduced motion is handled below by deriving the finished state, so no
     // timer is started and nothing animates.
-    if (mode !== 'demo' || reduceMotion) return
+    if (mode !== 'demo' || reduceMotion || !started) return
 
     let index = -1
     const timer = setInterval(() => {
@@ -88,9 +125,10 @@ export function JourneyStepper({
     }, DEMO_STEP_MS)
 
     return () => clearInterval(timer)
-    // Every dependency is stable for the life of the mount, so this runs once
-    // per mount — a re-render cannot restart the sequence.
-  }, [mode, reduceMotion, steps.length])
+    // `started` latches false -> true at most once (useInView's `once`), and
+    // every other dependency is stable for the life of the mount. So this runs
+    // once per mount — a re-render cannot restart the sequence.
+  }, [mode, reduceMotion, started, steps.length])
 
   // Reduced motion jumps straight to the settled state: the same information,
   // none of the choreography. Derived rather than assigned in the effect so
@@ -119,6 +157,7 @@ export function JourneyStepper({
 
   return (
     <ol
+      ref={listRef}
       className={cn(
         'flex flex-col gap-0 lg:flex-row lg:items-start',
         className,
@@ -133,7 +172,9 @@ export function JourneyStepper({
           <motion.li
             key={step.key}
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            // Gated on `started` so a stepper below the fold enters as the
+            // visitor arrives at it, rather than having already entered.
+            animate={started ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
             transition={{ duration: 0.4, delay: reduceMotion ? 0 : index * 0.07 }}
             aria-current={state === 'current' ? 'step' : undefined}
             className={cn(
@@ -149,6 +190,7 @@ export function JourneyStepper({
               <Connector
                 filled={isConnectorFilled(index)}
                 halted={halted && index > currentIndex}
+                showCheck={numbered}
               />
             )}
 
@@ -158,6 +200,7 @@ export function JourneyStepper({
               ringActive={ringActive}
               halted={halted}
               reduceMotion={Boolean(reduceMotion)}
+              badge={numbered ? index + 1 : undefined}
             />
 
             <div className="flex min-w-0 flex-col gap-1 pt-1.5 lg:items-center lg:pt-0">
@@ -212,12 +255,15 @@ function Node({
   ringActive,
   halted,
   reduceMotion,
+  badge,
 }: {
   step: JourneyStep
   state: StepState
   ringActive: boolean
   halted: boolean
   reduceMotion: boolean
+  /** 1-based position, shown in a corner pip. Undefined hides the pip. */
+  badge?: number
 }) {
   const Icon = step.icon
   const isCurrent = state === 'current'
@@ -263,12 +309,46 @@ function Node({
             'border-dashed border-border bg-card text-muted-foreground/40',
         )}
       >
-        {state === 'complete' ? (
-          <Check className="size-5" strokeWidth={3} />
-        ) : (
-          <Icon className="size-5" />
-        )}
+        {/* The icon-to-tick swap is the moment a step reads as *finished*, so
+            it gets its own transition rather than being a silent re-render.
+            `mode="wait"` keeps the two glyphs from overlapping mid-swap in a
+            circle that is only 44px across. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={state === 'complete' ? 'check' : 'icon'}
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.4, rotate: -25 }}
+            animate={{ opacity: 1, scale: 1, rotate: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+            transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.34, 1.4, 0.5, 1] }}
+            className="grid place-items-center"
+          >
+            {state === 'complete' ? (
+              <Check className="size-5" strokeWidth={3} />
+            ) : (
+              <Icon className="size-5" />
+            )}
+          </motion.span>
+        </AnimatePresence>
       </motion.span>
+
+      {/* Position pip. Outside the scaling node so the current step's 1.06
+          scale does not enlarge the number with it. */}
+      {badge !== undefined && (
+        <motion.span
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.3, delay: reduceMotion ? 0 : 0.12 }}
+          className={cn(
+            'absolute -top-1.5 -right-1.5 z-20 grid size-5 place-items-center rounded-full',
+            'border-2 border-card text-[0.6rem] font-bold tabular-nums',
+            state === 'upcoming'
+              ? 'bg-muted text-muted-foreground'
+              : 'bg-foreground text-background',
+          )}
+        >
+          {badge}
+        </motion.span>
+      )}
     </span>
   )
 }
@@ -286,29 +366,75 @@ function Node({
  * which is why both scale axes are pinned at both breakpoints — leaving one
  * unset would collapse the bar in the other orientation.
  */
-function Connector({ filled, halted }: { filled: boolean; halted: boolean }) {
+function Connector({
+  filled,
+  halted,
+  showCheck = false,
+}: {
+  filled: boolean
+  halted: boolean
+  /** Pin a tick to the segment's midpoint once it has filled. */
+  showCheck?: boolean
+}) {
   return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        'absolute overflow-hidden rounded-full bg-border/70',
-        // Vertical: runs up from this node's centre to the one above.
-        'bottom-1/2 left-[1.375rem] h-full w-0.5 -translate-x-1/2',
-        // Horizontal at lg: runs left from this node's centre.
-        'lg:top-6 lg:bottom-auto lg:left-auto lg:right-1/2 lg:h-0.5 lg:w-full lg:translate-x-0 lg:-translate-y-1/2',
-      )}
-    >
+    <>
       <span
+        aria-hidden="true"
         className={cn(
-          'block size-full rounded-full transition-transform duration-500 ease-out',
-          halted ? 'bg-border' : 'bg-success',
-          'origin-top lg:origin-left',
-          filled
-            ? 'scale-y-100 lg:scale-x-100'
-            : 'scale-y-0 lg:scale-y-100 lg:scale-x-0',
+          'absolute overflow-hidden rounded-full bg-border/70',
+          // Vertical: runs up from this node's centre to the one above.
+          'bottom-1/2 left-[1.375rem] h-full w-0.5 -translate-x-1/2',
+          // Horizontal at lg: runs left from this node's centre.
+          'lg:top-6 lg:bottom-auto lg:left-auto lg:right-1/2 lg:h-0.5 lg:w-full lg:translate-x-0 lg:-translate-y-1/2',
         )}
-      />
-    </span>
+      >
+        <span
+          className={cn(
+            'block size-full rounded-full transition-transform duration-500 ease-out',
+            halted ? 'bg-border' : 'bg-success',
+            'origin-top lg:origin-left',
+            filled
+              ? 'scale-y-100 lg:scale-x-100'
+              : 'scale-y-0 lg:scale-y-100 lg:scale-x-0',
+          )}
+        />
+      </span>
+
+      {/*
+        The tick sitting on a completed segment.
+
+        A sibling of the bar rather than a child of it: the bar clips its own
+        overflow so the fill can grow inside it, and a badge nested in there
+        would be clipped along with it.
+
+        The coordinates are the bar's midpoint, derived rather than measured.
+        Horizontal: the bar's right edge is at 50% of an equal-width cell and
+        it is one cell wide, so its centre lands exactly on the cell's left
+        edge. Vertical: same reasoning rotated — its centre is the cell's top
+        edge.
+      */}
+      {showCheck && !halted && (
+        <AnimatePresence>
+          {filled && (
+            <motion.span
+              aria-hidden="true"
+              initial={{ opacity: 0, scale: 0.3 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.3 }}
+              transition={{ duration: 0.32, ease: [0.34, 1.4, 0.5, 1], delay: 0.28 }}
+              className={cn(
+                'absolute z-10 grid size-4 place-items-center rounded-full',
+                'border-2 border-card bg-success text-success-foreground',
+                'top-0 left-[1.375rem] -translate-x-1/2 -translate-y-1/2',
+                'lg:top-6 lg:left-0',
+              )}
+            >
+              <Check className="size-2" strokeWidth={4} />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      )}
+    </>
   )
 }
 

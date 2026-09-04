@@ -38,6 +38,14 @@ const AboutPage = lazy(() => import('@/pages/public/about-page'))
 const SuccessStoriesPage = lazy(() => import('@/pages/public/success-stories-page'))
 const FaqPage = lazy(() => import('@/pages/public/faq-page'))
 const ContactPage = lazy(() => import('@/pages/public/contact-page'))
+// Both legal pages are one component parameterised by `kind`, so they share a
+// chunk — a visitor who opens one is fairly likely to open the other.
+const PrivacyPage = lazy(async () => ({
+  default: (await import('@/pages/public/legal-page')).PrivacyPage,
+}))
+const TermsPage = lazy(async () => ({
+  default: (await import('@/pages/public/legal-page')).TermsPage,
+}))
 
 const CandidateDashboardPage = lazy(() => import('@/pages/candidate/dashboard-page'))
 const CandidateTrackPage = lazy(() => import('@/pages/candidate/track-page'))
@@ -94,6 +102,8 @@ export const router = createBrowserRouter([
       { path: '/success-stories', element: <SuccessStoriesPage /> },
       { path: '/faq', element: <FaqPage /> },
       { path: '/contact', element: <ContactPage /> },
+      { path: '/privacy', element: <PrivacyPage /> },
+      { path: '/terms', element: <TermsPage /> },
     ],
   },
 

@@ -1,14 +1,15 @@
 /**
  * Privacy Policy and Terms of Service, shown in a dialog.
  *
- * A dialog rather than a link because these are read *while* filling the form.
- * Navigating away — even to a new tab — risks losing five steps of unsaved
- * answers, since nothing is persisted until submit.
+ * A dialog rather than a link because these are read *while* filling the
+ * registration form. Navigating away — even to a new tab — risks losing five
+ * steps of unsaved answers, since nothing is persisted until submit. That is
+ * the whole reason this component still exists now that `/privacy` and
+ * `/terms` are real pages: the footer's reader can afford to navigate, and an
+ * applicant mid-form cannot.
  *
- * The text below is PLACEHOLDER. It describes, in plain language, what the
- * platform actually does with the data the form collects, so a reviewer can
- * see the shape of the document. It is deliberately not written as binding
- * legal language: that has to come from the project owner before launch.
+ * The text itself lives in `lib/policies.ts` and is shared with those pages,
+ * so the modal and the page can never say different things.
  */
 
 import { useState, type ReactNode } from 'react'
@@ -20,80 +21,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-
-export type PolicyKind = 'privacy' | 'terms'
-
-interface Policy {
-  title: string
-  summary: string
-  sections: { heading: string; body: string }[]
-}
-
-const POLICIES: Record<PolicyKind, Policy> = {
-  privacy: {
-    title: 'Privacy Policy',
-    summary: 'What we collect when you apply, and what we do with it.',
-    sections: [
-      {
-        heading: 'What we collect',
-        body:
-          'The details you enter on this form: your name and your father’s name, date of birth, gender, city and address, phone numbers, CNIC numbers where provided, your Saylani roll number, the course you previously completed, your education and computer proficiency, whether you own a laptop, and the photograph you upload.',
-      },
-      {
-        heading: 'Why we collect it',
-        body:
-          'To assess your application, to identify you at each stage of the process, to contact you about interviews and deadlines, and to create your account if you are selected.',
-      },
-      {
-        heading: 'Who can see it',
-        body:
-          'Staff administering the bootcamp you applied to. Administrators are scoped to their own intake and cannot see applicants from other intakes.',
-      },
-      {
-        heading: 'How long we keep it',
-        body:
-          'For the duration of the intake and for as long as the records are needed afterwards for reporting and alumni contact.',
-      },
-      {
-        heading: 'Your photograph',
-        body:
-          'Stored privately. It is not published, and it is not readable without a time-limited link issued by the platform.',
-      },
-    ],
-  },
-  terms: {
-    title: 'Terms of Service',
-    summary: 'The rules that apply to using this platform and applying here.',
-    sections: [
-      {
-        heading: 'Your account',
-        body:
-          'Your account is personal to you. You are responsible for what is submitted from it, and for keeping your sign-in details private.',
-      },
-      {
-        heading: 'Applying',
-        body:
-          'One application per person per intake. Submitting an application does not guarantee a place: selection is competitive and capacity is limited.',
-      },
-      {
-        heading: 'Accuracy',
-        body:
-          'The information you submit must be true. Information found to be false may end your application at any stage, including after selection.',
-      },
-      {
-        heading: 'Deadlines',
-        body:
-          'Every stage runs to a deadline. Missing a scheduled stage without notice may end your application, and your place may be offered to another candidate.',
-      },
-      {
-        heading: 'Changes',
-        body:
-          'These terms may be updated. The version you accepted is recorded with your application.',
-      },
-    ],
-  },
-}
+import { POLICIES, POLICY_EFFECTIVE_DATE, type PolicyKind } from '@/lib/policies'
 
 /**
  * A policy link that opens its own dialog.
@@ -131,15 +59,10 @@ export function PolicyLink({ kind, children }: { kind: PolicyKind; children: Rea
                 <DialogTitle className="text-lg">{policy.title}</DialogTitle>
               </span>
               <DialogDescription>{policy.summary}</DialogDescription>
+              <span className="text-xs text-muted-foreground">
+                Effective {POLICY_EFFECTIVE_DATE}
+              </span>
             </div>
-
-            <Alert>
-              <AlertDescription>
-                <strong>Placeholder text.</strong> This describes what the
-                platform does with your data, but it is not the final legal
-                wording and has not been reviewed.
-              </AlertDescription>
-            </Alert>
 
             <div className="flex flex-col gap-4">
               {policy.sections.map((section) => (

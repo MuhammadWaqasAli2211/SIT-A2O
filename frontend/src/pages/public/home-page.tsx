@@ -1,14 +1,11 @@
-import { motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import {
   ArrowRight,
-  BadgeCheck,
   CalendarClock,
   CheckCircle2,
-  Clock,
+  Megaphone,
   PlayCircle,
   Quote,
-  Sparkles,
-  Users,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -16,26 +13,31 @@ import { Counter } from '@/components/motion/counter'
 import { Marquee } from '@/components/motion/marquee'
 import { Reveal, Stagger, StaggerItem } from '@/components/motion/reveal'
 import { Eyebrow, Section, SectionHeading } from '@/components/shared/section'
-import { Badge } from '@/components/ui/badge'
+import { ApplicationFlowCard } from '@/features/marketing/application-flow-card'
+import { StatCaveat, TestimonialCaveat } from '@/features/marketing/caveat'
+import { DashboardPreview } from '@/features/marketing/dashboard-preview'
+import { JourneyScene } from '@/features/marketing/journey-scene'
+import { PartnerStrip } from '@/features/marketing/partner-strip'
+import { TrackSelector } from '@/features/marketing/track-selector'
+import { bootcampLabel, useOpenBootcamp } from '@/features/marketing/use-open-bootcamp'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
-  ADMISSION_STEPS,
   HIRING_PARTNERS,
-  PROGRAMS,
   STATS,
   TESTIMONIALS,
   VALUES,
 } from '@/lib/site-data'
+import { JOURNEY_STEPS, TOTAL_STEPS_WORD } from '@/lib/stages'
 import { cn } from '@/lib/utils'
 
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <PartnerStrip />
+      <PartnerStrip partners={HIRING_PARTNERS} />
       <StatsBand />
-      <ProgramsSection />
+      <TrackSelector />
       <ProcessSection />
       <ValuesSection />
       <TestimonialsSection />
@@ -47,170 +49,145 @@ export default function HomePage() {
 /* ------------------------------------------------------------------ hero -- */
 
 function Hero() {
-  const reduce = useReducedMotion()
+  // Real, from the server: which intake is actually open. The badge is absent
+  // rather than stale when nothing is. See use-open-bootcamp.ts.
+  const { bootcamp } = useOpenBootcamp()
+  const label = bootcamp ? bootcampLabel(bootcamp) : undefined
 
   return (
-    <section className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
-      {/* Decorative background: aurora blobs over a faint grid. */}
+    <section className="relative overflow-hidden bg-hero-canvas pt-26 sm:pt-30">
+      {/* Decorative: a faint grid under two soft brand blooms. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 surface-grid opacity-[0.35] [mask-image:radial-gradient(ellipse_at_center,black,transparent_72%)]" />
-        <div className="absolute -top-40 left-1/2 size-[42rem] -translate-x-1/2 rounded-full bg-primary/18 blur-3xl animate-aurora" />
-        <div className="absolute top-24 right-[8%] size-[26rem] rounded-full bg-chart-2/14 blur-3xl animate-aurora [animation-delay:-6s]" />
-        <div className="absolute -bottom-24 left-[6%] size-[24rem] rounded-full bg-chart-4/12 blur-3xl animate-aurora [animation-delay:-11s]" />
+        <div className="surface-grid absolute inset-0 opacity-[0.3] [mask-image:radial-gradient(ellipse_at_50%_20%,black,transparent_70%)]" />
+        <div className="animate-aurora absolute -top-40 -left-32 size-[34rem] rounded-full bg-primary/12 blur-3xl" />
+        <div className="animate-aurora absolute top-10 right-[-10%] size-[30rem] rounded-full bg-chart-3/10 blur-3xl [animation-delay:-7s]" />
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <Eyebrow>
-              <Sparkles className="size-3.5" />
-              Admissions open for Bootcamp 07
-            </Eyebrow>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.08 }}
-            className="mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-6xl lg:text-7xl lg:leading-[1.05]"
-          >
-            Build a career in tech.{' '}
-            <span className="text-gradient">Pay nothing for it.</span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.16 }}
-            className="mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl"
-          >
-            Saylani Mass IT Training has taught over 250,000 students the skills that get
-            them hired — in classrooms across Pakistan, entirely free of charge.
-          </motion.p>
+      <div className="mx-auto max-w-[100rem] px-4 sm:px-6 lg:px-8">
+        {/*
+          The preview column is the wider of the two, matching the reference.
+          They stack below `xl`, not `lg`: the dashboard card carries a rail,
+          four stat cards and two chart panels, and at a 1024px viewport a
+          1.18fr column leaves it about 530px — narrower than the same card
+          gets when the hero stacks and it spans the full width. Splitting at
+          `lg` would make the card smallest exactly where it has the most to
+          show.
+        */}
+        <div className="grid items-center gap-10 pb-16 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-12 xl:pb-20">
+          <HeroCopy bootcampLabel={label} />
 
           <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.24 }}
-            className="mt-9 flex flex-col gap-3 sm:flex-row"
+            initial={{ opacity: 0, y: 32, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.25, ease: [0.21, 0.47, 0.32, 0.98] }}
+            className="min-w-0"
           >
-            <Button render={<Link to="/signup" />} size="lg" className="group h-11 px-6 text-sm">
-              Start your application
-              <ArrowRight className="size-4 transition-transform duration-250 group-hover:translate-x-1" />
-            </Button>
-            <Button
-              render={<Link to="/programs" />}
-              variant="outline"
-              size="lg"
-              className="h-11 px-6 text-sm"
-            >
-              <PlayCircle className="size-4" />
-              Explore programs
-            </Button>
+            <DashboardPreview />
           </motion.div>
-
-          <motion.ul
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.34 }}
-            className="mt-9 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 text-sm text-muted-foreground"
-          >
-            {['100% free, always', 'Industry-aligned curriculum', 'Certificate on completion'].map(
-              (item) => (
-                <li key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="size-4 text-primary" />
-                  {item}
-                </li>
-              ),
-            )}
-          </motion.ul>
         </div>
+      </div>
 
-        {/* Floating application-status preview */}
-        <motion.div
-          initial={{ opacity: 0, y: 40, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.4, ease: [0.21, 0.47, 0.32, 0.98] }}
-          className="relative mx-auto mt-20 max-w-4xl"
-        >
-          <div
-            aria-hidden="true"
-            className="absolute -inset-x-6 -top-6 bottom-0 rounded-[2rem] bg-gradient-to-b from-primary/12 to-transparent blur-2xl"
-          />
-          <Card className={cn('relative overflow-hidden border-border/70 shadow-2xl shadow-primary/5', !reduce && 'animate-float')}>
-            <CardContent className="p-0">
-              <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-5 py-3">
-                <span className="size-2.5 rounded-full bg-destructive/60" />
-                <span className="size-2.5 rounded-full bg-warning/60" />
-                <span className="size-2.5 rounded-full bg-success/60" />
-                <span className="ml-3 text-xs text-muted-foreground">
-                  Application status — B07-142
-                </span>
-              </div>
+      {/* Full-bleed transition scene. Sits behind the flow card, which laps
+          over its lower edge — the overlap scales with the band, which is
+          itself proportional to the viewport width. */}
+      <div className="relative">
+        <JourneyScene />
 
-              <div className="grid gap-px bg-border sm:grid-cols-4">
-                {[
-                  { label: 'Application', status: 'done', detail: 'Submitted 12 Aug' },
-                  { label: 'Interview', status: 'done', detail: 'Passed · Slot 2' },
-                  { label: 'Assessment', status: 'active', detail: 'Today, 11:00' },
-                  { label: 'Onboarding', status: 'pending', detail: 'Awaiting' },
-                ].map((stage, i) => (
-                  <motion.div
-                    key={stage.label}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.7 + i * 0.12 }}
-                    className="flex flex-col gap-2 bg-card p-5"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          'grid size-6 place-items-center rounded-full text-[0.65rem] font-semibold',
-                          stage.status === 'done' && 'bg-primary text-primary-foreground',
-                          stage.status === 'active' &&
-                            'bg-warning/20 text-warning-foreground ring-2 ring-warning/40',
-                          stage.status === 'pending' && 'bg-muted text-muted-foreground',
-                        )}
-                      >
-                        {stage.status === 'done' ? <BadgeCheck className="size-3.5" /> : i + 1}
-                      </span>
-                      <span className="text-sm font-medium">{stage.label}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{stage.detail}</span>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <div className="relative z-10 mx-auto -mt-10 max-w-[90rem] px-4 pb-20 sm:-mt-16 sm:px-6 lg:-mt-24 lg:px-8">
+          <ApplicationFlowCard bootcampLabel={label} />
+        </div>
       </div>
     </section>
   )
 }
 
-/* --------------------------------------------------------------- partners -- */
+/* ----------------------------------------------------------- hero copy -- */
 
-function PartnerStrip() {
+function HeroCopy({ bootcampLabel: label }: { bootcampLabel?: string }) {
   return (
-    <section className="border-y border-border bg-muted/25 py-10">
-      <p className="mb-7 text-center text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        Our graduates work at
-      </p>
-      <Marquee duration="45s">
-        {HIRING_PARTNERS.map((partner) => (
-          <span
-            key={partner}
-            className="mx-8 whitespace-nowrap text-lg font-semibold text-muted-foreground/60 transition-colors duration-300 hover:text-primary"
+    <div className="flex flex-col items-start">
+      {/*
+        Reserved height, not a conditional block. The badge resolves from a
+        network call a beat after paint; without a fixed slot the headline
+        below it jumps down the moment it lands.
+      */}
+      <div className="flex h-8 items-center">
+        {label && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
           >
-            {partner}
-          </span>
-        ))}
-      </Marquee>
-    </section>
+            <Eyebrow>
+              <Megaphone className="size-3.5" />
+              Admissions open for {label}
+            </Eyebrow>
+          </motion.div>
+        )}
+      </div>
+
+      <motion.h1
+        initial={{ opacity: 0, y: 22 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.08 }}
+        className="mt-6 text-4xl leading-[1.05] font-bold tracking-tight text-balance text-hero-ink sm:text-5xl lg:text-[3.4rem]"
+      >
+        Build a career in tech.
+        <br />
+        <span className="text-primary">Pay nothing for it.</span>
+      </motion.h1>
+
+      <motion.p
+        initial={{ opacity: 0, y: 22 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.16 }}
+        className="mt-6 max-w-xl text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg"
+      >
+        Bootcamp Flows has empowered over 250,000 students across Pakistan with
+        industry-focused training — completely free.
+      </motion.p>
+
+      <motion.div
+        initial={{ opacity: 0, y: 22 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.24 }}
+        className="mt-8 flex flex-col gap-3 sm:flex-row"
+      >
+        <Button
+          render={<Link to="/signup" />}
+          size="lg"
+          className="group h-12 rounded-full px-6 text-sm"
+        >
+          Start your application
+          <ArrowRight className="size-4 transition-transform duration-250 group-hover:translate-x-1" />
+        </Button>
+        <Button
+          render={<Link to="/programs" />}
+          variant="outline"
+          size="lg"
+          className="h-12 rounded-full border-border bg-card px-6 text-sm"
+        >
+          <PlayCircle className="size-4" />
+          Explore programs
+        </Button>
+      </motion.div>
+
+      <motion.ul
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.34 }}
+        className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2.5 text-sm text-muted-foreground"
+      >
+        {['100% free, always', 'Industry-aligned curriculum', 'Certificate on completion'].map(
+          (item) => (
+            <li key={item} className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 shrink-0 text-primary" />
+              {item}
+            </li>
+          ),
+        )}
+      </motion.ul>
+    </div>
   )
 }
 
@@ -219,105 +196,47 @@ function PartnerStrip() {
 function StatsBand() {
   return (
     <Section className="py-16 sm:py-20">
-      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-        {STATS.map((stat, index) => (
-          <Reveal key={stat.label} delay={index * 0.08} className="flex flex-col items-center gap-2 text-center">
-            <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary">
-              <stat.icon className="size-5" />
-            </span>
-            <span className="text-3xl font-semibold tracking-tight sm:text-4xl">
-              <Counter to={stat.value} suffix={stat.suffix} />
-            </span>
-            <span className="text-sm text-muted-foreground">{stat.label}</span>
-          </Reveal>
-        ))}
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {STATS.map((stat, index) => {
+          const tone = STAT_TONE[index % STAT_TONE.length]
+          return (
+            <Reveal
+              key={stat.label}
+              delay={index * 0.08}
+              className={cn(
+                'flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-8 text-center',
+                'transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/5',
+              )}
+            >
+              <span className={cn('grid size-12 place-items-center rounded-xl', tone)}>
+                <stat.icon className="size-5" />
+              </span>
+              <span className="text-3xl font-bold tracking-tight text-hero-ink sm:text-4xl">
+                <Counter to={stat.value} suffix={stat.suffix} />
+              </span>
+              <span className="text-sm text-muted-foreground">{stat.label}</span>
+            </Reveal>
+          )
+        })}
       </div>
+      {/* STATS is illustrative and every surface rendering it says so. */}
+      <StatCaveat />
     </Section>
   )
 }
 
-/* --------------------------------------------------------------- programs -- */
-
-function ProgramsSection() {
-  return (
-    <Section id="programs" className="bg-muted/25">
-      <SectionHeading
-        eyebrow="Programs"
-        title="Choose the track that fits where you want to go"
-        description="Five specialisations, each built with hiring partners and taught by working practitioners. All of them free."
-      />
-
-      <Stagger className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {PROGRAMS.map((program) => (
-          <StaggerItem key={program.slug}>
-            <Link to={`/programs/${program.slug}`} className="group block h-full">
-              <Card className="relative h-full overflow-hidden transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5">
-                <div
-                  aria-hidden="true"
-                  className={cn(
-                    'absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-100',
-                    program.accent,
-                  )}
-                />
-                <CardContent className="relative flex h-full flex-col gap-4 p-6">
-                  <span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary transition-all duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
-                    <program.icon className="size-5" />
-                  </span>
-
-                  <div className="flex flex-col gap-2">
-                    <h3 className="text-lg font-semibold tracking-tight">{program.title}</h3>
-                    <p className="text-sm leading-relaxed text-muted-foreground">
-                      {program.tagline}
-                    </p>
-                  </div>
-
-                  <div className="mt-auto flex flex-wrap gap-1.5 pt-2">
-                    {program.skills.slice(0, 4).map((skill) => (
-                      <Badge key={skill} variant="secondary" className="text-[0.7rem]">
-                        {skill}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="size-3.5" />
-                      {program.duration}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Users className="size-3.5" />
-                      {program.seats} seats
-                    </span>
-                    <span className="flex items-center gap-1 font-medium text-primary">
-                      Details
-                      <ArrowRight className="size-3.5 transition-transform duration-250 group-hover:translate-x-1" />
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          </StaggerItem>
-        ))}
-
-        <StaggerItem>
-          <Link to="/programs" className="group block h-full">
-            <Card className="flex h-full items-center justify-center border-dashed transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/50 hover:bg-primary/5">
-              <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-                <span className="grid size-11 place-items-center rounded-xl border border-dashed border-primary/40 text-primary transition-transform duration-300 group-hover:rotate-90">
-                  <ArrowRight className="size-5" />
-                </span>
-                <span className="text-sm font-medium">See all programs</span>
-                <span className="text-xs text-muted-foreground">
-                  Compare tracks, durations, and outcomes
-                </span>
-              </CardContent>
-            </Card>
-          </Link>
-        </StaggerItem>
-      </Stagger>
-    </Section>
-  )
-}
+/**
+ * Icon-chip tone per stat, cycled by index — the same primary/amber/blue/gold
+ * rotation `dashboard-preview.tsx`'s stat cards use, so the two places on the
+ * page presenting "a row of stat cards" read as one visual language rather
+ * than two independently-invented ones.
+ */
+const STAT_TONE = [
+  'bg-chart-1/12 text-chart-1',
+  'bg-warning/15 text-warning',
+  'bg-chart-2/12 text-chart-2',
+  'bg-chart-3/15 text-chart-3',
+]
 
 /* ---------------------------------------------------------------- process -- */
 
@@ -326,7 +245,7 @@ function ProcessSection() {
     <Section id="process">
       <SectionHeading
         eyebrow="How it works"
-        title="Four stages, clearly defined"
+        title={`${TOTAL_STEPS_WORD} stages, clearly defined`}
         description="Every applicant receives a unique candidate code and can see exactly where they stand at each step. No guessing, no lost applications."
       />
 
@@ -341,17 +260,26 @@ function ProcessSection() {
           className="absolute top-7 right-0 left-0 hidden h-px origin-left bg-gradient-to-r from-primary/50 via-primary/25 to-transparent lg:block"
         />
 
-        <div className="grid gap-10 lg:grid-cols-4">
-          {ADMISSION_STEPS.map((step, index) => (
-            <Reveal key={step.step} delay={index * 0.12} className="relative flex flex-col gap-4">
+        {/*
+          JOURNEY_STEPS — the same 5-stage data the hero's Application Status
+          card and a candidate's own tracker read from — not the retired
+          4-stage ADMISSION_STEPS. This card grid is a deliberately different
+          visual language from the hero's node-and-ring stepper (a flat
+          numbered-icon row rather than a connected/animated timeline), so
+          the two don't read as one section repeated twice on the same page;
+          only the underlying facts are shared, which is the actual fix.
+        */}
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
+          {JOURNEY_STEPS.map((step, index) => (
+            <Reveal key={step.key} delay={index * 0.1} className="relative flex flex-col gap-4">
               <span className="relative grid size-14 place-items-center rounded-2xl border border-border bg-card text-primary shadow-sm">
                 <step.icon className="size-6" />
                 <span className="absolute -top-2 -right-2 grid size-6 place-items-center rounded-full bg-primary text-[0.65rem] font-bold text-primary-foreground">
-                  {step.step}
+                  {String(index + 1).padStart(2, '0')}
                 </span>
               </span>
-              <h3 className="text-base font-semibold">{step.title}</h3>
-              <p className="text-sm leading-relaxed text-muted-foreground">{step.description}</p>
+              <h3 className="text-base font-semibold">{step.label}</h3>
+              <p className="text-sm leading-relaxed text-muted-foreground">{step.blurb}</p>
             </Reveal>
           ))}
         </div>
@@ -426,6 +354,8 @@ function TestimonialsSection() {
         </Marquee>
       </div>
 
+      <TestimonialCaveat />
+
       <Reveal delay={0.15} className="mt-12 flex justify-center">
         <Button render={<Link to="/success-stories" />} variant="outline" size="lg" className="group h-11">
           Read more stories
@@ -464,7 +394,22 @@ function TestimonialCard({
 
 /* -------------------------------------------------------------------- cta -- */
 
+/**
+ * The closing call to action.
+ *
+ * The intake name and its deadline are read from `/bootcamps/open` rather
+ * than typed in. They used to be the strings "Bootcamp 07" and "30
+ * September", which are wrong the day intake 08 opens and wrong again the day
+ * after the deadline passes — with nothing to prompt anyone to notice. The
+ * hook caches, so this costs no request the hero has not already made.
+ */
 function CtaSection() {
+  const { bootcamp } = useOpenBootcamp()
+  const label = bootcamp ? bootcampLabel(bootcamp) : null
+  const deadline = bootcamp?.registration_deadline
+    ? new Date(bootcamp.registration_deadline)
+    : null
+
   return (
     <Section className="pb-28">
       <Reveal>
@@ -475,13 +420,16 @@ function CtaSection() {
           />
 
           <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-6">
-            <Eyebrow>
-              <CalendarClock className="size-3.5" />
-              Registration closes 30 September
-            </Eyebrow>
+            {deadline && (
+              <Eyebrow>
+                <CalendarClock className="size-3.5" />
+                Registration closes{' '}
+                {deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}
+              </Eyebrow>
+            )}
 
             <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-              Your seat in Bootcamp 07 is still open
+              {label ? `Your seat in ${label} is still open` : 'Your seat is waiting'}
             </h2>
 
             <p className="text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">

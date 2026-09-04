@@ -58,6 +58,44 @@
   --auth-pane: oklch(0.42 0.13 155);
   --auth-pane-ink: oklch(0.98 0.01 155);
 
+  /* --- marketing hero -------------------------------------------------
+     Three tokens the home page needs and the app palette does not supply.
+     The gold, blue and red the hero also uses are NOT here: --chart-3,
+     --chart-2 and --chart-5 already are exactly those colours, and a second
+     name for a colour that has one is how two names drift apart. */
+
+  /* The hero's ground. Warmer and softer than --background, which stays a
+     pure white because the portal's cards sit on it and need the contrast. */
+  --hero-canvas: oklch(0.982 0.008 115);
+
+  /* Headline ink. Cooler and deeper than --foreground (a neutral 0.145 0 0)
+     so the display type reads as navy against the cream rather than as the
+     same body-copy black. */
+  --hero-ink: oklch(0.21 0.028 250);
+
+  /* The navbar shell. Deliberately NOT --brand-900: that token is a dark
+     forest green in light mode and inverts to near-white in dark mode, which
+     is right for a decorative ramp and wrong for a bar that must stay dark
+     under white text. Same trap --auth-pane above was added to sidestep. */
+  --nav-shell: oklch(0.235 0.055 155);
+  --nav-shell-ink: oklch(0.97 0.012 155);
+
+  /* --- programme track accents ----------------------------------------
+     One per track on the "Choose your track" section, deliberately all in
+     the green/teal/lime family rather than a rainbow: they have to read as
+     five shades of one brand, not five unrelated categories. That is why
+     these are NOT --chart-1..5, which are a categorical set (green, blue,
+     gold, purple, red) chosen for the opposite job — telling series apart
+     in a chart, where maximum separation is the point.
+
+     Source hexes from the design handoff, converted to oklch to sit in the
+     same space as every other token here. */
+  --track-1: oklch(0.6 0.15 149); /* #16a34a — Web & App Development */
+  --track-2: oklch(0.6 0.1 181); /* #0d9488 — Mobile Development    */
+  --track-3: oklch(0.52 0.14 150); /* #15803d — Data Science & AI     */
+  --track-4: oklch(0.52 0.12 127); /* #4d7c0f — Cloud & DevOps        */
+  --track-5: oklch(0.51 0.09 180); /* #0f766e — UI/UX Design          */
+
   --chart-1: oklch(0.53 0.14 155);
   --chart-2: oklch(0.6 0.118 240);
   --chart-3: oklch(0.7 0.15 75);
@@ -109,6 +147,27 @@
      rather than competing with it. Ink stays the same. */
   --auth-pane: oklch(0.33 0.11 155);
   --auth-pane-ink: oklch(0.97 0.01 155);
+
+  /* The cream becomes a green-tinted near-black: the hero still reads as its
+     own surface, distinct from --background, without turning into a glare. */
+  --hero-canvas: oklch(0.175 0.012 155);
+  --hero-ink: oklch(0.97 0 0);
+
+  /* A shade deeper than light mode so the bar sits back against a dark page
+     instead of floating above it. Ink is unchanged — it is white either way. */
+  --nav-shell: oklch(0.185 0.04 155);
+  --nav-shell-ink: oklch(0.96 0.012 155);
+
+  /* Lifted ~0.15L from their light-mode values. The handoff's hexes are
+     mid-tone greens picked to sit on white; left as-is they would sink into
+     a dark card, and the track number — which is the largest coloured
+     element on each card — would go nearly invisible. Hue and chroma are
+     held so each track stays recognisably the same colour across themes. */
+  --track-1: oklch(0.72 0.16 149);
+  --track-2: oklch(0.74 0.11 181);
+  --track-3: oklch(0.68 0.15 150);
+  --track-4: oklch(0.68 0.13 127);
+  --track-5: oklch(0.66 0.1 180);
 }
 
 @theme inline {
@@ -147,6 +206,15 @@
   --color-brand-900: var(--brand-900);
   --color-auth-pane: var(--auth-pane);
   --color-auth-pane-ink: var(--auth-pane-ink);
+  --color-hero-canvas: var(--hero-canvas);
+  --color-hero-ink: var(--hero-ink);
+  --color-nav-shell: var(--nav-shell);
+  --color-nav-shell-ink: var(--nav-shell-ink);
+  --color-track-1: var(--track-1);
+  --color-track-2: var(--track-2);
+  --color-track-3: var(--track-3);
+  --color-track-4: var(--track-4);
+  --color-track-5: var(--track-5);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
