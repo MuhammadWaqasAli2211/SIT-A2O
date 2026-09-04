@@ -1,8 +1,221 @@
-> **Branch:** `huzaifa` — last updated 2026-09-03
+> **Branch:** `waqas` — last updated 2026-09-04
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-09-04 — Admin dashboard visual redesign
+
+**Branch:** `waqas`
+
+Redesigned the Bootcamp Dashboard's stat cards, by-stage pipeline card, and
+the two Recharts panels for visual polish, without touching any data logic —
+same `BootcampStats` payload, same fields, same computation.
+
+### What changed
+
+- **Second stat row** (`MiniStat`, `dashboard-page.tsx`) was a bare card with
+  no icon and no visual tier below the headline stat row. Gave it an icon
+  chip and the uppercase-label voice the pipeline funnel widget already
+  established, so the page reads top row = headline, second row = supporting
+  detail, instead of two rows of the same weight.
+- **Pipeline (by-stage) card** — previously plain text rows over thin,
+  single-colour progress bars. Each stage now carries the same semantic tone
+  already used for its badge everywhere else in the app (`STAGE_STYLE` in
+  `portal-ui.tsx`: info for scheduled/AI-interviewed, success for
+  physical-interview/onboarded, warning for form, destructive for rejected,
+  muted for applied), plus a thicker bar, a percentage-of-total next to the
+  count, and a fixed `STAGE_ORDER` so a zero-count stage still holds its row
+  instead of the list reshuffling as counts change.
+- **By-program donut** — a single-category donut previously rendered as an
+  undifferentiated ring with nothing to anchor it. Added a centred total
+  figure overlaid on the ring (an absolutely-positioned div over the
+  `ResponsiveContainer`, not a Recharts `Label`, which cannot centre inside a
+  responsive donut without hardcoded pixel coordinates).
+- **Applications-over-time chart** — a single real data point previously hit
+  neither branch cleanly: not "no data" (there is a real number), and a
+  one-point line chart draws nothing meaningful. Added a distinct compact
+  state — the figure shown big, with a line explaining the curve fills in as
+  more applications land — used only when `trend.length === 1`.
+
+### 21st Magic MCP — first real use, evaluated honestly
+
+Searched it once for a "donut chart with a centred total label" reference.
+It returned a genuinely close match (a community "Sectors Donut" component:
+centred label, legend cross-highlight, theme-token aware). Did **not**
+install its code: pulling in an external paid component here would add an
+unreviewed dependency with its own styling assumptions, which conflicts with
+the ask to stay inside the existing shadcn/Tailwind design system with no
+new libraries. Hand-built the same concept — centred total, existing chart
+tokens — directly in the already-lazy-loaded `dashboard-charts.tsx` instead.
+Read as: good for idea-sourcing and validating a direction quickly, not a
+drop-in fit for a codebase this established.
+
+### Verification without a live login
+
+No super-admin password was available, and creating one or resetting a
+credential on the live production database was judged out of scope for a
+visual-only task — asking first rather than working around it. Verified
+instead by rendering the actual new markup and Tailwind classes against the
+real compiled CSS output (`frontend/dist/assets/index-*.css`) via headless
+Edge screenshots, in light mode, dark mode, and at a 390px mobile width. All
+three held up: contrast is clean in both themes, the stat grid correctly
+collapses to one column below the `sm:` breakpoint, and no layout breaks.
+
+**Verified:** `tsc -b && vite build` clean, `oxlint` 0 errors. Nothing
+committed or pushed — pending explicit sign-off, per standing instruction.
+
+---
+
+## 2026-09-03 — Physical Interview round, AI result announcement, pipeline funnel, and search fixes
+
+**Branch:** `waqas`
+
+Three linked pieces of work landed together: a full second interview round
+(Physical Interview, run in person after the AI screening round), a bulk
+"announce results" gate for the AI round so scores land for every candidate
+at once rather than the instant each one finishes, and a pass over every
+search box and the dashboard's pipeline visualisation.
+
+### Physical Interview — full workflow
+
+New migration `20260902140000_physical_interview.sql`: a
+`physical_interview_result` enum (`SELECTED` / `REJECTED` only —
+no third state at the DB layer), `physical_interview_batches` (venue,
+interview date, start time, deadline, subject/message for the invite email),
+and `physical_interview_invites` (sent/send-failed tracking, result,
+`rejection_note` — internal-only, `CHECK`-constrained to only exist on a
+`REJECTED` row — decided-at/by, a `unique (batch_id, application_id)`
+constraint, deny-by-default RLS). This is deliberately a separate table set
+from the pre-existing `interviews` table, which serves the AI round, not a
+reused/repurposed one.
+
+`physical_interview_service.py` (new): `row_status()` derives
+pending/selected/rejected/missed at read time rather than storing a status
+column that could drift from the real deadline — there is no scheduler in
+this project, so nothing else would keep a stored status current.
+`send_bulk()`, `record_result()` (advances the application's stage *before*
+writing the result, through the existing `application_service.advance_stage`
+so the transition, audit row, and notification all happen the one way they
+already happen everywhere else), `list_for_bootcamp()`, `get_detail()`,
+`funnel_stats()` (one `DISTINCT ON` subquery + aggregate, not N+1), and
+`my_status()` for the candidate's own view.
+
+`application_service.py`'s `_SELECTION_STAGES` (previously
+`INTERVIEW_SCHEDULED` + `AI_INTERVIEWED`) gained `PHYSICAL_INTERVIEW`, so
+moving *out* of that stage correctly clears `is_selected` regardless of
+which selection stage a candidate was sitting in.
+
+Admin side: bulk invite dialog with venue/date/time
+(`physical-interview-invite-dialog.tsx`), funnel widget on the dashboard.
+Candidate side: a status card (`status-card.tsx`) reading pending / selected
+/ rejected (with no internal rejection reason ever exposed) / missed.
+
+### AI interview result announcement
+
+New migration `20260903120000_ai_result_announcement.sql`:
+`bootcamp_phases.results_announced_at` / `results_announced_by`,
+`interview_invites.result_seen_at`.
+
+`ai_interview_service.candidate_score()` now withholds score and verdict
+until the intake's results are announced — a completed-but-unannounced
+candidate gets a plain "completed" status with nothing else, rather than a
+number nobody else in their cohort has yet. `announce_summary()` (the
+figures behind the admin confirm dialog — counts plus `can_announce`, false
+until the round's deadline has passed), `set_results_visible()` (announcing
+moves every invited candidate on in the same pass — passes to Physical
+Interview, failures and unscored records to Rejected, all through
+`advance_stage`; hiding again reverses only the visibility, never the stage
+moves — that is a deliberate, stated asymmetry, not an oversight),
+`mark_result_seen()` for the one-time reveal popup.
+
+The reveal popup (`result-reveal.tsx`) stamps "seen" **on dismiss**, not on
+mount — caught before shipping: stamping on mount refetches the score,
+which flips `result_seen` and unmounts the popup before anything had been
+read.
+
+`applications.py`'s `advance_stage` and `reinstate` routes narrowed from
+`AdminUser` to `SuperAdminUser` — these are the unrestricted manual override
+(any application to any stage, skipping every gate the ordinary flow
+enforces); the routine paths an ordinary admin needs — announcing results,
+recording a Physical Interview outcome — have their own endpoints and both
+already move stages through `advance_stage` as a *consequence* of a real
+decision, so this narrowing does not remove anything an ordinary admin's
+day-to-day work needs. `candidate-sheet.tsx`'s manual stage dropdown is now
+gated to `SUPER_ADMIN` on the frontend to match.
+
+A deliberately-pinned security test (`test_candidate_score_cannot_carry_evidence`,
+`test_ai_interview_permissions.py`) was widened on purpose for the two new
+booleans (`announced`, `result_seen`) — both are facts about the candidate's
+own reveal state, neither can carry interview content — with the reason
+recorded in the test itself, not just this log.
+
+### Two UI bugs fixed
+
+- **The switch/toggle thumb** (`components/ui/switch.tsx`) had no `left-0`
+  anchor, so an absolutely-positioned thumb fell back to its *static*
+  position and a `<button>` centres its content — the thumb started mid-pill
+  and the checked-state translate pushed it off the right edge, on top of
+  whatever followed the switch. On the Phases screen a white thumb landed on
+  top of the word "Open," which then visibly read as "pen." One shared
+  primitive, so the fix covers every switch in the app.
+- **The Physical Interview invite dialog's "Some fields are invalid" error**
+  — no field was actually invalid; the candidate picker requested a page
+  size of 200 against an endpoint capped at 100, so FastAPI's validation
+  handler rejected the whole request without saying which field. Fixed to
+  request 100, with the cap named in a comment so the next edit does not
+  have to rediscover it by reading the 422 response.
+
+### Search boxes: audited, not assumed broken
+
+Traced all ten search inputs in the app end to end before changing anything.
+Verified the backend search logic directly against live data (matched
+`waqas`/`WAQAS`/`B07`/`b07-007`/`thewaqas`, correctly returned nothing for
+`zzz`) and confirmed both fetch hooks (`useAsync`, `useLiveResource`)
+correctly re-run when their search dependency changes. Only one of the ten
+was actually dead: the portal navbar search (`portal-layout.tsx`) — an
+`<Input>` with no `value`, no `onChange`, no handler at all, rendered for
+every role including candidates, who have exactly one application and
+nothing to search. Removed for candidates; for staff, turned into a real
+Enter-to-jump search that navigates to
+`/admin/candidates?search=<term>`, with `candidates-page.tsx` seeded from
+that query param via `useSearchParams` so the search is shareable/reloadable.
+
+### Pipeline funnel widget redesigned
+
+`funnel-widget.tsx` rewritten from loose numbers in a row to one proportional
+segmented bar per stage (AI Interview, Physical Interview), sized by real
+share so the narrowing from attempted → passed → selected is visible before
+any figure is read. A connector between the two stages carries the count
+that actually crossed from one to the other — the one number that belongs to
+both. Colour reuses the same success/destructive/muted/warning vocabulary
+the rest of the app already uses for these outcomes. `Counter` count-up
+totals and staggered Framer Motion width fills, both respecting
+`prefers-reduced-motion`. Verified visually via headless-Edge screenshots
+against the real compiled CSS, in both the compact (Dashboard) and detailed
+(Candidates) placements.
+
+### Live database work
+
+Both new migrations were applied to the live production database via the
+CLI (no manual SQL handoff needed this time). Two throwaway verification
+scripts hit real constraints before landing on a clean one: a
+`UniqueViolation` on `applications_bootcamp_id_profile_id_key` (the user's
+own real `B07-007` application already exists) and a `CheckViolation` on
+`bootcamp_number <= 99` (used `999` first) — both caught, cleaned up
+correctly, and the final script used a throwaway bootcamp number (`99`)
+instead of touching real rows.
+
+**Verified:** 349 backend tests pass (up from 324 — new
+`test_physical_interview.py` and `test_result_announcement.py`, plus the
+widened permissions pin above), clean production build, 0 type errors, 0
+lint errors, all three migrations confirmed applied via the live
+`supabase_migrations.schema_migrations` ledger. Committed as 26
+one-file-per-commit changes and pushed to `origin/waqas`
+(`598eba6..af16498`) after explicit go-ahead; `main` and `development`
+untouched throughout.
 
 ---
 
