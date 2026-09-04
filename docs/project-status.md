@@ -1,6 +1,112 @@
-> **Branch:** `huzaifa` — last updated 2026-09-03
+> **Branch:** `waqas` — last updated 2026-09-04
 
 # Project Status
+
+## Where things stand — 2026-09-04 (admin dashboard visual redesign)
+
+**Bootcamp Dashboard redesigned for visual polish — same data, better
+presentation.** No change to `BootcampStats`, no new API calls, no metric
+removed or hidden.
+
+- The second stat row (average score, attendance rate, rejected, new this
+  week) now carries an icon per card and the same uppercase-label voice the
+  pipeline funnel widget uses, reading as a clear secondary tier under the
+  headline stat row instead of a flat duplicate of it.
+- The by-stage Pipeline card now colours each stage with the same tone
+  already used for its badge everywhere else in the app, shows each stage's
+  share of the total next to its count, and holds a fixed stage order so a
+  zero-count stage keeps its row instead of the list reshuffling.
+- The by-program donut gets a centred total figure overlaid on the ring, so
+  a single-category donut reads as one real data point instead of an
+  unfinished-looking ring.
+- The applications-over-time chart gets a distinct compact state for exactly
+  one data point — a big figure with a short line, rather than either a
+  misleading "no data" empty state or a chart with nothing to draw.
+
+**21st Magic MCP connected and test-driven once.** Added as an HTTP MCP
+server scoped to this project. One search call returned a good reference
+match for a centred-label donut; its actual component code was **not**
+installed (an external paid component would add an unreviewed dependency
+and its own styling conventions on top of this project's established
+design system) — the concept was hand-built instead using the existing
+Recharts + Tailwind-token setup. Available for future UI work as a
+reference/ideation source; not yet proven as a source of mergeable code in
+this codebase.
+
+**Verified without a live admin login.** No super-admin password was on
+hand, and resetting one on the live production database was judged outside
+a visual-only task's scope. Verified instead by rendering the real new
+markup against the actual compiled Tailwind CSS via headless-browser
+screenshots in light mode, dark mode, and a 390px mobile width — all three
+clean.
+
+**Verified:** clean production build, 0 type errors, 0 lint errors. Nothing
+committed or pushed — awaiting explicit sign-off.
+
+---
+
+## Where things stand — 2026-09-03 (Physical Interview round, AI result announcement, pipeline funnel, search fixes)
+
+**A second, in-person interview round now exists end to end.** Physical
+Interview sits after the AI screening round: admins bulk-invite candidates
+to a venue/date/time batch, candidates see their own pending/selected/
+rejected/missed status (internal rejection notes never exposed to them),
+and recording a result advances the application's stage through the same
+`application_service.advance_stage` path every other stage move already
+uses — so the transition, audit row, and notification all happen the one
+way they already happen everywhere else. New tables:
+`physical_interview_batches` and `physical_interview_invites`, deliberately
+separate from the pre-existing `interviews` table, which serves the AI
+round.
+
+**AI interview results are now announced in bulk, not revealed the instant
+each candidate finishes.** A candidate who has completed sees a plain
+"completed" status with no score until an admin announces the whole
+intake's results at once — score and verdict stay hidden until then.
+Announcing moves every invited candidate on in the same pass: passes go to
+Physical Interview, failures and unscored records go to Rejected. Hiding
+the announcement again reverses only the visibility, never those stage
+moves — a deliberate, stated asymmetry. Candidates see their result once
+via a one-time reveal popup, stamped seen only after it has actually been
+shown (a mount-time stamp was caught and rejected before shipping — it
+would have unmounted the popup before anything was read).
+
+**The manual "move to any stage" override is now super-admin only**, on
+both the API (`POST /applications/{id}/stage` and `/reinstate`) and the
+admin UI's stage dropdown. Ordinary admins keep every routine path —
+announcing AI results, recording a Physical Interview outcome — since both
+already move stages as a *consequence* of a real decision through their own
+endpoints; only the unrestricted, gate-skipping override was narrowed.
+
+**Two live UI bugs fixed app-wide:** every toggle/switch in the app had its
+thumb able to drift outside its track and sit on top of adjacent text (most
+visibly, the Phases screen's "Open" label briefly reading as "pen") — fixed
+once in the shared `Switch` primitive, covering every instance. Separately,
+the Physical Interview invite dialog's "Some fields are invalid" error was
+a page-size request (200) exceeding the backend's actual cap (100), not an
+invalid field.
+
+**Every search box in the app was audited, not assumed broken.** Ten found;
+nine were verified working end to end against live data. The one dead one
+— the portal navbar search, an input with no handler at all, shown even to
+candidates with nothing to search — is now removed for candidates and
+turned into a real staff jump-to-search that seeds the Candidates page via
+a URL search param.
+
+**The dashboard's pipeline funnel widget was redesigned** from loose
+numbers into proportional segmented bars sized by real share, with a
+connector showing the count that actually crossed from the AI round into
+the Physical Interview round, in both its compact (Dashboard) and detailed
+(Candidates) placements.
+
+**Verified:** 349 backend tests pass (up from 324), clean production build,
+0 type errors, 0 lint errors, both new migrations confirmed applied on the
+live database via the migration ledger (not assumed from the file's
+presence). Committed as 26 one-file-per-commit changes and pushed to
+`origin/waqas` after explicit sign-off; `main` and `development` untouched
+throughout.
+
+---
 
 ## Where things stand — 2026-09-03 (homepage hero rebuild + "Bootcamp Flows" rebrand)
 
