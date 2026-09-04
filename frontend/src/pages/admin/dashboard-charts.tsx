@@ -20,6 +20,7 @@ import {
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/shared/portal-ui'
+import { Counter } from '@/components/motion/counter'
 import { CHART_COLORS, chartTooltipStyle } from '@/lib/chart-theme'
 import type { BootcampStats } from '@/lib/types'
 import { FileText, PieChart as PieIcon } from 'lucide-react'
@@ -50,6 +51,7 @@ export default function DashboardCharts({ stats }: { stats: BootcampStats }) {
   }))
 
   const split = stats.by_program.filter((row) => row.count > 0)
+  const programTotal = split.reduce((sum, row) => sum + row.count, 0)
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -65,6 +67,18 @@ export default function DashboardCharts({ stats }: { stats: BootcampStats }) {
               title="No applications yet"
               description="The curve appears once candidates start applying."
             />
+          ) : trend.length === 1 && trend[0] ? (
+            // A one-point line is a dot on an axis, not a trend — a single
+            // figure reads better than a chart that has nothing to draw yet.
+            <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center">
+              <span className="text-4xl font-semibold tracking-tight tabular-nums">
+                <Counter to={trend[0].applications} />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                application{trend[0].applications === 1 ? '' : 's'} so far — the curve fills in as
+                more come in.
+              </p>
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
@@ -84,6 +98,8 @@ export default function DashboardCharts({ stats }: { stats: BootcampStats }) {
                   stroke="var(--color-chart-1)"
                   strokeWidth={2}
                   fill="url(#applications)"
+                  dot={{ r: 2.5, fill: 'var(--color-chart-1)', strokeWidth: 0 }}
+                  activeDot={{ r: 4 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -102,27 +118,40 @@ export default function DashboardCharts({ stats }: { stats: BootcampStats }) {
           ) : (
             // Fixed height on the wrapper, not the card: the legend below has
             // to sit outside the chart's responsive box or it gets clipped.
-            <ResponsiveContainer width="100%" height={190}>
-              <PieChart>
-                <Pie
-                  data={split}
-                  dataKey="count"
-                  nameKey="title"
-                  innerRadius="55%"
-                  outerRadius="80%"
-                  paddingAngle={2}
-                  strokeWidth={0}
-                >
-                  {split.map((row, index) => (
-                    <Cell
-                      key={row.program_id}
-                      fill={CHART_COLORS[index % CHART_COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip {...chartTooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+            // The total is overlaid rather than passed to Recharts' own
+            // label, which cannot be centred inside a responsive donut
+            // without hardcoding pixel coordinates.
+            <div className="relative">
+              <ResponsiveContainer width="100%" height={190}>
+                <PieChart>
+                  <Pie
+                    data={split}
+                    dataKey="count"
+                    nameKey="title"
+                    innerRadius="60%"
+                    outerRadius="82%"
+                    paddingAngle={split.length > 1 ? 2 : 0}
+                    strokeWidth={0}
+                  >
+                    {split.map((row, index) => (
+                      <Cell
+                        key={row.program_id}
+                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip {...chartTooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 top-0 flex h-[190px] flex-col items-center justify-center gap-0.5">
+                <span className="text-2xl font-semibold tracking-tight tabular-nums">
+                  {programTotal}
+                </span>
+                <span className="text-[0.7rem] text-muted-foreground uppercase">
+                  {programTotal === 1 ? 'applicant' : 'applicants'}
+                </span>
+              </div>
+            </div>
           )}
 
           {split.length > 0 && (
