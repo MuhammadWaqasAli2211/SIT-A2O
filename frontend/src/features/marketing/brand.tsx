@@ -31,6 +31,9 @@ export const BRAND_ACCENT = 'Flows'
  */
 const ON_SHELL_ACCENT = 'text-brand-300 dark:text-primary'
 
+/** The hexagon shell's path data, on the mark's 24-unit grid. */
+const BRAND_HEX_PATH = 'M12 2.4 20 7v10l-8 4.6L4 17V7l8-4.6Z'
+
 /**
  * The hexagon mark: three nodes joined by two flow arcs.
  *
@@ -47,7 +50,7 @@ export function BrandMark({ className }: { className?: string }) {
     >
       {/* Rounded hexagon shell */}
       <path
-        d="M12 2.4 20 7v10l-8 4.6L4 17V7l8-4.6Z"
+        d={BRAND_HEX_PATH}
         stroke="currentColor"
         strokeWidth="1.6"
         strokeLinejoin="round"
@@ -67,35 +70,58 @@ export function BrandMark({ className }: { className?: string }) {
   )
 }
 
+/** Mark-box and wordmark sizing per `size`. Kept as one lookup so the two
+ *  scale together — a bigger word next to a navbar-sized mark reads as a
+ *  mistake, not a bigger lockup. */
+const LOCKUP_SIZE = {
+  default: { mark: 'size-9 rounded-xl p-1.5', gap: 'gap-2.5', text: 'text-[1.05rem]' },
+  /** For a standalone brand moment — a footer's brand block, a splash
+   *  screen — where the lockup is the visual anchor of its own area rather
+   *  than one item beside nav links. Roughly matches the scale a large
+   *  wordmark reads at in that kind of placement (e.g. "Compos" in the
+   *  footer-rebuild reference), not an arbitrary bump. */
+  lg: { mark: 'size-12 rounded-2xl p-2 sm:size-14', gap: 'gap-3.5', text: 'text-2xl sm:text-3xl' },
+} as const
+
 /**
  * Mark plus wordmark.
  *
- * `tone="shell"` is for the dark navbar, where the whole lockup sits on
- * --nav-shell and the primary half of the name has to be the shell's ink
- * rather than --foreground (which is near-black in light mode and would
- * vanish into the bar).
+ * `tone="shell"` is for a dark surface — the navbar, or the footer's brand
+ * block — where the whole lockup sits on --nav-shell and the primary half of
+ * the name has to be the shell's ink rather than --foreground (which is
+ * near-black in light mode and would vanish into the bar).
+ *
+ * `size="lg"` scales the mark and wordmark together for a standalone brand
+ * moment. Default stays exactly what the navbar, portal sidebar, and legacy
+ * admin shell already render — this is additive, not a change to any
+ * existing call site.
  */
 export function BrandLockup({
   tone = 'default',
+  size = 'default',
   className,
   markClassName,
 }: {
   tone?: 'default' | 'shell'
+  size?: 'default' | 'lg'
   className?: string
   markClassName?: string
 }) {
+  const scale = LOCKUP_SIZE[size]
+
   return (
-    <span className={cn('flex shrink-0 items-center gap-2.5', className)}>
+    <span className={cn('flex shrink-0 items-center', scale.gap, className)}>
       <span
         className={cn(
-          'grid size-9 shrink-0 place-items-center rounded-xl p-1.5 shadow-sm transition-transform duration-300 group-hover:scale-105',
+          'grid shrink-0 place-items-center shadow-sm transition-transform duration-300 group-hover:scale-105',
+          scale.mark,
           tone === 'shell' ? cn('bg-primary/15', ON_SHELL_ACCENT) : 'bg-primary text-primary-foreground',
           markClassName,
         )}
       >
         <BrandMark />
       </span>
-      <span className="text-[1.05rem] leading-none font-bold tracking-tight">
+      <span className={cn('leading-none font-bold tracking-tight', scale.text)}>
         <span className={tone === 'shell' ? 'text-nav-shell-ink' : 'text-foreground'}>
           {BRAND_PRIMARY}
         </span>{' '}
