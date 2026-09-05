@@ -25,10 +25,13 @@
  *   address   Plausible — Saylani's head office is at Bahadurabad, Karachi.
  *   instagram VERIFIED — 200.
  *   youtube   VERIFIED — 200.
- *   linkedin  BROKEN — 404. This account does not exist. The real one is
- *             pk.linkedin.com/company/saylani-welfare-international-trust-official
- *             (verified 200), left unapplied because the correct handle for
- *             *this* programme is the owner's call, not a search result's.
+ *   linkedin  VERIFIED — 200, but interim by the owner's own instruction
+ *             (2026-09-04): `saylaniwelfare` 404s (that handle does not
+ *             exist), so this now points at Saylani Welfare International
+ *             Trust's real, verified account — the parent charity's page,
+ *             not a bootcamp-specific one, because no programme-specific
+ *             account exists yet. Swap to the real one the moment it's
+ *             created; don't leave this pointed at the charity long-term.
  *   facebook  UNVERIFIABLE — Facebook answers 400 to every non-browser
  *             request, including pages that certainly exist, so neither this
  *             URL nor any alternative can be checked from here.
@@ -63,6 +66,10 @@ export const OFFICE_HOURS = [
 export const SOCIAL_LINKS = [
   { label: 'Facebook', Icon: FacebookIcon, href: 'https://facebook.com/saylaniwelfare' },
   { label: 'Instagram', Icon: InstagramIcon, href: 'https://instagram.com/saylaniwelfare' },
-  { label: 'LinkedIn', Icon: LinkedinIcon, href: 'https://linkedin.com/company/saylaniwelfare' },
+  {
+    label: 'LinkedIn',
+    Icon: LinkedinIcon,
+    href: 'https://pk.linkedin.com/company/saylani-welfare-international-trust-official',
+  },
   { label: 'YouTube', Icon: YoutubeIcon, href: 'https://youtube.com/@saylaniwelfare' },
 ] as const
