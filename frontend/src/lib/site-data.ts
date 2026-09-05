@@ -766,58 +766,56 @@ export const VALUES = [
 /* ---------------------------------------------------------------- footer -- */
 
 /**
- * The footer's link columns, grouped by what a visitor came down here to do.
- *
- * A footer is not a second navigation bar. People scroll to one having failed
- * to find something above it, or to check something before they commit — so
- * these are grouped by intent ("I want to apply", "I need help") rather than
- * by the site's own section names, and each group is short enough to scan
- * without reading.
- *
- * Legal links are deliberately *not* a column here: they belong in the bottom
- * bar, which is the one place every visitor already knows to look for them.
- * See `LEGAL_LINKS` below.
- *
- * The programme list is generated from `PROGRAMS`, not retyped, so adding a
- * sixth track cannot leave the footer advertising five.
+ * Legal pages. Declared ahead of `FOOTER_LINKS`, which embeds this array
+ * directly as its "Legal" column rather than repeating the same two hrefs a
+ * third time in a separate bottom-bar row.
  */
-export const FOOTER_LINKS = [
-  {
-    heading: 'Programs',
-    links: [
-      ...PROGRAMS.map((p) => ({ label: p.title, href: `/programs/${p.slug}` })),
-      { label: 'Compare all tracks', href: '/programs' },
-    ],
-  },
-  {
-    heading: 'Apply',
-    links: [
-      { label: 'Start an application', href: '/signup' },
-      { label: 'How admissions work', href: '/admissions' },
-      { label: 'Who can apply', href: '/admissions#eligibility' },
-      { label: 'Key dates', href: '/admissions#dates' },
-    ],
-  },
-  {
-    heading: 'About',
-    links: [
-      { label: 'Our mission', href: '/about' },
-      { label: 'Success stories', href: '/success-stories' },
-      { label: 'Campuses', href: '/about#campuses' },
-    ],
-  },
-  {
-    heading: 'Help',
-    links: [
-      { label: 'FAQs', href: '/faq' },
-      { label: 'Contact admissions', href: '/contact' },
-      { label: 'Student portal', href: '/login' },
-    ],
-  },
-]
-
-/** Bottom-bar links. Kept beside the copyright, where people expect them. */
 export const LEGAL_LINKS = [
   { label: 'Privacy Policy', href: '/privacy' },
   { label: 'Terms of Service', href: '/terms' },
+]
+
+/**
+ * The footer's link columns.
+ *
+ * Rebuilt 2026-09-04 on a reference footer's structure (a plain site map, a
+ * standalone Legal column, and audience-specific columns) rather than the
+ * prior intent-based grouping (Programs/Apply/About/Help) — the reference's
+ * own three off-topic columns (Components/Resources/Marketing, which
+ * described that product's UI-kit business) were dropped rather than ported,
+ * and replaced with the two columns that are actually true of this site.
+ *
+ * `Legal` reuses `LEGAL_LINKS` above rather than retyping it. The bottom bar
+ * now carries only the copyright line, matching the reference: a visitor no
+ * longer sees "Privacy Policy" listed twice on the same page.
+ */
+export const FOOTER_LINKS = [
+  {
+    heading: 'Pages',
+    links: [
+      { label: 'Home', href: '/' },
+      { label: 'About', href: '/about' },
+      { label: 'Programs', href: '/programs' },
+      { label: 'Admissions', href: '/admissions' },
+      { label: 'Success Stories', href: '/success-stories' },
+      { label: 'FAQ', href: '/faq' },
+      { label: 'Contact', href: '/contact' },
+    ],
+  },
+  {
+    heading: 'Legal',
+    links: LEGAL_LINKS,
+  },
+  {
+    heading: 'For Candidates',
+    links: [
+      { label: 'Start an application', href: '/signup' },
+      { label: 'Track your application', href: '/login' },
+      { label: 'Key application dates', href: '/admissions#dates' },
+    ],
+  },
+  {
+    heading: 'For Admins & Staff',
+    links: [{ label: 'Staff & admin sign in', href: '/login' }],
+  },
 ]
