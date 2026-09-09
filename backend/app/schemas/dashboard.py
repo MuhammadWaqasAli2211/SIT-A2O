@@ -64,6 +64,10 @@ class BootcampStats(BaseModel):
     by_stage: list[StageCount] = Field(default_factory=list)
     by_program: list[ProgramCount] = Field(default_factory=list)
     applications_over_time: list[DailyCount] = Field(default_factory=list)
+    # A year of daily counts for the calendar heatmap. Separate from
+    # `applications_over_time` above, which stays a 30-day series because the
+    # line chart it feeds is explicitly a 30-day view.
+    application_activity: list[DailyCount] = Field(default_factory=list)
     upcoming_interviews: list[UpcomingInterview] = Field(default_factory=list)
     physical_interview_funnel: PhysicalInterviewFunnel = Field(
         default_factory=PhysicalInterviewFunnel
