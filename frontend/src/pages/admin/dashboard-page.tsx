@@ -6,7 +6,6 @@ import {
   Mail,
   Percent,
   RefreshCw,
-  Sparkles,
   TrendingUp,
   UserCheck,
   Users,
@@ -21,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import {
   AsyncSection,
   BootcampStatusBadge,
@@ -28,6 +28,7 @@ import {
   CardsSkeleton,
   NoBootcampSelected,
 } from '@/features/admin/components'
+import { ApplicationHeatmap } from '@/features/admin/application-heatmap'
 import { bootcampApi } from '@/features/admin/api'
 import { FunnelWidget } from '@/features/admin/funnel-widget'
 import { LiveIndicator } from '@/features/live/live-indicator'
@@ -131,7 +132,7 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
   }, [stats])
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-2.5">
         <BootcampStatusBadge status={stats.status} />
         <Badge variant="outline" className="font-normal">
@@ -145,67 +146,86 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total applications"
-          value={stats.total_applications}
-          icon={Users}
-          hint={`${stats.active_applications} still active`}
-        />
-        <StatCard
-          label="Interviews completed"
-          value={stats.interviews_completed}
-          icon={UserCheck}
-          hint={`${stats.interviews_scheduled} scheduled`}
-          delay={0.05}
-        />
-        <StatCard
-          label="Onboarded"
-          value={stats.onboarded}
-          icon={CheckCircle2}
-          hint={`${conversion}% of applicants`}
-          delay={0.1}
-        />
-        <StatCard
-          label="Emails sent"
-          value={stats.emails_sent}
-          icon={Mail}
-          hint="Delivered by the platform"
-          delay={0.15}
-        />
-      </div>
+      {/* Two per row on mobile, not one: a full-width card per stat pushed
+          the fourth one three screens down. `Stagger`/`StaggerItem` own the
+          entrance now — StatCard no longer animates itself, so the row
+          arrives in sequence instead of four cards appearing at once. */}
+      <Stagger trigger="mount" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StaggerItem>
+          <StatCard
+            label="Total applications"
+            value={stats.total_applications}
+            icon={Users}
+            hint={`${stats.active_applications} still active`}
+            tone="primary"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Interviews completed"
+            value={stats.interviews_completed}
+            icon={UserCheck}
+            hint={`${stats.interviews_scheduled} scheduled`}
+            tone="info"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Onboarded"
+            value={stats.onboarded}
+            icon={CheckCircle2}
+            hint={`${conversion}% of applicants`}
+            tone="success"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Emails sent"
+            value={stats.emails_sent}
+            icon={Mail}
+            hint="Delivered by the platform"
+            tone="warning"
+          />
+        </StaggerItem>
+      </Stagger>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MiniStat
-          label="Average interview score"
-          value={stats.average_score === null ? '—' : `${stats.average_score}`}
-          hint={stats.average_score === null ? 'No scores recorded yet' : 'Out of 100'}
-          icon={Percent}
-        />
-        <MiniStat
-          label="Attendance rate"
-          value={attendance === null ? '—' : `${attendance}%`}
-          hint={
-            attendance === null
-              ? 'No interviews held yet'
-              : `${stats.interviews_no_show} no-shows`
-          }
-          icon={CalendarCheck}
-        />
-        <MiniStat
-          label="Rejected"
-          value={String(stats.rejected_applications)}
-          hint="Can be reinstated if needed"
-          icon={XCircle}
-          tone="muted"
-        />
-        <MiniStat
-          label="New this week"
-          value={String(stats.applications_last_7_days)}
-          hint="Last 7 days"
-          icon={Sparkles}
-        />
-      </div>
+      <Stagger trigger="mount" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <StaggerItem>
+          <MiniStat
+            label="Average interview score"
+            value={stats.average_score === null ? '—' : `${stats.average_score}`}
+            hint={stats.average_score === null ? 'No scores recorded yet' : 'Out of 100'}
+            icon={Percent}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <MiniStat
+            label="Attendance rate"
+            value={attendance === null ? '—' : `${attendance}%`}
+            hint={
+              attendance === null
+                ? 'No interviews held yet'
+                : `${stats.interviews_no_show} no-shows`
+            }
+            icon={CalendarCheck}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <MiniStat
+            label="Rejected"
+            value={String(stats.rejected_applications)}
+            hint="Can be reinstated if needed"
+            icon={XCircle}
+            tone="muted"
+          />
+        </StaggerItem>
+      </Stagger>
+
+      {/* Replaces the old flat "New this week" count. Given its own
+          full-width card rather than a quarter of a stat row: a 7-row grid
+          squeezed into a 220px column had to use 11px cells to fit, which
+          is what made it read as an afterthought. */}
+      <ApplicationHeatmap points={stats.application_activity} />
 
       <FunnelWidget bootcampId={stats.bootcamp_id} physicalInterviewFunnel={stats.physical_interview_funnel} />
 
@@ -213,7 +233,7 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
         <DashboardCharts stats={stats} />
       </Suspense>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <PipelineCard stats={stats} />
         <UpcomingCard stats={stats} />
       </div>
@@ -222,10 +242,11 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
 }
 
 /**
- * Second-tier stat: same data density as StatCard's row but visually
- * subordinate — a flat icon chip instead of a hover-lift card, and the
- * uppercase label voice FunnelStage already uses for secondary figures, so
- * the page reads top row = headline, second row = supporting detail.
+ * Second-tier stat: same data density as StatCard's row, and now the same
+ * hover/border treatment, but a smaller icon chip and the uppercase label
+ * voice FunnelStage already uses for secondary figures — the page still
+ * reads top row = headline, second row = supporting detail, just not at
+ * the cost of looking unfinished next to it.
  */
 function MiniStat({
   label,
@@ -241,22 +262,30 @@ function MiniStat({
   tone?: 'default' | 'muted'
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-start gap-3 p-4">
+    <Card
+      className={cn(
+        'group h-full border-2 border-foreground/15 py-0',
+        'transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-foreground/10',
+        tone === 'muted' ? 'hover:border-muted-foreground/60' : 'hover:border-primary',
+      )}
+    >
+      <CardContent className="flex items-start gap-2 p-3">
         <span
           className={cn(
-            'mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg',
-            tone === 'muted' ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary',
+            'mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg transition-all duration-200 ease-out group-hover:scale-105 group-hover:shadow-md sm:size-7',
+            tone === 'muted'
+              ? 'bg-muted-foreground/15 text-muted-foreground group-hover:bg-muted-foreground group-hover:text-background'
+              : 'bg-primary/15 text-primary group-hover:bg-primary group-hover:text-primary-foreground',
           )}
         >
-          <Icon className="size-4" />
+          <Icon className="size-3.5" />
         </span>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+          <span className="text-[0.6rem] font-medium tracking-wide text-muted-foreground uppercase">
             {label}
           </span>
-          <span className="text-xl font-semibold tracking-tight tabular-nums">{value}</span>
-          <span className="truncate text-xs text-muted-foreground">{hint}</span>
+          <span className="text-base font-bold tracking-tight tabular-nums sm:text-lg">{value}</span>
+          <span className="truncate text-[0.7rem] text-muted-foreground">{hint}</span>
         </div>
       </CardContent>
     </Card>
