@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   Building2,
   CalendarClock,
+  ClipboardList,
   FileText,
   GraduationCap,
   KeyRound,
@@ -102,6 +103,10 @@ const BOOTCAMP_TOOLS: PortalNavItem[] = [
   // 'Interviews' above, which schedules our own physical round — the two are
   // different rounds against different systems, so they get different rows.
   { label: 'AI interviews', href: '/admin/ai-interviews', icon: BrainCircuit },
+  // The reviewer's roster: screening result and paperwork on the same row,
+  // both openable in place. Sits above 'Onboarding' because it is where a
+  // reviewer starts; that screen is where they go to act on one folder.
+  { label: 'HR assessment', href: '/admin/hr-assessment', icon: ClipboardList },
   // Review of the 4 onboarding forms + Documents Hub uploads, per candidate.
   { label: 'Onboarding', href: '/admin/onboarding', icon: GraduationCap },
   { label: 'Phases', href: '/admin/phases', icon: ShieldCheck },
@@ -129,6 +134,7 @@ const SUPER_ADMIN_NAV: PortalNavGroup[] = [
       { label: 'Administrators', href: '/super-admin/admins', icon: ShieldCheck },
       { label: 'AI permissions', href: '/super-admin/permissions', icon: KeyRound },
       { label: 'AI interviews', href: '/super-admin/ai-interviews', icon: BrainCircuit },
+      { label: 'HR assessment', href: '/super-admin/hr-assessment', icon: ClipboardList },
       { label: 'Programs', href: '/super-admin/programs', icon: GraduationCap },
     ],
   },
