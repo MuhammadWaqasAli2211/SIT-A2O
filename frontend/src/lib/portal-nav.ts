@@ -6,12 +6,13 @@ import {
   FileText,
   GraduationCap,
   KeyRound,
+  Layers,
   LayoutDashboard,
   Mail,
   Radar,
   ShieldCheck,
   UserCircle,
-  Users,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -96,7 +97,7 @@ const CANDIDATE_NAV: PortalNavGroup[] = [
 // Shared between both staff navs so an admin and a super admin get the same
 // per-bootcamp tools in the same order.
 const BOOTCAMP_TOOLS: PortalNavItem[] = [
-  { label: 'Candidates', href: '/admin/candidates', icon: Users },
+  { label: 'Candidates', href: '/admin/candidates', icon: UsersRound },
   { label: 'Interviews', href: '/admin/interviews', icon: CalendarClock },
   // Results from the external AI screening service. Separate from
   // 'Interviews' above, which schedules our own physical round — the two are
@@ -104,7 +105,10 @@ const BOOTCAMP_TOOLS: PortalNavItem[] = [
   { label: 'AI interviews', href: '/admin/ai-interviews', icon: BrainCircuit },
   // Review of the 4 onboarding forms + Documents Hub uploads, per candidate.
   { label: 'Onboarding', href: '/admin/onboarding', icon: GraduationCap },
-  { label: 'Phases', href: '/admin/phases', icon: ShieldCheck },
+  // Layers, not ShieldCheck: ShieldCheck is already 'Administrators' in the
+  // super-admin nav below, and a phase-gate control is not a permissions
+  // control — the two rows read as the same concept under one icon.
+  { label: 'Phases', href: '/admin/phases', icon: Layers },
   { label: 'Emails', href: '/admin/emails', icon: Mail },
 ]
 
