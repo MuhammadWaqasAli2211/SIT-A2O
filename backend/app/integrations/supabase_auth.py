@@ -116,11 +116,21 @@ def _post(
 
 
 def sign_up(email: str, password: str, metadata: dict[str, Any]) -> dict:
-    """Create a user. Supabase sends the confirmation email when enabled."""
+    """Create a user. Supabase sends the confirmation email when enabled.
+
+    `redirect_to` is what actually controls the confirmation link's
+    destination — it is not the dashboard's Site URL. Without it, GoTrue
+    falls back to the Site URL by itself (no path), which is why this used
+    to land wherever that field happened to be pointed, with no route of our
+    own to catch it. Passed as a query param, the same way the supabase-js
+    client sends `options.emailRedirectTo`, because GoTrue's `/signup`
+    reads it from the URL, not the JSON body.
+    """
     return _post(
         "/signup",
         operation="signup",
         json={"email": email, "password": password, "data": metadata},
+        params={"redirect_to": f"{settings.FRONTEND_URL}/verify-email"},
     )
 
 
@@ -144,6 +154,7 @@ def resend_confirmation(email: str) -> dict:
         "/resend",
         operation="resend",
         json={"type": "signup", "email": email},
+        params={"redirect_to": f"{settings.FRONTEND_URL}/verify-email"},
     )
 
 

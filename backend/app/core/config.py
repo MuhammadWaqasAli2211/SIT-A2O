@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
     CORS_ORIGINS: str = "http://localhost:5173"
+    # The one frontend origin this backend hands out *links* to — signup's
+    # email-confirmation redirect today, and the natural home for any future
+    # emailed link. Deliberately separate from CORS_ORIGINS, which is a list
+    # of origins allowed to *call* the API and normally holds more than one
+    # (a deployed frontend plus a local dev server); a link can only point
+    # at one place, so this is a single value, not the first item of that list.
+    FRONTEND_URL: str = "http://localhost:5173"
 
     PROJECT_NAME: str = "Saylani Bootcamp Recruitment Platform"
 
@@ -60,6 +67,17 @@ class Settings(BaseSettings):
     # a clear error if a send is attempted with no key set.
     INTERVIEWER_AI_API_KEY: str = ""
     INTERVIEWER_AI_BASE_URL: str = "https://interviewerai-production-b311.up.railway.app/api/v1"
+
+    # --- Agilytics (post-onboarding workspace provisioning) ---
+    # A shared HMAC secret, not a bearer token: every request we send is
+    # signed with it (see app/integrations/agilytics.py). It stays server-side
+    # and is never handed to, nor derivable by, the frontend — same standard
+    # as INTERVIEWER_AI_API_KEY above.
+    PORTAL_AGILYTICS_SECRET: str = ""
+    # `agilytics-preview.vercel.app` is a Vercel *preview* deployment. Kept in
+    # configuration precisely so pointing at the eventual production host is
+    # an env change rather than a code change.
+    AGILYTICS_API_BASE_URL: str = "https://agilytics-preview.vercel.app"
 
     # Supabase signs access tokens with this audience.
     JWT_AUDIENCE: str = "authenticated"
@@ -109,6 +127,10 @@ class Settings(BaseSettings):
     @property
     def interviewer_ai_configured(self) -> bool:
         return bool(self.INTERVIEWER_AI_API_KEY)
+
+    @property
+    def agilytics_configured(self) -> bool:
+        return bool(self.PORTAL_AGILYTICS_SECRET and self.AGILYTICS_API_BASE_URL)
 
 
 @lru_cache

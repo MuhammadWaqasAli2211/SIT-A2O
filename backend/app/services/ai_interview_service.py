@@ -408,6 +408,57 @@ def _results_announced(db: Session, bootcamp_id: uuid.UUID) -> bool:
     )
 
 
+def best_interviews_by_application(
+    db: Session, actor: Profile, bootcamp_id: uuid.UUID | None = None
+) -> dict[uuid.UUID, dict]:
+    """Each application's best completed interview, hydrated, keyed by ours.
+
+    The sibling of `_best_scores_by_application` below, differing in two ways
+    the HR Assessment screen needs. It keeps the whole record rather than only
+    the number, so that screen can hand the evidence modal something to open
+    without a per-row round trip. And it answers platform-wide as well as per
+    intake, because the super admin's version of that screen is unscoped.
+
+    Applications with no readable score are simply absent here, unlike
+    `_best_scores_by_application`, which maps them to None — announcing has to
+    make a decision about a candidate who never sat the interview, whereas a
+    table column just leaves the cell empty.
+
+    Scoping matches `list_completed`: an ADMIN must name an intake, a
+    SUPER_ADMIN may omit it. One DB query plus one external call either way.
+    """
+    if bootcamp_id is not None:
+        bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+        _ids, _emails, index = _invited_index(db, bootcamp_id)
+    elif actor.role == UserRole.SUPER_ADMIN:
+        _ids, _emails, index = _invited_index(db)
+    else:
+        raise NotFoundError("Select an intake to see its candidates.")
+
+    if not index:
+        return {}
+
+    best: dict[uuid.UUID, dict] = {}
+    for interview in interviewer_ai.list_interviews(limit=_COMPLETED_FETCH_LIMIT)[0]:
+        if not is_completed(interview):
+            continue
+        hydrated = _hydrate(interview, index)
+        known = hydrated.get("local")
+        if not known or not known.get("application_id"):
+            continue
+        score = extract_score(interview)
+        if score is None:
+            continue
+        application_id = uuid.UUID(known["application_id"])
+        current = best.get(application_id)
+        # Best attempt, not most recent — the same rule candidate_score and
+        # _best_scores_by_application use, so no screen contradicts another.
+        if current is None or score > (extract_score(current) or float("-inf")):
+            best[application_id] = hydrated
+
+    return best
+
+
 def _best_scores_by_application(
     db: Session, bootcamp_id: uuid.UUID
 ) -> dict[uuid.UUID, float | None]:

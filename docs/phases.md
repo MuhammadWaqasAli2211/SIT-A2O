@@ -90,7 +90,20 @@ stay governed by the surrounding two?*
 - The form collects bank details (IBAN) and identity data (CNIC) — both
   sensitive, see `security.md`
 - Submission feeds analytics and Agilytic onboarding
-- *Open question: does Agilytic expose an API, or do we export for manual upload?*
+- **Answered 2026-09-05: API integration, not manual export.** Agilytics
+  exposes three signed endpoints — workspace provisioning, onboarding status,
+  and bulk invite — all HMAC-SHA256 signed with `PORTAL_AGILYTICS_SECRET`
+  (`backend/app/integrations/agilytics.py`). All three are built and verified
+  against their live API.
+- Provisioning is **admin-initiated** from the HR Assessment screen, never
+  automatic: their provisioning call is not idempotent and their API has no
+  delete, so a second call would leave an intake's students split across two
+  workspaces that cannot be removed. `bootcamps.agilytics_workspace_id` holds
+  the resulting id and is the guard against that.
+- Provisioning sends everyone at `FORM` or `ONBOARDED` as students, and the
+  intake's own bootcamp admins as workspace leads — which creates accounts
+  for our staff on their side. The confirm dialog names them before the
+  button is pressed.
 
 ---
 

@@ -35,22 +35,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { applicationApi, onboardingApi } from '@/features/admin/api'
 import { AsyncSection } from '@/features/admin/components'
-import {
-  BackgroundVerificationForm,
-  type BackgroundVerificationDraft,
-} from '@/features/onboarding/background-verification-form'
-import { BankPaymentForm, type BankPaymentDraft } from '@/features/onboarding/bank-payment-form'
-import {
-  EmploymentApplicationForm,
-  type EmploymentApplicationDraft,
-} from '@/features/onboarding/employment-application-form'
-import { HalfNamaForm, type HalfNamaDraft } from '@/features/onboarding/half-nama-form'
+import { OnboardingSubmissionView } from '@/features/onboarding/submission-view'
 import { useAsync, useMutation } from '@/hooks/use-async'
-import { isAdult } from '@/lib/age'
 import {
   DOCUMENT_STATUS_LABEL,
   ONBOARDING_FORM_LABEL,
-  OnboardingFormType,
   type DocumentStatus,
   type OnboardingDocumentRecord,
   type OnboardingFormRow,
@@ -109,91 +98,34 @@ export default function AdminOnboardingCandidatePage() {
 /* --------------------------------------------------------------- forms -- */
 
 function FormsPanel({ applicationId, dateOfBirth }: { applicationId: string; dateOfBirth: string | null }) {
-  const rows = useAsync(() => onboardingApi.forms(applicationId), [applicationId])
   const [reopenTarget, setReopenTarget] = useState<OnboardingFormRow | null>(null)
+  // The shared view owns the fetch, so "that reopen landed" is communicated by
+  // bumping this rather than by calling a refetch it does not expose.
+  const [refreshToken, setRefreshToken] = useState(0)
 
   return (
-    <AsyncSection
-      initialLoading={rows.initialLoading}
-      error={rows.error}
-      onRetry={rows.refetch}
-      skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
-    >
-      {rows.data && (
-        <Tabs defaultValue={rows.data[0]?.form_type} orientation="vertical">
-          <TabsList className="h-fit w-56 shrink-0 flex-col items-stretch">
-            {rows.data.map((row) => (
-              <TabsTrigger key={row.form_type} value={row.form_type} className="justify-start">
-                {ONBOARDING_FORM_LABEL[row.form_type]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+    <>
+      <OnboardingSubmissionView
+        applicationId={applicationId}
+        dateOfBirth={dateOfBirth}
+        refreshToken={refreshToken}
+        renderActions={(row) =>
+          row.submission?.status === 'SUBMITTED' && (
+            <Button size="sm" variant="outline" onClick={() => setReopenTarget(row)}>
+              <RotateCcw className="size-3.5" />
+              Reopen for correction
+            </Button>
+          )
+        }
+      />
 
-          {rows.data.map((row) => (
-            <TabsContent key={row.form_type} value={row.form_type}>
-              <div className="flex flex-col gap-3">
-                {!row.submission ? (
-                  <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    Not submitted yet.
-                  </p>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {row.submission.status === 'REOPENED'
-                          ? `Reopened for correction${row.submission.reopen_note ? `: "${row.submission.reopen_note}"` : ''}`
-                          : `Submitted ${new Date(row.submission.submitted_at).toLocaleString()}`}
-                      </span>
-                      {row.submission.status === 'SUBMITTED' && (
-                        <Button size="sm" variant="outline" onClick={() => setReopenTarget(row)}>
-                          <RotateCcw className="size-3.5" />
-                          Reopen for correction
-                        </Button>
-                      )}
-                    </div>
-                    <ReadOnlyForm
-                      formType={row.form_type}
-                      data={row.submission.submitted_data}
-                      isAdultCandidate={dateOfBirth ? isAdult(dateOfBirth) : true}
-                    />
-                  </>
-                )}
-              </div>
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
-
-      <ReopenDialog row={reopenTarget} onClose={() => setReopenTarget(null)} onDone={rows.refetch} />
-    </AsyncSection>
+      <ReopenDialog
+        row={reopenTarget}
+        onClose={() => setReopenTarget(null)}
+        onDone={() => setRefreshToken((n) => n + 1)}
+      />
+    </>
   )
-}
-
-function ReadOnlyForm({
-  formType,
-  data,
-  isAdultCandidate,
-}: {
-  formType: OnboardingFormRow['form_type']
-  data: Record<string, unknown>
-  isAdultCandidate: boolean
-}) {
-  switch (formType) {
-    case OnboardingFormType.BACKGROUND_VERIFICATION:
-      return <BackgroundVerificationForm initialData={data as Partial<BackgroundVerificationDraft>} readOnly />
-    case OnboardingFormType.EMPLOYMENT_APPLICATION:
-      return <EmploymentApplicationForm initialData={data as Partial<EmploymentApplicationDraft>} readOnly />
-    case OnboardingFormType.HALF_NAMA:
-      return <HalfNamaForm initialData={data as Partial<HalfNamaDraft>} readOnly />
-    case OnboardingFormType.BANK_PAYMENT_DETAILS:
-      return (
-        <BankPaymentForm
-          isAdultCandidate={isAdultCandidate}
-          initialData={data as Partial<BankPaymentDraft>}
-          readOnly
-        />
-      )
-  }
 }
 
 function ReopenDialog({

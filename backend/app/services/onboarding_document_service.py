@@ -41,7 +41,7 @@ EXTENSION_BY_CONTENT_TYPE = {
 
 # The two stages an application reaches once it has entered onboarding —
 # what qualifies it to appear in the admin's bootcamp-level folder list.
-_ONBOARDING_LIST_STAGES = (ApplicationStage.FORM, ApplicationStage.ONBOARDED)
+ONBOARDING_LIST_STAGES = (ApplicationStage.FORM, ApplicationStage.ONBOARDED)
 
 # Hold several concurrent files rather than one — the "+ Add / - Remove"
 # tabs. Every other type supersedes on re-upload, same as the documents table.
@@ -277,7 +277,14 @@ def link(document: OnboardingDocument) -> tuple[str, int]:
 # --------------------------------------------------------- admin overview --
 
 
-def _summary_for(db: Session, application: Application, profile: Profile) -> OnboardingCandidateSummary:
+def summary_for(db: Session, application: Application, profile: Profile) -> OnboardingCandidateSummary:
+    """One row's forms/documents progress.
+
+    Public because the HR Assessment roll-up builds the same progress figures
+    over the same population — see hr_assessment_service. Duplicating this
+    would mean two definitions of "how far through onboarding is this
+    candidate", which would eventually disagree.
+    """
     form_rows = onboarding_form_service.rows_for_application(db, application.id)
     forms_submitted = sum(
         1 for row in form_rows.values() if row.status == OnboardingFormStatus.SUBMITTED
@@ -329,7 +336,7 @@ def list_for_bootcamp(
     """The candidate-folder list: everyone in this bootcamp who has reached
     onboarding, with a progress summary per row so an admin can scan without
     opening every folder."""
-    filters = [Application.bootcamp_id == bootcamp_id, Application.stage.in_(_ONBOARDING_LIST_STAGES)]
+    filters = [Application.bootcamp_id == bootcamp_id, Application.stage.in_(ONBOARDING_LIST_STAGES)]
     if search:
         needle = f"%{search.strip().lower()}%"
         filters.append(
@@ -345,4 +352,4 @@ def list_for_bootcamp(
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = db.execute(base.order_by(Application.candidate_code).limit(limit).offset(offset)).all()
 
-    return [_summary_for(db, application, profile) for application, profile in rows], total
+    return [summary_for(db, application, profile) for application, profile in rows], total

@@ -62,6 +62,32 @@ export const PHYSICAL_INTERVIEW_MERGE_FIELDS = [
   '$deadline',
 ] as const
 
+/**
+ * The covering email sent alongside an Agilytics invite.
+ *
+ * Same shape of problem as the InterviewerAI one above, for a sharper
+ * reason: Agilytics's bulk-invite endpoint accepts no body *and returns no
+ * tokens* (verified 2026-09-05 against their live API — the response carries
+ * only `invitesIssued` and `expiresAt`). So we cannot build an accept URL and
+ * cannot send their invitation ourselves. Their system owns that message;
+ * this one tells the candidate it is coming, and what it is for.
+ *
+ * Deliberately does not promise a link or a sender name we have not
+ * verified — a covering mail that describes an email the candidate never
+ * receives is worse than no covering mail.
+ */
+export const AGILYTICS_MESSAGE_TEMPLATE =
+  '<p>Dear $candidate_name,</p>' +
+  '<p>Your onboarding for <strong>$program</strong> ($bootcamp) is complete, and ' +
+  'your place on the Agilytics learning platform has been set up. Your candidate ' +
+  'code is $candidate_code.</p>' +
+  '<p>Agilytics will email you separately at this address with an invitation link ' +
+  'to activate your account. <strong>That link expires 7 days after it is sent</strong>, ' +
+  'so please activate as soon as it arrives.</p>' +
+  '<p>If it has not arrived within a day, check your spam folder before contacting ' +
+  'us — we can reissue it.</p>' +
+  '<p>— Saylani Admissions</p>'
+
 export const PHYSICAL_INTERVIEW_MESSAGE_TEMPLATE =
   '<p>Dear $candidate_name,</p>' +
   '<p>Congratulations — you have cleared the AI screening interview for ' +

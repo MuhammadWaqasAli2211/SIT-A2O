@@ -30,6 +30,7 @@ import { UserRole } from '@/lib/types'
  */
 const LoginPage = lazy(() => import('@/pages/auth/login-page'))
 const SignupPage = lazy(() => import('@/pages/auth/signup-page'))
+const VerifyEmailPage = lazy(() => import('@/pages/auth/verify-email-page'))
 
 const ProgramsPage = lazy(() => import('@/pages/public/programs-page'))
 const ProgramDetailPage = lazy(() => import('@/pages/public/program-detail-page'))
@@ -66,6 +67,7 @@ const AdminInterviewsPage = lazy(() => import('@/pages/admin/interviews-page'))
 const AdminPhasesPage = lazy(() => import('@/pages/admin/phases-page'))
 const AdminEmailsPage = lazy(() => import('@/pages/admin/emails-page'))
 const AdminAiInterviewsPage = lazy(() => import('@/pages/admin/ai-interviews-page'))
+const AdminHrAssessmentPage = lazy(() => import('@/pages/admin/hr-assessment-page'))
 const AdminOnboardingCandidatesPage = lazy(() => import('@/pages/admin/onboarding-candidates-page'))
 const AdminOnboardingCandidatePage = lazy(() => import('@/pages/admin/onboarding-candidate-page'))
 const AdminBackgroundVerificationPreviewPage = lazy(
@@ -83,6 +85,7 @@ const SuperAdminAnalyticsPage = lazy(() => import('@/pages/super-admin/analytics
 const SuperAdminProgramsPage = lazy(() => import('@/pages/super-admin/programs-page'))
 const SuperAdminPermissionsPage = lazy(() => import('@/pages/super-admin/permissions-page'))
 const SuperAdminAiInterviewsPage = lazy(() => import('@/pages/super-admin/ai-interviews-page'))
+const SuperAdminHrAssessmentPage = lazy(() => import('@/pages/super-admin/hr-assessment-page'))
 
 // Attached to every top-level branch so a crash inside one section renders the
 // boundary rather than white-screening the whole app.
@@ -116,6 +119,13 @@ export const router = createBrowserRouter([
       { path: '/signup', element: <SignupPage /> },
     ],
   },
+
+  // Deliberately outside GuestRoute: that guard checks AuthContext, and this
+  // page establishes a session itself, mid-render, from a signup email link
+  // — wrapping it would risk the guard redirecting away the instant that
+  // session exists, before the success state it just earned is ever shown.
+  // See the page's own header comment for the full reasoning.
+  { path: '/verify-email', element: <VerifyEmailPage />, ...onError },
 
   // --------------------------------------------------------------- portal --
   {
@@ -187,6 +197,10 @@ export const router = createBrowserRouter([
                   // Results from the external AI Interviewer, distinct from
                   // /admin/interviews, which schedules our own physical round.
                   { path: '/admin/ai-interviews', element: <AdminAiInterviewsPage /> },
+                  // Screening result + paperwork on one row, per candidate.
+                  // Distinct from /admin/onboarding below, which is where a
+                  // folder is actually acted on.
+                  { path: '/admin/hr-assessment', element: <AdminHrAssessmentPage /> },
                   // Review of the 4 onboarding forms + Documents Hub uploads.
                   { path: '/admin/onboarding', element: <AdminOnboardingCandidatesPage /> },
                   {
@@ -224,6 +238,10 @@ export const router = createBrowserRouter([
                       {
                         path: '/super-admin/ai-interviews',
                         element: <SuperAdminAiInterviewsPage />,
+                      },
+                      {
+                        path: '/super-admin/hr-assessment',
+                        element: <SuperAdminHrAssessmentPage />,
                       },
                     ],
                   },

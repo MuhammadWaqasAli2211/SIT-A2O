@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes import (
+    agilytics,
     ai_interviews,
     applications,
     audit,
@@ -8,6 +9,7 @@ from app.api.v1.routes import (
     bootcamps,
     emails,
     health,
+    hr_assessment,
     interview_invites,
     interviews,
     notifications,
@@ -36,3 +38,5 @@ api_router.include_router(notifications.router)
 api_router.include_router(ai_interviews.router)
 api_router.include_router(permissions.router)
 api_router.include_router(physical_interviews.router)
+api_router.include_router(hr_assessment.router)
+api_router.include_router(agilytics.router)

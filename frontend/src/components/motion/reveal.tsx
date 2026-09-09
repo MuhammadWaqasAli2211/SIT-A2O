@@ -62,12 +62,15 @@ export function Reveal({
 
 /* -------------------------------------------------------------------------- */
 
-const containerVariants: Variants = {
+/** Exported so other staggered surfaces — table rows, which cannot be a
+ *  `StaggerItem` without breaking table semantics — animate on the same
+ *  timing rather than on a second set of numbers that drifts from these. */
+export const staggerContainerVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
 }
 
-const itemVariants: Variants = {
+export const staggerItemVariants: Variants = {
   hidden: { opacity: 0, y: 24 },
   show: {
     opacity: 1,
@@ -75,6 +78,9 @@ const itemVariants: Variants = {
     transition: { duration: 0.55, ease: [0.21, 0.47, 0.32, 0.98] },
   },
 }
+
+const containerVariants = staggerContainerVariants
+const itemVariants = staggerItemVariants
 
 /**
  * Staggered list entrance. Wrap items in <StaggerItem> to opt each one in.

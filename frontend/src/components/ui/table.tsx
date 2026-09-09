@@ -50,17 +50,16 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
+/**
+ * A row's own styling, exported so an animated row (a `motion.tr`, which
+ * cannot be a `TableRow`) can wear exactly these classes rather than a copy
+ * that drifts from them. See components/motion/table-row.tsx.
+ */
+const tableRowClass =
+  "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted"
+
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
-  return (
-    <tr
-      data-slot="table-row"
-      className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
-        className
-      )}
-      {...props}
-    />
-  )
+  return <tr data-slot="table-row" className={cn(tableRowClass, className)} {...props} />
 }
 
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
@@ -111,4 +110,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  tableRowClass,
 }
