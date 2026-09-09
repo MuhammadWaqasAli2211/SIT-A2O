@@ -820,6 +820,100 @@ export interface OnboardingCandidateSummary {
   hub_unlocked: boolean
 }
 
+/* ------------------------------------------------------------ HR assessment --
+ * One candidate's screening result and paperwork progress on the same row.
+ * Both halves already exist on their own screens; this is the view that puts
+ * them together — see backend app/services/hr_assessment_service.py.
+ */
+
+export interface HrAssessmentRow {
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  email: string | null
+  /** Only rendered in the platform-wide view, the one that spans intakes. */
+  bootcamp_id: string | null
+  bootcamp_name: string | null
+  /** The program applied to — shown as "Track". */
+  program_title: string | null
+  stage: ApplicationStage
+  status: ApplicationStatus
+  /** Null when no readable score exists: never invited, never sat it, or a
+   *  payload carrying nothing recognisable. */
+  ai_score: number | null
+  /** The matched external record, or null. Enough to open the evidence modal;
+   *  the report and recording behind it stay lazily fetched. */
+  interview: ExternalRecord | null
+  forms_submitted: number
+  forms_total: number
+  documents_required: number
+  documents_uploaded: number
+  documents_approved: number
+  documents_rejected: number
+  documents_pending: number
+  hub_unlocked: boolean
+}
+
+export interface HrAssessmentStats {
+  total: number
+  forms_complete: number
+  documents_pending: number
+  average_ai_score: number | null
+}
+
+export interface HrAssessmentPage {
+  items: HrAssessmentRow[]
+  stats: HrAssessmentStats
+}
+
+/* ---------------------------------------------------------------- Agilytics --
+ * The post-onboarding system. One workspace per intake, provisioned by an
+ * admin from the HR Assessment screen — never automatically, because their
+ * provisioning call creates a new workspace every time it is made and
+ * exposes no way to delete one.
+ */
+
+export interface AgilyticsMemberStatus {
+  email: string
+  full_name: string | null
+  status: string | null
+  role: string | null
+  track_name: string | null
+  joined_at: string | null
+}
+
+export interface AgilyticsWorkspaceState {
+  /** False is the ordinary state before anyone has provisioned, not an error. */
+  provisioned: boolean
+  workspace_id: string | null
+  workspace_name: string | null
+  total_members: number | null
+  approved: number | null
+  pending: number | null
+  /** Keyed by lowercased email. Covers leads only — their workspace-wide
+   *  response reports students as counts rather than rows. */
+  members: Record<string, AgilyticsMemberStatus>
+}
+
+export interface AgilyticsProvisionResult {
+  workspace_id: string | null
+  already_provisioned: boolean
+  tracks: string[]
+  students: number
+  leads: number
+  /** Shown before confirming: provisioning creates accounts for these people
+   *  in a third-party system. */
+  lead_emails: string[]
+}
+
+export interface AgilyticsInviteResult {
+  invites_issued: number
+  expires_at: string | null
+  /** Our covering email, not theirs. Zero when none was requested. */
+  emailed: number
+  email_failed: number
+}
+
 /* ---------------------------------------------------------- candidate view -- */
 
 export interface ApplicationDetail {
