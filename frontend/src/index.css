@@ -432,3 +432,34 @@
     break-after: avoid-page;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Staggered entrance for above-the-fold groups (see Stagger `trigger="mount"`).
+
+   CSS rather than the motion library: verified 2026-09-05 against the running
+   app that declarative `initial`/`animate` on `motion.div` never applied —
+   the stat cards, and PageHeader which long predates them, were painted fully
+   opaque and in position on the first frame after mount even with the timings
+   cranked to a 3s duration. A keyframe cannot silently fail to apply the way
+   that did.
+--------------------------------------------------------------------------- */
+@keyframes stagger-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.stagger-rise {
+  animation: stagger-rise 0.5s cubic-bezier(0.21, 0.47, 0.32, 0.98) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-rise {
+    animation: none;
+  }
+}
