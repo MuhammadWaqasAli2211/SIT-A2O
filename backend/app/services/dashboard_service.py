@@ -39,6 +39,12 @@ from app.schemas.dashboard import (
 from app.services import bootcamp_service, physical_interview_service
 
 _TREND_DAYS = 30
+# The calendar heatmap fetches a wide window and draws however much fits:
+# the grid measures its own container and picks a week count from that, so
+# a wide monitor reaches further back than a phone does. 70 weeks is the
+# widest it will ever ask for. Days with no applications render as empty
+# cells — that sparseness is the point of the view.
+_ACTIVITY_DAYS = 490
 _UPCOMING_LIMIT = 8
 _CITY_LIMIT = 8
 
@@ -141,12 +147,19 @@ def bootcamp_stats(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> Bootc
     ).one()
     average = interviews.average
 
-    trend_rows = db.execute(
+    # One query covering the full activity year, sliced two ways below: the
+    # calendar heatmap wants every day of it, the line chart wants only the
+    # trailing 30. Widening this query rather than adding a second one keeps
+    # the round-trip count where the 2026-08-29 pass left it.
+    activity_rows = db.execute(
         select(func.date(Application.applied_at), func.count())
-        .where(scoped, Application.applied_at >= now - timedelta(days=_TREND_DAYS))
+        .where(scoped, Application.applied_at >= now - timedelta(days=_ACTIVITY_DAYS))
         .group_by(func.date(Application.applied_at))
         .order_by(func.date(Application.applied_at))
     ).all()
+
+    trend_cutoff = (now - timedelta(days=_TREND_DAYS)).date()
+    trend_rows = [row for row in activity_rows if row[0] >= trend_cutoff]
 
     upcoming_rows = db.execute(
         select(Interview, Application, Profile.full_name)
@@ -180,6 +193,7 @@ def bootcamp_stats(db: Session, bootcamp_id: uuid.UUID, actor: Profile) -> Bootc
         by_stage=_stage_breakdown(db, scoped),
         by_program=_program_breakdown(db, scoped),
         applications_over_time=[DailyCount(day=day, count=count) for day, count in trend_rows],
+        application_activity=[DailyCount(day=day, count=count) for day, count in activity_rows],
         # A pure DB aggregate (see funnel_stats), not an external call — safe
         # to fold into this already-optimised round trip. The AI-interview
         # side of the funnel is not: it costs an InterviewerAI HTTP call, so
