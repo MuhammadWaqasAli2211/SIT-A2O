@@ -38,6 +38,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ErrorBoundary } from '@/components/shared/error-boundary'
+import { UserAvatar } from '@/components/shared/user-avatar'
 import {
   ApplicationProvider,
   useApplication,
@@ -81,19 +82,12 @@ function PortalShell() {
   if (!profile) return null
 
   const groups = navForRole(profile.role)
-  const initials =
-    profile.full_name
-      ?.split(' ')
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() ?? profile.email[0]?.toUpperCase() ?? '?'
 
   return (
     <div className="flex min-h-screen bg-muted/30">
       {/* ------------------------------------------------ desktop sidebar -- */}
       <motion.aside
-        animate={{ width: collapsed ? 78 : 264 }}
+        animate={{ width: collapsed ? 68 : 232 }}
         transition={{ duration: 0.28, ease: [0.21, 0.47, 0.32, 0.98] }}
         className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-background lg:flex print:hidden"
       >
@@ -130,14 +124,20 @@ function PortalShell() {
 
       {/* ------------------------------------------------------- content -- */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-6 print:hidden">
+        {/* Dark shell, not `bg-background`. `--nav-shell` exists precisely
+            for a bar that has to stay dark in *both* themes — the public
+            marketing header already uses it, so the portal now reads as the
+            same product rather than a plain white strip bolted underneath
+            it. Controls inside are tinted off white-alpha rather than the
+            neutral tokens, which would vanish against it. */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2.5 bg-nav-shell px-3 text-nav-shell-ink shadow-lg shadow-black/10 sm:px-5 print:hidden">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation"
-            className="grid size-9 shrink-0 place-items-center rounded-lg border border-border transition-colors hover:bg-muted lg:hidden"
+            className="grid size-8 shrink-0 place-items-center rounded-lg border border-white/15 bg-white/10 transition-colors hover:bg-white/20 lg:hidden"
           >
-            <Menu className="size-4.5" />
+            <Menu className="size-4" />
           </button>
 
           {/* Staff only. This was previously an Input with no `value`, no
@@ -161,14 +161,14 @@ function PortalShell() {
               }}
               className="relative hidden max-w-sm flex-1 sm:block"
             >
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-nav-shell-ink/60" />
               <Input
                 type="search"
                 value={headerSearch}
                 onChange={(event) => setHeaderSearch(event.target.value)}
                 placeholder="Search candidates, codes..."
                 aria-label="Search candidates"
-                className="pl-9"
+                className="border-white/15 bg-white/10 pl-9 text-nav-shell-ink placeholder:text-nav-shell-ink/50 focus-visible:border-white/30 focus-visible:ring-white/20"
               />
             </form>
           )}
@@ -176,7 +176,12 @@ function PortalShell() {
           <div className="ml-auto flex items-center gap-2">
             {profile.role === UserRole.CANDIDATE && <RegisterAction />}
 
-            <Button render={<Link to="/" />} variant="ghost" size="sm" className="hidden sm:inline-flex">
+            <Button
+              render={<Link to="/" />}
+              variant="ghost"
+              size="sm"
+              className="hidden text-nav-shell-ink hover:bg-white/10 hover:text-nav-shell-ink sm:inline-flex"
+            >
               <Home className="size-4" />
               Website
             </Button>
@@ -186,7 +191,7 @@ function PortalShell() {
                 completes an AI interview (2026-08-30). */}
             <NotificationBell />
 
-            <ThemeToggle />
+            <ThemeToggle className="size-8 border-white/15 bg-white/10 text-nav-shell-ink hover:bg-white/20" />
 
             {/* The account menu is the one header control with enough moving
                 parts to fail. A compact fallback keeps the header intact
@@ -204,15 +209,28 @@ function PortalShell() {
                 render={
                   <button
                     type="button"
-                    className="flex items-center gap-2 rounded-lg border border-border py-1 pr-2 pl-1 transition-colors hover:bg-muted"
+                    className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 py-1 pr-3 pl-1 transition-colors hover:bg-white/20"
                   />
                 }
               >
-                <span className="grid size-7 place-items-center rounded-md bg-primary text-xs font-semibold text-primary-foreground">
-                  {initials}
-                </span>
-                <span className="hidden text-sm font-medium sm:inline">
+                <UserAvatar size="sm" />
+                {/* Two forms, so the user is never anonymous. Below `sm`
+                    the header has no room for a full name beside three
+                    other controls — it showed nothing at all — so it falls
+                    back to the first name; from `sm` up the whole name is
+                    shown, ellipsised by CSS only if it genuinely does not
+                    fit, with the full string on hover either way. */}
+                <span
+                  title={profile.full_name ?? profile.email}
+                  className="max-w-[5.5rem] truncate text-[0.8125rem] font-medium sm:hidden"
+                >
                   {profile.full_name?.split(' ')[0] ?? 'Account'}
+                </span>
+                <span
+                  title={profile.full_name ?? profile.email}
+                  className="hidden max-w-[11rem] truncate text-[0.8125rem] font-medium sm:inline"
+                >
+                  {profile.full_name ?? 'Account'}
                 </span>
               </DropdownMenuTrigger>
 
@@ -250,7 +268,7 @@ function PortalShell() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8 print:p-[10mm]">
+        <main className="flex-1 px-4 py-5 sm:px-5 lg:px-6 print:p-[10mm]">
           <div className="mx-auto max-w-7xl">
             {/* Keyed on the path so a page that failed does not leave its
                 fallback showing over every route the user visits next — the
@@ -343,13 +361,13 @@ function NotificationBell() {
           <button
             type="button"
             aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
-            className="relative grid size-9 place-items-center rounded-lg border border-border transition-colors hover:bg-muted"
+            className="relative grid size-8 place-items-center rounded-lg border border-white/15 bg-white/10 text-nav-shell-ink transition-colors hover:bg-white/20"
           />
         }
       >
         <Bell className="size-4" />
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-background" />
+          <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-warning ring-2 ring-nav-shell" />
         )}
       </DropdownMenuTrigger>
 
@@ -408,7 +426,7 @@ function NotificationBell() {
 /* -------------------------------------------------------------- nav row -- */
 
 const ROW_BASE =
-  'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors'
+  'group relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[0.8125rem] font-medium transition-colors'
 
 /**
  * One sidebar row, either navigable or locked.
@@ -445,7 +463,9 @@ function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }
             />
           }
         >
-          <item.icon className="size-4.5 shrink-0" />
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted/60 text-muted-foreground/45">
+            <item.icon className="size-4" />
+          </span>
           {!collapsed && (
             <>
               <span className="flex-1 whitespace-nowrap">{item.label}</span>
@@ -474,7 +494,7 @@ function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }
         cn(
           ROW_BASE,
           isActive
-            ? 'bg-primary/10 text-primary'
+            ? 'bg-primary/12 font-semibold text-primary'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground',
           collapsed && 'justify-center px-0',
         )
@@ -489,7 +509,20 @@ function NavRow({ item, collapsed }: { item: PortalNavItem; collapsed: boolean }
               transition={{ type: 'spring', damping: 26, stiffness: 340 }}
             />
           )}
-          <item.icon className="size-4.5 shrink-0" />
+          {/* Solid fill on the active chip, not a 15% tint. A tinted chip
+              on a tinted row was two washes of the same colour and read as
+              no chip at all; filling it makes the current page obvious
+              from across the room, which is the whole job of this row. */}
+          <span
+            className={cn(
+              'grid size-8 shrink-0 place-items-center rounded-lg transition-all duration-200',
+              isActive
+                ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
+                : 'bg-muted text-muted-foreground group-hover:bg-primary/15 group-hover:text-primary',
+            )}
+          >
+            <item.icon className="size-4" />
+          </span>
           {!collapsed && (
             <>
               <span className="flex-1 whitespace-nowrap">{item.label}</span>
@@ -523,17 +556,20 @@ function SidebarBody({
 
   return (
     <>
-      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+      {/* Same `--nav-shell` as the content header, so the dark bar runs
+          edge to edge across the top of the app instead of stopping at the
+          sidebar's edge. */}
+      <div className="flex h-14 items-center justify-between bg-nav-shell px-3 text-nav-shell-ink">
         <Link to="/" className="flex items-center gap-2.5 overflow-hidden">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary p-1.5 text-primary-foreground">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary p-1.5 text-primary-foreground shadow-md shadow-black/20">
             <BrandMark />
           </span>
           {!collapsed && (
             <span className="flex flex-col leading-none whitespace-nowrap">
               <span className="text-sm font-semibold tracking-tight">
-                {BRAND_PRIMARY} <span className="text-primary">{BRAND_ACCENT}</span>
+                {BRAND_PRIMARY} <span className="text-brand-300">{BRAND_ACCENT}</span>
               </span>
-              <span className="text-[0.65rem] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              <span className="text-[0.65rem] font-medium tracking-[0.14em] text-nav-shell-ink/60 uppercase">
                 {profile ? ROLE_LABEL[profile.role] : 'Portal'}
               </span>
             </span>
@@ -545,14 +581,14 @@ function SidebarBody({
             type="button"
             onClick={onClose}
             aria-label="Close navigation"
-            className="grid size-8 place-items-center rounded-lg transition-colors hover:bg-muted"
+            className="grid size-8 place-items-center rounded-lg transition-colors hover:bg-white/15"
           >
             <X className="size-4" />
           </button>
         )}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-6 overflow-y-auto p-3 scrollbar-none">
+      <nav className="flex flex-1 flex-col gap-5 overflow-x-hidden overflow-y-auto p-2.5 scrollbar-none">
         {groups.map((group) => (
           <div key={group.heading} className="flex flex-col gap-1">
             {!collapsed && (
@@ -574,12 +610,12 @@ function SidebarBody({
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+              'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[0.8125rem] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
               collapsed && 'justify-center px-0',
             )}
           >
             <ChevronsLeft
-              className={cn('size-4.5 shrink-0 transition-transform duration-300', collapsed && 'rotate-180')}
+              className={cn('size-4 shrink-0 transition-transform duration-300', collapsed && 'rotate-180')}
             />
             {!collapsed && <span>Collapse</span>}
           </button>
