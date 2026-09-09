@@ -10,6 +10,10 @@ import { api } from '@/lib/api-client'
 import type {
   AdminApplicationDetail,
   AdminGrants,
+  AgilyticsInviteResult,
+  AgilyticsMemberStatus,
+  AgilyticsProvisionResult,
+  AgilyticsWorkspaceState,
   AiAnalytics,
   AiScope,
   AnnounceSummary,
@@ -26,6 +30,7 @@ import type {
   EmailStatus,
   ExternalRecord,
   ExternalRecords,
+  HrAssessmentPage,
   Interview,
   InterviewMode,
   InterviewRow,
@@ -572,6 +577,56 @@ export const aiInterviewApi = {
 
   /** Super-admin only — their log is tenant-wide and cannot be intake-scoped. */
   auditLog: () => get<ExternalRecords>('/ai-audit-log'),
+}
+
+export const hrAssessmentApi = {
+  /** Onboarding candidates with their AI screening result on the same row.
+   *  Omit bootcampId for the platform-wide view — super admin only, the
+   *  backend refuses an admin who omits it. */
+  list: (bootcampId?: string) =>
+    get<HrAssessmentPage>('/hr-assessment', bootcampId ? { bootcamp_id: bootcampId } : undefined),
+}
+
+export const agilyticsApi = {
+  /** This intake's Agilytics side. `provisioned: false` before it exists. */
+  state: (bootcampId: string) =>
+    get<AgilyticsWorkspaceState>(`/bootcamps/${bootcampId}/agilytics`),
+
+  /** What provisioning would send. Read-only — creates nothing. */
+  preview: (bootcampId: string) =>
+    get<AgilyticsProvisionResult>(`/bootcamps/${bootcampId}/agilytics/preview`),
+
+  /** Creates the workspace. Refused if one already exists — their endpoint is
+   *  not idempotent and a duplicate cannot be deleted. */
+  async provision(bootcampId: string) {
+    const { data } = await api.post<AgilyticsProvisionResult>(
+      `/bootcamps/${bootcampId}/agilytics`,
+    )
+    return data
+  },
+
+  /** Issues Agilytics invites, and optionally emails the selected candidates.
+   *
+   *  `application_ids` does NOT narrow the Agilytics half — their endpoint
+   *  takes no member list and always covers every pending member. It selects
+   *  who receives our own covering email. Safe to repeat. */
+  async sendInvites(
+    bootcampId: string,
+    payload: { application_ids?: string[]; subject?: string; body_html?: string } = {},
+  ) {
+    const { data } = await api.post<AgilyticsInviteResult>(
+      `/bootcamps/${bootcampId}/agilytics/invites`,
+      { application_ids: payload.application_ids ?? [], ...payload },
+    )
+    return data
+  },
+
+  /** One member's status, fetched on demand for a single row — never for the
+   *  whole table, which would be one request per candidate. */
+  memberStatus: (bootcampId: string, email: string) =>
+    get<AgilyticsMemberStatus>(
+      `/bootcamps/${bootcampId}/agilytics/members/${encodeURIComponent(email)}`,
+    ),
 }
 
 export const permissionApi = {
