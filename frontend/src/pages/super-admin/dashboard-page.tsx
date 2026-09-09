@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import { EmptyState, PageHeader, StatCard } from '@/components/shared/portal-ui'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -71,35 +72,47 @@ function Body({ stats }: { stats: PlatformStats }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Bootcamps"
-          value={stats.total_bootcamps}
-          icon={Building2}
-          hint={`${stats.active_bootcamps} currently running`}
-        />
-        <StatCard
-          label="Candidates"
-          value={stats.total_candidates}
-          icon={Users}
-          hint={`${stats.total_applications} applications`}
-          delay={0.05}
-        />
-        <StatCard
-          label="Interviews"
-          value={stats.total_interviews}
-          icon={UserCheck}
-          hint="Scheduled across all intakes"
-          delay={0.1}
-        />
-        <StatCard
-          label="Administrators"
-          value={stats.total_admins}
-          icon={ShieldCheck}
-          hint="Including super admins"
-          delay={0.15}
-        />
-      </div>
+      {/* Same treatment as the admin dashboard's row: two per row on
+          mobile, and the entrance owned by Stagger rather than by each
+          card's own delay. */}
+      <Stagger trigger="mount" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StaggerItem>
+          <StatCard
+            label="Bootcamps"
+            value={stats.total_bootcamps}
+            icon={Building2}
+            hint={`${stats.active_bootcamps} currently running`}
+            tone="primary"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Candidates"
+            value={stats.total_candidates}
+            icon={Users}
+            hint={`${stats.total_applications} applications`}
+            tone="info"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Interviews"
+            value={stats.total_interviews}
+            icon={UserCheck}
+            hint="Scheduled across all intakes"
+            tone="success"
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard
+            label="Administrators"
+            value={stats.total_admins}
+            icon={ShieldCheck}
+            hint="Including super admins"
+            tone="warning"
+          />
+        </StaggerItem>
+      </Stagger>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
