@@ -27,15 +27,61 @@ export function PageHeader({
       className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
     >
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">{title}</h1>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+      {/* `flex-nowrap`, and the first action allowed to shrink: the bootcamp
+          switcher is `w-full` below `sm`, which under `flex-wrap` claimed the
+          whole row and bumped the refresh button onto a line of its own. */}
+      {actions && (
+        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1 sm:[&>*:first-child]:flex-none">
+          {actions}
+        </div>
+      )}
     </motion.div>
   )
 }
 
 /* ------------------------------------------------------------- stat card -- */
+
+/** Accent tones for the stat grid — see `TONE_STYLE`. */
+export type StatTone = 'primary' | 'info' | 'success' | 'warning'
+
+/**
+ * One accent colour per card, applied in three places: a bar across the
+ * top, the icon chip, and the hover border.
+ *
+ * The chip is a light tint at rest and goes to full saturation on hover,
+ * rather than sitting solid the whole time — a card that already shouts
+ * has nowhere to go when you point at it. The hover border is the card's
+ * *own* colour too: a blue card that turns green under the cursor reads as
+ * a theme bug, not as feedback.
+ *
+ * Every class is written out in full because Tailwind scans source text —
+ * a template-built `bg-${tone}` name is not in the output CSS at all.
+ */
+const TONE_STYLE: Record<StatTone, { bar: string; chip: string; border: string }> = {
+  primary: {
+    bar: 'bg-primary',
+    chip: 'bg-primary/15 text-primary group-hover:bg-primary group-hover:text-primary-foreground group-hover:shadow-primary/30',
+    border: 'hover:border-primary',
+  },
+  info: {
+    bar: 'bg-info',
+    chip: 'bg-info/15 text-info group-hover:bg-info group-hover:text-info-foreground group-hover:shadow-info/30',
+    border: 'hover:border-info',
+  },
+  success: {
+    bar: 'bg-success',
+    chip: 'bg-success/15 text-success group-hover:bg-success group-hover:text-success-foreground group-hover:shadow-success/30',
+    border: 'hover:border-success',
+  },
+  warning: {
+    bar: 'bg-warning',
+    chip: 'bg-warning/20 text-warning-foreground group-hover:bg-warning group-hover:text-warning-foreground group-hover:shadow-warning/30 dark:text-warning',
+    border: 'hover:border-warning',
+  },
+}
 
 export function StatCard({
   label,
@@ -45,7 +91,7 @@ export function StatCard({
   icon: Icon,
   trend,
   hint,
-  delay = 0,
+  tone = 'primary',
 }: {
   label: string
   value: number
@@ -55,48 +101,56 @@ export function StatCard({
   /** Percentage change; positive renders as an uptick, negative as a downtick. */
   trend?: number
   hint?: string
-  delay?: number
+  tone?: StatTone
 }) {
+  const toneStyle = TONE_STYLE[tone]
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay }}
+    <Card
+      className={cn(
+        'group relative h-full overflow-hidden border-2 border-foreground/15 py-0',
+        'transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-foreground/10',
+        toneStyle.border,
+      )}
     >
-      <Card className="group h-full transition-all duration-300 hover:-translate-y-1 hover:border-primary/35 hover:shadow-lg">
-        <CardContent className="flex flex-col gap-3 p-5">
-          <div className="flex items-start justify-between">
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-              <Icon className="size-4.5" />
-            </span>
-          </div>
-
-          <span className="text-3xl font-semibold tracking-tight">
-            <Counter to={value} suffix={suffix} decimals={decimals} />
-          </span>
-
-          <div className="flex items-center gap-2 text-xs">
-            {trend !== undefined && (
-              <span
-                className={cn(
-                  'flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium',
-                  trend >= 0 ? 'bg-success/12 text-success' : 'bg-destructive/12 text-destructive',
-                )}
-              >
-                {trend >= 0 ? (
-                  <ArrowUpRight className="size-3" />
-                ) : (
-                  <ArrowDownRight className="size-3" />
-                )}
-                {Math.abs(trend)}%
-              </span>
+      <span className={cn('absolute inset-x-0 top-0 h-0.5', toneStyle.bar)} />
+      <CardContent className="flex flex-col gap-1 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-[0.7rem] font-medium text-muted-foreground sm:text-xs">{label}</span>
+          <span
+            className={cn(
+              'grid size-6 shrink-0 place-items-center rounded-lg transition-all duration-200 ease-out group-hover:scale-105 group-hover:shadow-md sm:size-7',
+              toneStyle.chip,
             )}
-            {hint && <span className="text-muted-foreground">{hint}</span>}
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+          >
+            <Icon className="size-3.5 sm:size-4" />
+          </span>
+        </div>
+
+        <span className="text-lg font-bold tracking-tight sm:text-xl">
+          <Counter to={value} suffix={suffix} decimals={decimals} />
+        </span>
+
+        <div className="flex items-center gap-2 text-xs">
+          {trend !== undefined && (
+            <span
+              className={cn(
+                'flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-medium',
+                trend >= 0 ? 'bg-success/12 text-success' : 'bg-destructive/12 text-destructive',
+              )}
+            >
+              {trend >= 0 ? (
+                <ArrowUpRight className="size-3" />
+              ) : (
+                <ArrowDownRight className="size-3" />
+              )}
+              {Math.abs(trend)}%
+            </span>
+          )}
+          {hint && <span className="truncate text-muted-foreground">{hint}</span>}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
