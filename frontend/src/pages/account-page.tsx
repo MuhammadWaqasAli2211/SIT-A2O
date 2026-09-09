@@ -14,6 +14,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/portal-ui'
+import { UserAvatar } from '@/components/shared/user-avatar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -120,30 +121,12 @@ function IdentityCard({
   pictureUrl: string | null
   onSignOut: () => void
 }) {
-  const initials = (detail.full_name ?? detail.email)
-    .split(' ')
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
-
   return (
     <Card className="lg:col-span-1">
       <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-        {/* Initials remain the fallback: the URL is signed and expires, and
-            staff never upload a picture at all. */}
-        {pictureUrl ? (
-          <img
-            src={pictureUrl}
-            alt=""
-            className="size-20 rounded-2xl border border-border object-cover"
-          />
-        ) : (
-          <span className="grid size-20 place-items-center rounded-2xl bg-primary text-2xl font-semibold text-primary-foreground">
-            {initials}
-          </span>
-        )}
+        {/* The generic bust glyph remains the fallback: the URL is signed
+            and expires, and staff never upload a picture at all. */}
+        <UserAvatar pictureUrl={pictureUrl} size="xl" className="border border-border" />
 
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold">{detail.full_name ?? 'Your name'}</h2>
