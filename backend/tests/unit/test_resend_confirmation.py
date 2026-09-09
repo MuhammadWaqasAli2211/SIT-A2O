@@ -65,7 +65,7 @@ def test_resend_uses_the_anon_key_not_service_role(monkeypatch):
     captured = {}
 
     def fake_post(path, *, operation, json, params=None):
-        captured.update(path=path, operation=operation, json=json)
+        captured.update(path=path, operation=operation, json=json, params=params)
         return {}
 
     monkeypatch.setattr(supabase_auth, "_post", fake_post)
@@ -75,3 +75,19 @@ def test_resend_uses_the_anon_key_not_service_role(monkeypatch):
     assert captured["json"] == {"type": "signup", "email": "someone@example.com"}
     # _post builds anon headers; the admin path is _admin_request, unused here.
     assert captured["operation"] == "resend"
+
+
+def test_resend_points_the_link_at_our_frontend(monkeypatch):
+    """Regression: this used to be omitted, so a resent link fell back to
+    whatever the Supabase dashboard's Site URL happened to be — not our
+    verification page, and not necessarily even the right port."""
+    captured = {}
+    monkeypatch.setattr(supabase_auth.settings, "FRONTEND_URL", "http://localhost:5173")
+    monkeypatch.setattr(
+        supabase_auth,
+        "_post",
+        lambda path, *, operation, json, params=None: captured.update(params=params) or {},
+    )
+    supabase_auth.resend_confirmation("someone@example.com")
+
+    assert captured["params"] == {"redirect_to": "http://localhost:5173/verify-email"}
