@@ -61,6 +61,13 @@ class Bootcamp(Base, TimestampMixin):
         Integer, nullable=False, server_default=text("1")
     )
 
+    # The Agilytics workspace this intake was provisioned into, or None if it
+    # has not been. Opaque: minted by their system, stored only so we can
+    # address their onboarding-status and bulk-invite endpoints afterwards.
+    # Their provisioning call is not idempotent, so this doubles as the guard
+    # against creating a second workspace for the same intake.
+    agilytics_workspace_id: Mapped[str | None] = mapped_column(Text)
+
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
