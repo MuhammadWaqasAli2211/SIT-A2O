@@ -654,6 +654,8 @@ export interface BootcampStats {
   by_stage: StageCount[]
   by_program: ProgramCount[]
   applications_over_time: DailyCount[]
+  /** A year of daily counts, for the calendar heatmap. */
+  application_activity: DailyCount[]
   upcoming_interviews: UpcomingInterview[]
   physical_interview_funnel: PhysicalInterviewFunnel
 }
