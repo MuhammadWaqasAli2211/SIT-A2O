@@ -1140,7 +1140,13 @@ Unanswered questions carried forward:
   batch scheduler supports arbitrary sizes today; nothing hardcodes 50/50/25)
 - Does the system schedule physical assessments, or only record outcomes?
 - Exact onboarding form fields beyond IBAN and CNIC?
-- Agilytic: API integration or manual export?
+- ~~Agilytic: API integration or manual export?~~ **Answered 2026-09-05: API
+  integration, built and verified live.** All three HMAC-signed endpoints
+  (provision, onboarding-status, bulk-invite) work against their API; driven
+  from the HR Assessment screen. Open items: their base URL is still a Vercel
+  *preview* deployment, and one throwaway probe workspace
+  (`95086c38-1974-474c-90fc-506d351dc080`) exists on their side that we cannot
+  delete.
 - Deployment target?
 
 ---
