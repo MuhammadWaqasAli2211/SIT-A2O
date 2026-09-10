@@ -19,11 +19,13 @@ export function AppShell() {
       <header className="border-b">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <span className="grid size-6 place-items-center text-primary">
+            {/* `text-primary` removed with the rebrand: the mark is the real
+                logo artwork now, not a currentColor glyph. */}
+            <span className="block h-10 w-auto shrink-0">
               <BrandMark />
             </span>
             <span className="font-semibold">
-              {BRAND_PRIMARY} <span className="text-primary">{BRAND_ACCENT}</span>
+              {BRAND_PRIMARY} <span className="text-flow-600">{BRAND_ACCENT}</span>
             </span>
           </div>
 
