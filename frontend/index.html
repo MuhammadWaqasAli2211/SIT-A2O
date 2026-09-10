@@ -2,7 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Pre-rendered rather than one large source: a browser asked to make a
+         16px icon out of a 500px logo downscales it in a single step and the
+         ribbon turns to mush. Each size here was resampled and sharpened for
+         the size it is served at. The .ico carries 16-256 for the browsers
+         and OS surfaces that still ask for one. -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/mark3d-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/mark3d-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/brand/mark3d-48.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/brand/mark3d-192.png" />
+    <!-- The one place that still wants the white tile: an installed app icon
+         has to fill its own rounded tile rather than float on whatever the
+         launcher's wallpaper happens to be. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/brand/icon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <title>Bootcamp Flows — Free IT Bootcamps in Pakistan</title>
@@ -10,15 +23,25 @@
       name="description"
       content="Free, industry-aligned IT education. Bootcamp Flows has empowered over 250,000 students across Pakistan in web development, data science, mobile, cloud, and design. Applications open now."
     />
-    <meta name="theme-color" content="#0f7a45" />
+    <meta name="theme-color" content="#1800AD" />
 
-    <!-- Noto Nastaliq Urdu: needed for the onboarding forms, which reproduce
-         Saylani's paper forms bilingually. No other font on this site needs
-         Urdu-script coverage. -->
+    <!-- Three families, three jobs:
+
+         IBM Plex Sans Condensed  — the interface face, everything English.
+                                    Condensed earns real width back in the
+                                    admin tables, which are the densest thing
+                                    in the product.
+         Jim Nightshade           — a display accent, dashboard only. It is a
+                                    script face: used for a greeting line and
+                                    nothing functional, never for data,
+                                    numbers, labels or controls.
+         Noto Nastaliq Urdu       — the onboarding forms, which reproduce
+                                    Saylani's paper forms bilingually. No
+                                    other screen needs Urdu-script coverage. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Jim+Nightshade&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap"
       rel="stylesheet"
     />
 
