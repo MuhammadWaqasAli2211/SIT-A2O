@@ -77,7 +77,10 @@ export function PublicHeader() {
           scrolled && 'shadow-lg shadow-black/20',
         )}
       >
-        <div className="mx-auto flex h-18 max-w-[100rem] items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        {/* py-2, not py-3: the bar keeps its h-18, but trimming 4px of
+            padding each side widens the content box from 48px to 56px, which
+            is what lets the logo grow without the bar itself changing. */}
+        <div className="mx-auto flex h-18 max-w-[100rem] items-center gap-4 px-4 py-2 sm:px-6 lg:px-8">
           <Link to="/" className="group shrink-0">
             <BrandLockup tone="shell" />
           </Link>
