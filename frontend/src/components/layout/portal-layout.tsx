@@ -561,13 +561,21 @@ function SidebarBody({
           sidebar's edge. */}
       <div className="flex h-14 items-center justify-between bg-nav-shell px-3 text-nav-shell-ink">
         <Link to="/" className="flex items-center gap-2.5 overflow-hidden">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary p-1.5 text-primary-foreground shadow-md shadow-black/20">
+          {/* 44px tall inside the 56px bar, leaving 6px of clearance, so the
+              bar's own height never has to change. Height only — the width is
+              the artwork's own 1.09:1. No wrapper box or CSS rounding: the
+              mark is transparent artwork carrying its own extruded depth and
+              contact shadow, and a `rounded-*` + `overflow-hidden` wrapper
+              would clip that shadow off. */}
+          <span className="block h-11 w-auto shrink-0">
             <BrandMark />
           </span>
           {!collapsed && (
             <span className="flex flex-col leading-none whitespace-nowrap">
               <span className="text-sm font-semibold tracking-tight">
-                {BRAND_PRIMARY} <span className="text-brand-300">{BRAND_ACCENT}</span>
+                {/* Green, matching BrandLockup: the mark is a blue B flowing
+                    into a green arrow, and the name splits the same way. */}
+                {BRAND_PRIMARY} <span className="text-flow-500 dark:text-flow-600">{BRAND_ACCENT}</span>
               </span>
               <span className="text-[0.65rem] font-medium tracking-[0.14em] text-nav-shell-ink/60 uppercase">
                 {profile ? ROLE_LABEL[profile.role] : 'Portal'}

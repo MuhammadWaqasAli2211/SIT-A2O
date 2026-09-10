@@ -15,8 +15,10 @@ export function PageHeader({
   description,
   actions,
 }: {
-  title: string
-  description?: string
+  /** A node, not just a string, so a page can style part of its own title —
+   *  the candidate dashboard sets the greeting's name in the display face. */
+  title: ReactNode
+  description?: ReactNode
   actions?: ReactNode
 }) {
   return (

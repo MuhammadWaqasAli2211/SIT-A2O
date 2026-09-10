@@ -62,7 +62,7 @@ export function StoryBubble({
 
       {/* Speaker */}
       <figcaption className="mt-4 flex items-center gap-3 pl-1">
-        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-semibold text-white shadow-sm">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-flow-600 text-sm font-semibold text-white shadow-sm">
           {story.initials}
         </span>
         <span className="flex min-w-0 flex-col">
