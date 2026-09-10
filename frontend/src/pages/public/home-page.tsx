@@ -257,7 +257,7 @@ function ProcessSection() {
           whileInView={{ scaleX: 1 }}
           viewport={{ once: true, margin: '-120px' }}
           transition={{ duration: 1.1, ease: 'easeInOut' }}
-          className="absolute top-7 right-0 left-0 hidden h-px origin-left bg-gradient-to-r from-primary/50 via-primary/25 to-transparent lg:block"
+          className="absolute top-7 right-0 left-0 hidden h-px origin-left bg-gradient-to-r from-primary/50 via-info/35 to-flow-500/40 lg:block"
         />
 
         {/*
@@ -413,7 +413,10 @@ function CtaSection() {
   return (
     <Section className="pb-28">
       <Reveal>
-        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/12 via-primary/5 to-chart-2/10 px-6 py-16 text-center sm:px-14 sm:py-20">
+        {/* Sweeps blue -> cyan -> green, the same run the mark makes. It used
+            to end on --chart-2, a categorical chart colour standing in for a
+            brand one; --flow-500 is the logo's actual green. */}
+        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/14 via-info/8 to-flow-500/14 px-6 py-16 text-center sm:px-14 sm:py-20">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -top-24 left-1/2 size-[30rem] -translate-x-1/2 rounded-full bg-primary/20 blur-3xl animate-aurora"
