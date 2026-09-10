@@ -5,10 +5,17 @@
  * wordmark that says two different things in two places is the whole reason
  * this is a component rather than markup copied twice.
  *
- * The mark is an inline SVG rather than an icon-font glyph or a raster file:
- * it has to recolour with the theme (the flow strokes read from
- * `currentColor` and the accent token), and it is small enough that a network
- * request for it would cost more than shipping the ~20 path commands.
+ * ## One logo, prepared properly
+ *
+ * Both components below render the supplied artwork — there is no drawn
+ * stand-in. What makes it hold up at 16px is preparation, not substitution:
+ * the assets in public/brand/ are trimmed of the source file's empty padding,
+ * recentred, and pre-rendered per size with a real resampling filter, and the
+ * small ones are given back the edge contrast that any downscale removes.
+ * See `scripts/build_logo_assets.py` for the pipeline and the reasoning.
+ *
+ * `BrandMark` (tiled) is the default. `BrandLogo` (bare) is only for large
+ * light surfaces — see each component's own note.
  */
 
 import { cn } from '@/lib/utils'
@@ -19,53 +26,86 @@ export const BRAND_PRIMARY = 'Bootcamp'
 export const BRAND_ACCENT = 'Flows'
 
 /**
- * The bright green that reads correctly *on the nav shell*, in both themes.
+ * The colour of "Flows" — the accent half of the wordmark.
  *
- * --nav-shell is a fixed dark surface either way, so its accent has to be a
- * fixed bright green too — but neither --primary nor --brand-300 is bright in
- * both themes on its own: --primary is a mid 0.53 green in light mode, and
- * --brand-300 inverts down to 0.45 in dark mode. Taking the light half from
- * one and the dark half from the other lands on ~0.8 / ~0.68 lightness, which
- * is vivid against the shell in both, and avoids minting a fourth token for
- * a colour the ramp already contains.
+ * Green, not blue, and that is the point. The mark is a blue B that flows into
+ * a green arrow, so a wordmark whose accent half is also blue leaves the
+ * logo's whole green half unrepresented anywhere in the interface. Splitting
+ * the name the way the mark splits itself is what ties the two together.
+ *
+ * `--flow-*` rather than `--success`: this is brand, not status. Nothing has
+ * been approved by the time someone reads the product's own name.
  */
-const ON_SHELL_ACCENT = 'text-brand-300 dark:text-primary'
+const ACCENT = 'text-flow-600'
 
 /**
- * The hexagon mark: three nodes joined by two flow arcs.
+ * The same accent, on the nav shell.
  *
- * Reads as a process moving through stages, which is what the product is.
- * Drawn on a 24-unit grid so it lines up with the lucide icons beside it.
+ * --nav-shell is a fixed dark surface in both themes, so its accent has to be
+ * a fixed bright tone too — and --flow-600 is not bright in both on its own
+ * (0.54 in light, 0.81 in dark). Taking the light half from one step of the
+ * ramp and the dark half from another lands vivid against the shell either
+ * way, without minting a token for a colour the ramp already contains.
+ */
+const ON_SHELL_ACCENT = 'text-flow-500 dark:text-flow-600'
+
+/**
+ * The logo: the real artwork, extruded, on transparency.
+ *
+ * Two things make it work at interface sizes, and both are done ahead of time
+ * in public/brand/ rather than by the browser:
+ *
+ * 1. **Pre-rendered sizes.** The source is 500x500 with ~12% empty padding
+ *    around off-centre artwork. Asking a browser for 32px from that spends a
+ *    third of the pixel budget on nothing and downscales a detailed gradient
+ *    in one step, which is what turned the ribbon into a smear. The assets
+ *    here are trimmed to the artwork, recentred, and resampled per size with
+ *    a proper filter plus sharpening at the small end.
+ *
+ * 2. **Depth.** A darkened extrusion of the mark's own silhouette plus a
+ *    contact shadow, so it sits on the surface rather than being stamped
+ *    flat onto it.
+ *
+ * **Known limit, deliberately left standing.** With no tile behind it, the
+ * logo's deep blue (#013186, oklch(0.348 0.150 261)) is close in lightness to
+ * `--nav-shell` (oklch(0.22 0.07 262)) and `--auth-pane` (oklch(0.33 0.15
+ * 262)), so the top-left of the mark has little contrast on those two
+ * surfaces. The extrusion and its shadow give the shape an edge to read
+ * against, which softens the problem without solving it. Solving it properly
+ * means changing those surfaces — a navbar decision, not this component's.
+ *
+ * `srcSet` carries density variants rather than one large file: a 192px
+ * source displayed at 32px is the same six-times downscale the pre-rendering
+ * exists to avoid.
  */
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
+    <img
+      src="/brand/mark3d-128.png"
+      srcSet="/brand/mark3d-64.png 1x, /brand/mark3d-128.png 2x, /brand/mark3d-192.png 3x"
+      alt=""
       aria-hidden="true"
-      className={cn('size-full', className)}
-    >
-      {/* Rounded hexagon shell */}
-      <path
-        d="M12 2.4 20 7v10l-8 4.6L4 17V7l8-4.6Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-        opacity="0.55"
-      />
-      {/* Two flow arcs, entering and leaving the middle node */}
-      <path
-        d="M8 15.2c0-2 1.4-3.2 4-3.2s4-1.2 4-3.2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      {/* Stage nodes */}
-      <circle cx="8" cy="15.2" r="1.85" fill="currentColor" />
-      <circle cx="16" cy="8.8" r="1.85" fill="currentColor" />
-    </svg>
+      // The artwork is 1.09:1 — wider than tall. Sized by height, with the
+      // width left to follow, because height is what the fixed-height bars
+      // actually constrain. Forcing it square would pad the short axis and
+      // then let that padding limit the width.
+      width={137}
+      height={128}
+      // Eager: every place this renders is above the fold, where a lazy
+      // swap-in reads as the page flickering.
+      loading="eager"
+      decoding="async"
+      className={cn('h-full w-auto max-w-none', className)}
+    />
   )
 }
+
+/*
+ * The white-tiled `icon-*.png` sizes are still generated, and still what the
+ * PWA manifest wants — an installed app icon has to fill its own tile rather
+ * than float on whatever the launcher's wallpaper happens to be. They are no
+ * longer used inside the app itself.
+ */
 
 /**
  * Mark plus wordmark.
@@ -86,10 +126,17 @@ export function BrandLockup({
 }) {
   return (
     <span className={cn('flex shrink-0 items-center gap-2.5', className)}>
+      {/* No wrapper box, no background, no CSS rounding: the mark is the
+          artwork on transparency and carries its own extruded depth and
+          contact shadow. A `rounded-*` + `overflow-hidden` wrapper would clip
+          that shadow off, and a `shadow-*` would cast a second, square one
+          behind a non-rectangular shape. */}
       <span
         className={cn(
-          'grid size-9 shrink-0 place-items-center rounded-xl p-1.5 shadow-sm transition-transform duration-300 group-hover:scale-105',
-          tone === 'shell' ? cn('bg-primary/15', ON_SHELL_ACCENT) : 'bg-primary text-primary-foreground',
+          // Height only — the width is the artwork's own. 56px is the public
+          // header's content box once its padding is py-2, which is as tall
+          // as this can go without the bar itself growing.
+          'block h-14 w-auto shrink-0 transition-transform duration-300 group-hover:scale-105',
           markClassName,
         )}
       >
@@ -99,7 +146,7 @@ export function BrandLockup({
         <span className={tone === 'shell' ? 'text-nav-shell-ink' : 'text-foreground'}>
           {BRAND_PRIMARY}
         </span>{' '}
-        <span className={tone === 'shell' ? ON_SHELL_ACCENT : 'text-primary'}>
+        <span className={tone === 'shell' ? ON_SHELL_ACCENT : ACCENT}>
           {BRAND_ACCENT}
         </span>
       </span>
