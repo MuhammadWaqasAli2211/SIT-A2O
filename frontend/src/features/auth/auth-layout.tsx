@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { AlumniCarousel } from '@/features/auth/alumni-carousel'
 import { AuthIllustration } from '@/features/auth/auth-illustration'
+import { BRAND_ACCENT, BRAND_PRIMARY, BrandMark } from '@/features/marketing/brand'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
@@ -66,7 +67,17 @@ export function AuthLayout({
 
         {/* ----------------------------------------------- brand pane -- */}
         <div className="relative hidden w-[48%] flex-col overflow-hidden bg-auth-pane lg:flex">
-          <div className="relative z-10 px-10 pt-12 xl:px-12">
+          <div className="relative z-10 flex items-center gap-4 px-10 pt-10 xl:px-12">
+            <span className="block h-28 w-auto shrink-0">
+              <BrandMark />
+            </span>
+            <span className="text-2xl leading-none font-bold tracking-tight text-auth-pane-ink">
+              {BRAND_PRIMARY}{' '}
+              <span className="text-flow-500 dark:text-flow-600">{BRAND_ACCENT}</span>
+            </span>
+          </div>
+
+          <div className="relative z-10 px-10 pt-8 xl:px-12">
             <AlumniCarousel />
           </div>
 
