@@ -245,7 +245,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Databases', topics: ['MongoDB & Mongoose', 'Schema design', 'Aggregation', 'Indexing basics'] },
       { module: 'Capstone', topics: ['Team project', 'Code review', 'CI/CD basics', 'Deployment'] },
     ],
-    accent: 'from-emerald-500/20 to-teal-500/5',
+    accent: 'from-blue-500/20 to-indigo-500/5',
     accentVar: 'var(--color-track-1)',
   },
   {
@@ -301,7 +301,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Machine Learning', topics: ['Regression', 'Classification', 'Model evaluation', 'Feature engineering'] },
       { module: 'Applied AI', topics: ['NLP basics', 'Intro to deep learning', 'Model deployment'] },
     ],
-    accent: 'from-violet-500/20 to-purple-500/5',
+    accent: 'from-cyan-500/20 to-sky-500/5',
     accentVar: 'var(--color-track-3)',
   },
   {
@@ -328,7 +328,7 @@ export const PROGRAMS: Program[] = [
       { module: 'CI/CD', topics: ['GitHub Actions', 'Pipelines', 'Testing gates', 'Release strategies'] },
       { module: 'Cloud', topics: ['AWS core services', 'IAM', 'Infrastructure as code', 'Cost basics'] },
     ],
-    accent: 'from-amber-500/20 to-orange-500/5',
+    accent: 'from-teal-500/20 to-cyan-500/5',
     accentVar: 'var(--color-track-4)',
   },
   {
@@ -355,7 +355,7 @@ export const PROGRAMS: Program[] = [
       { module: 'Figma & Prototyping', topics: ['Components', 'Auto layout', 'Interactions', 'Handoff'] },
       { module: 'Design Systems', topics: ['Tokens', 'Documentation', 'Consistency at scale'] },
     ],
-    accent: 'from-pink-500/20 to-rose-500/5',
+    accent: 'from-emerald-500/20 to-green-500/5',
     accentVar: 'var(--color-track-5)',
   },
 ]
