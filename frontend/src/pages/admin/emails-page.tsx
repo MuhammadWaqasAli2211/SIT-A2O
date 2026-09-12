@@ -1,7 +1,8 @@
-import { AlertTriangle, CheckCircle2, Loader2, Mail, Search, Send, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Mail, Search, Send, XCircle } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,7 +17,13 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -31,18 +38,13 @@ import { MERGE_FIELDS } from '@/features/admin/email-merge-fields'
 import {
   AsyncSection,
   BootcampSwitcher,
-  NoBootcampSelected,
+  BootcampGate,
   Pagination,
 } from '@/features/admin/components'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
-import {
-  STAGE_LABEL,
-  STAGE_ORDER,
-  type ApplicationStage,
-  type EmailStatus,
-} from '@/lib/types'
+import { STAGE_LABEL, STAGE_ORDER, type ApplicationStage, type EmailStatus } from '@/lib/types'
 
 const PAGE_SIZE = 25
 const ALL = 'ALL'
@@ -112,7 +114,7 @@ function formatDateTime(iso: string) {
 }
 
 export default function AdminEmailsPage() {
-  const { selected, selectedId } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading } = useBootcamp()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>(ALL)
@@ -141,9 +143,11 @@ export default function AdminEmailsPage() {
       <PageHeader
         title="Emails"
         description={
-          selected
-            ? `Everything sent to candidates in ${selected.name}.`
-            : 'Pick an intake to see its email history.'
+          bootcampLoading
+            ? undefined
+            : selected
+              ? `Everything sent to candidates in ${selected.name}.`
+              : 'Pick an intake to see its email history.'
         }
         actions={
           <>
@@ -156,139 +160,144 @@ export default function AdminEmailsPage() {
         }
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected icon={Mail} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
+      <BootcampGate icon={Mail}>
+        {(_selectedId) => (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    setOffset(0)
+                  }}
+                  placeholder="Search by recipient or subject"
+                  className="pl-9"
+                />
+              </div>
+
+              <Select
+                value={status}
+                onValueChange={(value) => {
+                  if (!value) return
+                  setStatus(value)
                   setOffset(0)
                 }}
-                placeholder="Search by recipient or subject"
-                className="pl-9"
-              />
+              >
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All</SelectItem>
+                  <SelectItem value="SENT">Sent</SelectItem>
+                  <SelectItem value="FAILED">Failed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select
-              value={status}
-              onValueChange={(value) => {
-                if (!value) return
-                setStatus(value)
-                setOffset(0)
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="All" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All</SelectItem>
-                <SelectItem value="SENT">Sent</SelectItem>
-                <SelectItem value="FAILED">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
-            {rows.length === 0 ? (
-              <EmptyState
-                icon={Mail}
-                title={debouncedSearch || status !== ALL ? 'No matches' : 'Nothing sent yet'}
-                description={
-                  debouncedSearch || status !== ALL
-                    ? 'Try a different search or filter.'
-                    : 'Every email the platform sends to a candidate is recorded here, including failures.'
-                }
-                action={
-                  !debouncedSearch && status === ALL ? (
-                    <Button size="sm" onClick={() => setComposeOpen(true)}>
-                      <Send className="size-4" />
-                      Compose
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Recipient</TableHead>
-                          <TableHead>Subject</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="hidden lg:table-cell">Sent by</TableHead>
-                          <TableHead className="hidden md:table-cell">When</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="text-sm">{row.recipient_email}</span>
-                                {row.candidate_code && (
-                                  <span className="font-mono text-xs text-muted-foreground">
-                                    {row.candidate_code}
+            <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
+              {rows.length === 0 ? (
+                <EmptyState
+                  icon={Mail}
+                  title={debouncedSearch || status !== ALL ? 'No matches' : 'Nothing sent yet'}
+                  description={
+                    debouncedSearch || status !== ALL
+                      ? 'Try a different search or filter.'
+                      : 'Every email the platform sends to a candidate is recorded here, including failures.'
+                  }
+                  action={
+                    !debouncedSearch && status === ALL ? (
+                      <Button size="sm" onClick={() => setComposeOpen(true)}>
+                        <Send className="size-4" />
+                        Compose
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Recipient</TableHead>
+                            <TableHead>Subject</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="hidden lg:table-cell">Sent by</TableHead>
+                            <TableHead className="hidden md:table-cell">When</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rows.map((row) => (
+                            <TableRow key={row.id}>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="text-sm">{row.recipient_email}</span>
+                                  {row.candidate_code && (
+                                    <span className="font-mono text-xs text-muted-foreground">
+                                      {row.candidate_code}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="block max-w-64 truncate text-sm">
+                                  {row.subject}
+                                </span>
+                                {row.template && (
+                                  <Badge
+                                    variant="outline"
+                                    className="mt-1 text-[0.7rem] font-normal"
+                                  >
+                                    {row.template}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {row.status === 'SENT' ? (
+                                  <span className="inline-flex items-center gap-1.5 text-sm text-success">
+                                    <CheckCircle2 className="size-3.5" />
+                                    Sent
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="inline-flex items-center gap-1.5 text-sm text-destructive"
+                                    title={row.error ?? undefined}
+                                  >
+                                    <XCircle className="size-3.5" />
+                                    Failed
                                   </span>
                                 )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span className="block max-w-64 truncate text-sm">{row.subject}</span>
-                              {row.template && (
-                                <Badge variant="outline" className="mt-1 text-[0.7rem] font-normal">
-                                  {row.template}
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.status === 'SENT' ? (
-                                <span className="inline-flex items-center gap-1.5 text-sm text-success">
-                                  <CheckCircle2 className="size-3.5" />
-                                  Sent
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center gap-1.5 text-sm text-destructive"
-                                  title={row.error ?? undefined}
-                                >
-                                  <XCircle className="size-3.5" />
-                                  Failed
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                              {row.sent_by_name ?? '—'}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-sm text-muted-foreground whitespace-nowrap">
-                              {formatDateTime(row.created_at)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                                {row.sent_by_name ?? '—'}
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell text-sm text-muted-foreground whitespace-nowrap">
+                                {formatDateTime(row.created_at)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            {data && (
-              <Pagination
-                total={data.total}
-                limit={data.limit}
-                offset={data.offset}
-                onChange={setOffset}
-              />
-            )}
-          </AsyncSection>
-        </div>
-      )}
+              {data && (
+                <Pagination
+                  total={data.total}
+                  limit={data.limit}
+                  offset={data.offset}
+                  onChange={setOffset}
+                />
+              )}
+            </AsyncSection>
+          </div>
+        )}
+      </BootcampGate>
 
       {selectedId && (
         <ComposeDialog
@@ -433,8 +442,8 @@ function ComposeDialog({
           <Alert>
             <AlertTriangle className="size-4" />
             <AlertDescription>
-              This sends real email immediately. A mistyped placeholder is left as-is in the
-              message rather than failing the send, so check the preview text before confirming.
+              This sends real email immediately. A mistyped placeholder is left as-is in the message
+              rather than failing the send, so check the preview text before confirming.
             </AlertDescription>
           </Alert>
 
@@ -451,9 +460,8 @@ function ComposeDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={send.pending || !subject || !body}>
-            {send.pending && <Loader2 className="size-4 animate-spin" />}
             <Send className="size-4" />
-            Send now
+            <PendingLabel idle="Send now" pending="Sending…" isPending={send.pending} />
           </Button>
         </DialogFooter>
       </DialogContent>
