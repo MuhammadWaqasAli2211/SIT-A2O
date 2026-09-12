@@ -5,10 +5,18 @@
  * Experience Letters); they only differ in whether a new upload replaces
  * the existing file or appends to the list.
  */
-import { AlertTriangle, ExternalLink, FileText, ImageOff, Loader2, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  ExternalLink,
+  FileText,
+  ImageOff,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { AppLoader } from '@/components/shared/app-loader'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -185,7 +193,7 @@ function DocumentFileRow({
           ) : isImage && thumb ? (
             <img src={thumb} alt="" className="size-full object-cover" onError={() => setThumbFailed(true)} />
           ) : isImage ? (
-            <Loader2 className="size-4 animate-spin" />
+            <AppLoader size="sm" bare className="size-4" />
           ) : (
             <FileText className="size-4" />
           )}
@@ -207,8 +215,8 @@ function DocumentFileRow({
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => view.run()} disabled={view.pending}>
-          {view.pending ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
-          View
+          <ExternalLink className="size-3.5" />
+          <PendingLabel idle="View" pending="Opening…" isPending={view.pending} />
         </Button>
 
         {!accepted && (
@@ -236,8 +244,7 @@ function ReplaceButton({
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => inputRef.current?.click()} disabled={pending}>
-        {pending && <Loader2 className="size-3.5 animate-spin" />}
-        Replace
+        <PendingLabel idle="Replace" pending="Uploading…" isPending={pending} />
       </Button>
       <input
         ref={inputRef}
