@@ -7,10 +7,11 @@
  * is edit-only (a new intake always starts as DRAFT).
  */
 
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -284,8 +285,11 @@ function FormBody({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSave}>
-            {save.pending && <Loader2 className="size-4 animate-spin" />}
-            {isEdit ? 'Save changes' : 'Create bootcamp'}
+            <PendingLabel
+              isPending={save.pending}
+              idle={isEdit ? 'Save changes' : 'Create bootcamp'}
+              pending={isEdit ? 'Saving…' : 'Creating…'}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
