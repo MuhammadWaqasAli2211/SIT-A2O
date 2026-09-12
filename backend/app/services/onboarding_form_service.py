@@ -15,7 +15,12 @@ from sqlalchemy.orm import Session
 from app.core.age import is_adult
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.application import Application
-from app.models.enums import ApplicationStage, OnboardingFormStatus, OnboardingFormType
+from app.models.enums import (
+    ApplicationStage,
+    OnboardingFormStatus,
+    OnboardingFormType,
+    PhaseType,
+)
 from app.models.onboarding import OnboardingFormSubmission
 from app.models.user import Profile
 from app.schemas.onboarding import OnboardingFormRow, OnboardingProgress
@@ -152,6 +157,11 @@ def submit(
     actor: Profile,
 ) -> OnboardingFormSubmission:
     assert_onboarding_unlocked(application)
+    # The FORM phase is the Student's Folder's window. Until this call existed
+    # the phase gated nothing at all: an admin could close it on the phases
+    # screen and candidates carried on submitting, which is the half of the
+    # toggle bug that made the switch look decorative.
+    bootcamp_service.assert_phase_accepts(db, application.bootcamp_id, PhaseType.FORM)
 
     rows = rows_for_application(db, application.id)
     assert_in_order(form_type, rows)
