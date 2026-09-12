@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Controller, useFormContext } from 'react-hook-form'
-import { CheckCircle2, ImageUp, Info, Laptop, Loader2, X } from 'lucide-react'
+import {
+  CheckCircle2,
+  ImageUp,
+  Info,
+  Laptop,
+  X,
+} from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -25,6 +31,7 @@ import {
 import { z } from 'zod'
 
 import { pictureApi } from '@/features/registration/picture-api'
+import { useProfilePicture } from '@/features/profile/picture-context'
 import { toErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 
@@ -153,6 +160,7 @@ export function EducationSection() {
 
 function PictureField({ locked }: { locked: boolean }) {
   const { control } = useFormContext()
+  const { reload: reloadPicture } = useProfilePicture()
   const [preview, setPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -193,6 +201,10 @@ function PictureField({ locked }: { locked: boolean }) {
             try {
               await pictureApi.upload(file)
               field.onChange(file)
+              // Picks up the new signed URL for the header avatar (and this
+              // account page, next time it mounts) without a reload — the
+              // whole point of holding the picture in shared context.
+              reloadPicture()
             } catch (error) {
               field.onChange(undefined)
               setUploadError(toErrorMessage(error, 'Could not upload your picture.'))
@@ -210,11 +222,16 @@ function PictureField({ locked }: { locked: boolean }) {
                 )}
               >
                 <ImageUp className="size-6 text-muted-foreground" />
+                {/* No spinner: the words already say it is uploading. The tick
+                    keeps its slot in every state rather than appearing and
+                    shoving the label sideways when the upload lands. */}
                 <span className="flex items-center gap-1.5 text-sm font-medium">
-                  {uploading && <Loader2 className="size-3.5 animate-spin" />}
-                  {field.value && !uploading && (
-                    <CheckCircle2 className="size-3.5 text-success" />
-                  )}
+                  <CheckCircle2
+                    className={cn(
+                      'size-3.5 text-success',
+                      !(field.value && !uploading) && 'invisible',
+                    )}
+                  />
                   {uploading
                     ? 'Uploading…'
                     : field.value
