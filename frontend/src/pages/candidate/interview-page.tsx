@@ -30,7 +30,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { useApplication } from '@/features/applications/application-context'
 import { candidateApi } from '@/features/candidate/api'
@@ -128,7 +127,6 @@ export default function CandidateInterviewPage() {
           initialLoading={initialLoading}
           error={error}
           onRetry={refetch}
-          skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
         >
           {interviews.length === 0 ? (
             // Deliberately nothing. This used to be a "No interview scheduled
