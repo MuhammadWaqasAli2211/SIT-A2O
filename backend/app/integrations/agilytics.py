@@ -140,7 +140,20 @@ def _detail_message(response: httpx.Response, fallback: str) -> str:
                     return value
     except ValueError:
         pass
-    return response.text[:500] or fallback
+
+    # An HTML body means we did not reach the API at all — their host answered
+    # with a page, which is what a Next.js deployment does for a route it does
+    # not have. Echoing the markup put a screenful of `<!DOCTYPE html>` in the
+    # admin's error toast and told them nothing; this says the one thing that
+    # is actually actionable.
+    body = response.text[:500]
+    if body.lstrip()[:1] == "<":
+        return (
+            "Agilytics answered with a web page rather than API data — the "
+            "partner API is not reachable at the configured URL "
+            f"({settings.AGILYTICS_API_BASE_URL})."
+        )
+    return body or fallback
 
 
 def _request(
