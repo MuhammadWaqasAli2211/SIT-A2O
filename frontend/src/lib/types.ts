@@ -856,15 +856,47 @@ export interface HrAssessmentRow {
   hub_unlocked: boolean
 }
 
+/**
+ * A candidate invited to a Physical Interview whose result is not yet in.
+ *
+ * A different population from HrAssessmentRow, not a subset: that one is
+ * everybody who has already cleared the round. Recording a result here is
+ * exactly what moves somebody from this list into that one.
+ */
+export interface HrAssessmentAwaitingRow {
+  invite_id: string
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  email: string | null
+  bootcamp_id: string | null
+  bootcamp_name: string | null
+  program_title: string | null
+  /** The batch's details, so two rounds are tellable apart in the list. */
+  venue: string
+  interview_date: string
+  start_time: string | null
+  deadline_at: string
+  sent_at: string | null
+  send_failed: boolean
+  /** 'pending' or 'missed' — a decided invite is not in this list at all. */
+  status: string
+  ai_score: number | null
+  interview: ExternalRecord | null
+}
+
 export interface HrAssessmentStats {
   total: number
   forms_complete: number
   documents_pending: number
   average_ai_score: number | null
+  /** Open Physical Interview invites — the top section's headline count. */
+  awaiting_decision: number
 }
 
 export interface HrAssessmentPage {
   items: HrAssessmentRow[]
+  awaiting: HrAssessmentAwaitingRow[]
   stats: HrAssessmentStats
 }
 
@@ -884,6 +916,12 @@ export interface AgilyticsMemberStatus {
   joined_at: string | null
 }
 
+export interface AgilyticsTrackCount {
+  track_id: string | null
+  track_name: string | null
+  member_count: number
+}
+
 export interface AgilyticsWorkspaceState {
   /** False is the ordinary state before anyone has provisioned, not an error. */
   provisioned: boolean
@@ -892,6 +930,15 @@ export interface AgilyticsWorkspaceState {
   total_members: number | null
   approved: number | null
   pending: number | null
+  /** The rest of their statusBreakdown — a member who left or was revoked is
+   *  exactly what a join-rate figure must not omit. */
+  left: number | null
+  rejected: number | null
+  revoked: number | null
+  leads_count: number | null
+  sub_leads_count: number | null
+  students_count: number | null
+  tracks: AgilyticsTrackCount[]
   /** Keyed by lowercased email. Covers leads only — their workspace-wide
    *  response reports students as counts rather than rows. */
   members: Record<string, AgilyticsMemberStatus>
@@ -940,4 +987,58 @@ export interface PublicBootcamp {
   starts_at: string | null
   registration_deadline: string | null
   programs: Program[]
+}
+
+/**
+ * Per-candidate Agilytics membership.
+ *
+ * Both timestamps are null-meaningful and read as a three-state badge:
+ * neither set is "Not invited", invited alone is "Invited", joined is
+ * "Joined" — at which point the candidate has also been advanced to
+ * Onboarded on our side.
+ */
+export interface AgilyticsCandidateRow {
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  email: string
+  program_title: string | null
+  invited_at: string | null
+  joined_at: string | null
+}
+
+export interface AgilyticsEligibleList {
+  provisioned: boolean
+  workspace_id: string | null
+  /** Cleared the Physical Interview and not yet invited. */
+  new: AgilyticsCandidateRow[]
+  /** Carried alongside so the modal can say "9 already invited" rather than
+   *  silently showing fewer people than the admin expects. */
+  already_invited: AgilyticsCandidateRow[]
+}
+
+export interface AgilyticsInviteOutcome {
+  /** Agilytics' own aggregate across the whole workspace — not the same as how
+   *  many of our candidates it covered. */
+  invites_issued: number
+  expires_at: string | null
+  /** Candidate codes whose membership their per-member lookup confirmed. */
+  confirmed: string[]
+  /** Confirmed absent from the workspace. Their API has no add-member call, so
+   *  anyone who reached onboarding after provisioning lands here and stays
+   *  eligible for a retry. */
+  not_in_workspace: string[]
+  /** The lookup itself failed — left unstamped, so still retryable. */
+  check_failed: string[]
+  emailed: number
+  email_failed: number
+}
+
+export interface AgilyticsJoinSyncResult {
+  checked: number
+  joined: string[]
+  /** Moved to ONBOARDED — a real stage transition, audited and notified. */
+  advanced: string[]
+  still_pending: number
+  unreachable: number
 }
