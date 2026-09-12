@@ -66,6 +66,18 @@ class Application(Base, TimestampMixin):
     # lets somebody leave the second one.
     is_selected: Mapped[bool | None] = mapped_column(Boolean)
 
+    # Agilytics membership — the system this pipeline hands over to.
+    #
+    # `invited_at` is written only once their per-member lookup confirms the
+    # address is really in the workspace: `bulk-invite` answers with a single
+    # count and never says who, so a stamp taken from that count alone would
+    # mark people invited who were never added. `joined_at` mirrors their
+    # `joinedAt` once a member reaches APPROVED, cached because students are
+    # not enumerated in their workspace-wide response — each check is one
+    # request, and a stamped row is never asked about again.
+    agilytics_invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    agilytics_joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     statement: Mapped[str | None] = mapped_column(Text)
 
     # Registration answers specific to this intake. Person-level answers live
