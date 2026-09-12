@@ -12,6 +12,7 @@ import {
   Mail,
   Radar,
   ShieldCheck,
+  TrendingUp,
   UserCircle,
   UsersRound,
   type LucideIcon,
@@ -98,6 +99,14 @@ const CANDIDATE_NAV: PortalNavGroup[] = [
 // Shared between both staff navs so an admin and a super admin get the same
 // per-bootcamp tools in the same order.
 const BOOTCAMP_TOOLS: PortalNavItem[] = [
+  // First of the tools, directly under 'Dashboard'. Every row below it only
+  // does anything while the relevant phase is open, so the gate that decides
+  // that belongs at the top of the list rather than buried past Onboarding.
+  //
+  // Layers, not ShieldCheck: ShieldCheck is already 'Administrators' in the
+  // super-admin nav below, and a phase-gate control is not a permissions
+  // control — the two rows would read as the same concept under one icon.
+  { label: 'Phases', href: '/admin/phases', icon: Layers },
   { label: 'Candidates', href: '/admin/candidates', icon: UsersRound },
   { label: 'Interviews', href: '/admin/interviews', icon: CalendarClock },
   // Results from the external AI screening service. Separate from
@@ -110,10 +119,9 @@ const BOOTCAMP_TOOLS: PortalNavItem[] = [
   { label: 'HR assessment', href: '/admin/hr-assessment', icon: ClipboardList },
   // Review of the 4 onboarding forms + Documents Hub uploads, per candidate.
   { label: 'Onboarding', href: '/admin/onboarding', icon: GraduationCap },
-  // Layers, not ShieldCheck: ShieldCheck is already 'Administrators' in the
-  // super-admin nav below, and a phase-gate control is not a permissions
-  // control — the two rows read as the same concept under one icon.
-  { label: 'Phases', href: '/admin/phases', icon: Layers },
+  // Paperwork progress and the Agilytics handover. Staff-only, like every
+  // row in this group — the candidate nav is a separate list entirely.
+  { label: 'Onboarded stats', href: '/admin/onboarded-stats', icon: TrendingUp },
   { label: 'Emails', href: '/admin/emails', icon: Mail },
 ]
 
