@@ -6,9 +6,10 @@
  * page owning its own copy is how the five drift apart.
  */
 
-import { AlertTriangle, Building2, Loader2, RefreshCw, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Building2, RefreshCw, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +21,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { AppLoader } from '@/components/shared/app-loader'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { BOOTCAMP_STATUS_LABEL, type BootcampStatus } from '@/lib/types'
@@ -53,7 +61,10 @@ export function BootcampSwitcher() {
       // popup has been opened once. `selectedId` is restored from
       // localStorage before that ever happens, so the trigger showed the
       // raw bootcamp uuid until the admin opened the dropdown themselves.
-      items={bootcamps.map((bootcamp) => ({ value: bootcamp.id, label: bootcamp.name }))}
+      items={bootcamps.map((bootcamp) => ({
+        value: bootcamp.id,
+        label: bootcamp.name,
+      }))}
     >
       <SelectTrigger className="w-full sm:w-64">
         <SelectValue placeholder="Select a bootcamp" />
@@ -117,7 +128,12 @@ export function AsyncSection({
   children: ReactNode
 }) {
   if (initialLoading) {
-    return <>{skeleton ?? <TableSkeleton />}</>
+    // The app's one loader, not a skeleton. Grey placeholder boxes are a
+    // second loading language: the same wait looked like one thing while a
+    // route resolved and another while its rows arrived, and nothing told the
+    // user those were the same event. A caller can still pass `skeleton` when
+    // the shape of what is coming is genuinely worth previewing.
+    return <>{skeleton ?? <AppLoader size="md" />}</>
   }
 
   if (error) {
@@ -174,6 +190,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Confirm',
+  pendingLabel,
   destructive = false,
   pending = false,
   error,
@@ -184,6 +201,10 @@ export function ConfirmDialog({
   title: string
   description: ReactNode
   confirmLabel?: string
+  /** What the confirm button says while the action is in flight. Defaults to
+   *  a neutral verb, since this dialog fronts everything from a delete to a
+   *  phase close and one word cannot describe them all. */
+  pendingLabel?: string
   destructive?: boolean
   pending?: boolean
   error?: string | null
@@ -213,8 +234,11 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={pending}
           >
-            {pending && <Loader2 className="size-4 animate-spin" />}
-            {confirmLabel}
+            <PendingLabel
+              idle={confirmLabel}
+              pending={pendingLabel ?? 'Working…'}
+              isPending={pending}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -292,10 +316,48 @@ export function NoBootcampSelected({ icon: Icon = Building2 }: { icon?: LucideIc
       <div className="flex flex-col gap-1.5">
         <p className="font-medium">No bootcamp selected</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          You are not assigned to any intake yet. A super admin can assign one from the
-          Bootcamps screen.
+          You are not assigned to any intake yet. A super admin can assign one from the Bootcamps
+          screen.
         </p>
       </div>
     </div>
   )
+}
+
+/**
+ * Every bootcamp-scoped page's opening gate, in one place.
+ *
+ * Before this existed, each page wrote its own `!selectedId ? <NoBootcampSelected
+ * /> : (...)`, which conflates two states `BootcampProvider` already tells
+ * them apart: "still fetching the assignment list" and "fetched it and there
+ * genuinely is nothing." `bootcamps` starts as `[]` while the request is in
+ * flight, so `selectedId` reads exactly like an admin with no intake for
+ * however long that request takes — the "No bootcamp selected — you are not
+ * assigned to any intake" flash every one of these pages showed for a frame
+ * before their real content (or their real empty state) appeared.
+ *
+ * `loading` was already on the context and simply never read. This checks it
+ * first.
+ *
+ * Children is a render prop, not a plain node, on purpose: it hands back a
+ * `string`, not `string | undefined`, so a page's `bootcampId={selectedId}`
+ * keeps typechecking without an assertion. A plain `ReactNode` child loses
+ * TypeScript's narrowing the moment the truthy branch moves outside the
+ * `!selectedId` check that used to justify it — the compiler cannot see
+ * through a component boundary to know this one only renders its children
+ * once `selectedId` is confirmed. Naming the parameter `selectedId` shadows
+ * the outer optional one, so call sites need no renaming at all.
+ */
+export function BootcampGate({
+  icon,
+  children,
+}: {
+  icon?: LucideIcon
+  children: (selectedId: string) => ReactNode
+}) {
+  const { selectedId, loading } = useBootcamp()
+
+  if (loading) return <AppLoader size="lg" />
+  if (!selectedId) return <NoBootcampSelected icon={icon} />
+  return <>{children(selectedId)}</>
 }
