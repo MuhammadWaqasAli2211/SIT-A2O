@@ -19,9 +19,10 @@
  * candidates is an admin's call and not something to hardcode.
  */
 
-import { AlertTriangle, Loader2, Send } from 'lucide-react'
+import { AlertTriangle, Send } from 'lucide-react'
 import { useState } from 'react'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -162,8 +163,13 @@ export function SendInvitesDialog({
             onClick={() => onSend(willEmail ? { subject, body_html: body } : null)}
             disabled={pending || (willEmail && !subject.trim())}
           >
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            {willEmail ? `Send invites and email ${emailable.length}` : 'Send invites only'}
+            <Send className="size-4" />
+            <PendingLabel
+              isPending={pending}
+              idle={willEmail ? `Send invites and email ${emailable.length}` : 'Send invites only'}
+              pending="Sending…"
+              reserve={[`Send invites and email ${emailable.length}`, 'Send invites only']}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
