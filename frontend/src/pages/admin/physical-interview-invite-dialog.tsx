@@ -14,10 +14,19 @@
  * check — those already happened to reach this stage).
  */
 
-import { CalendarRange, Eye, FileText, Loader2, MapPin, Pencil, Send, Users } from 'lucide-react'
+import {
+  CalendarRange,
+  Eye,
+  FileText,
+  MapPin,
+  Pencil,
+  Send,
+  Users,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -36,6 +45,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/shared/portal-ui'
 import { applicationApi, physicalInterviewApi } from '@/features/admin/api'
+import { RecordResultDialog } from '@/features/physical-interview/record-result-dialog'
 import { ConfirmDialog } from '@/features/admin/components'
 import {
   MERGE_FIELDS,
@@ -392,9 +402,13 @@ function SendPanel({
           Cancel
         </Button>
         <Button type="button" onClick={onSubmitClick} disabled={!canSend || send.pending}>
-          {send.pending && <Loader2 className="size-4 animate-spin" />}
+
           <Send className="size-4" />
-          Send invite{selected.size === 1 ? '' : 's'}
+          <PendingLabel
+            isPending={send.pending}
+            idle={`Send invite${selected.size === 1 ? '' : 's'}`}
+            pending="Sending…"
+          />
         </Button>
       </div>
 
@@ -517,98 +531,26 @@ function InviteRow({ row, onChanged }: { row: PhysicalInterviewInviteRow; onChan
         ) : null}
       </TableCell>
 
-      {recording && (
-        <RecordResultSheet
-          invite={row}
-          onClose={() => setRecording(false)}
-          onChanged={() => {
-            setRecording(false)
-            onChanged()
-          }}
-        />
-      )}
+      {/* The shared dialog, also used by the HR Assessment screen's
+          awaiting-decision list — one reject-with-reason flow, not two. */}
+      <RecordResultDialog
+        target={
+          recording
+            ? {
+                // This table's row calls it `id`; the HR screen's calls it
+                // `invite_id`. Same invite either way.
+                invite_id: row.id,
+                candidate_code: row.candidate_code,
+                full_name: row.candidate_name,
+              }
+            : null
+        }
+        onClose={() => setRecording(false)}
+        onRecorded={() => {
+          setRecording(false)
+          onChanged()
+        }}
+      />
     </TableRow>
-  )
-}
-
-function RecordResultSheet({
-  invite,
-  onClose,
-  onChanged,
-}: {
-  invite: PhysicalInterviewInviteRow
-  onClose: () => void
-  onChanged: () => void
-}) {
-  const [rejecting, setRejecting] = useState(false)
-  const [note, setNote] = useState('')
-
-  const record = useMutation((payload: { result: 'SELECTED' | 'REJECTED'; rejection_note?: string }) =>
-    physicalInterviewApi.recordResult(invite.id, payload),
-  )
-
-  async function select() {
-    if (await record.run({ result: 'SELECTED' })) {
-      toast.success(`${invite.candidate_code} marked Selected — moved to Onboarding Forms`)
-      onChanged()
-    }
-  }
-
-  async function reject() {
-    if (await record.run({ result: 'REJECTED', rejection_note: note.trim() || undefined })) {
-      toast.success(`${invite.candidate_code} marked Not Selected`)
-      onChanged()
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogTitle>Record result — {invite.candidate_code}</DialogTitle>
-        <DialogDescription>
-          {rejecting
-            ? 'Optional internal note — visible to admins only, never shown to the candidate.'
-            : 'Selecting moves this candidate straight to Onboarding Forms.'}
-        </DialogDescription>
-
-        {record.error && (
-          <Alert variant="destructive">
-            <AlertDescription>{record.error}</AlertDescription>
-          </Alert>
-        )}
-
-        {rejecting ? (
-          <div className="flex flex-col gap-3">
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              maxLength={1000}
-              placeholder="e.g. Communication skills weak (internal only)"
-              className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setRejecting(false)}>
-                Back
-              </Button>
-              <Button type="button" variant="destructive" onClick={reject} disabled={record.pending}>
-                {record.pending && <Loader2 className="size-4 animate-spin" />}
-                Confirm not selected
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="destructive" onClick={() => setRejecting(true)}>
-              Not selected
-            </Button>
-            <Button type="button" onClick={select} disabled={record.pending}>
-              {record.pending && <Loader2 className="size-4 animate-spin" />}
-              Selected
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   )
 }
