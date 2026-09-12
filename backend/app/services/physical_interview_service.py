@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.models.application import Application
+from app.models.bootcamp import Bootcamp
 from app.models.enums import ApplicationStage, ApplicationStatus, PhysicalInterviewResult
 from app.models.physical_interview import PhysicalInterviewBatch, PhysicalInterviewInvite
 from app.models.user import Profile
@@ -220,7 +221,48 @@ def record_result(
         metadata={"result": payload.result.value, "has_note": bool(payload.rejection_note)},
     )
     db.flush()
+
+    # Last, and never able to fail the call. `advance_stage` has already
+    # written the stage move, the transition row and the in-app notification;
+    # an unreachable mail server must not undo a decision an admin has made in
+    # person. Both senders swallow and log their own failures.
+    _email_outcome(db, application, payload.result)
+
     return invite
+
+
+def _email_outcome(
+    db: Session, application: Application, result: PhysicalInterviewResult
+) -> None:
+    """The candidate-facing half of a recorded result.
+
+    Until this existed the only thing a decision produced for the candidate
+    was the in-app notification `advance_stage` writes — which they saw only
+    if they happened to open the portal. The selected email is the one that
+    actually starts onboarding, since it is what tells them the folder is
+    waiting.
+
+    The rejection note is deliberately not passed: it is the admin's internal
+    record, and `record_result` keeps it on the invite row alone.
+    """
+    profile = db.get(Profile, application.profile_id)
+    if profile is None or not profile.email:
+        return
+
+    bootcamp = db.get(Bootcamp, application.bootcamp_id)
+    bootcamp_name = bootcamp.name if bootcamp else "the bootcamp"
+
+    send = (
+        email_service.send_physical_interview_selected
+        if result == PhysicalInterviewResult.SELECTED
+        else email_service.send_physical_interview_rejected
+    )
+    send(
+        to=profile.email,
+        full_name=profile.full_name,
+        candidate_code=application.candidate_code,
+        bootcamp_name=bootcamp_name,
+    )
 
 
 _INVITE_ROW_LOAD = selectinload(PhysicalInterviewBatch.invites).options(
