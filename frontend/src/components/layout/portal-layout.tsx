@@ -45,6 +45,10 @@ import {
 } from '@/features/applications/application-context'
 import { BRAND_ACCENT, BRAND_PRIMARY, BrandMark } from '@/features/marketing/brand'
 import { useNotifications } from '@/features/notifications/use-notifications'
+import {
+  ProfilePictureProvider,
+  useProfilePicture,
+} from '@/features/profile/picture-context'
 import { RegistrationClosedDialog } from '@/features/registration/registration-closed-dialog'
 import { useAuth } from '@/hooks/use-auth'
 import { relativeTime } from '@/lib/format'
@@ -55,15 +59,18 @@ import { cn } from '@/lib/utils'
 export function PortalLayout() {
   return (
     <ApplicationProvider>
-      <TooltipProvider delay={120}>
-        <PortalShell />
-      </TooltipProvider>
+      <ProfilePictureProvider>
+        <TooltipProvider delay={120}>
+          <PortalShell />
+        </TooltipProvider>
+      </ProfilePictureProvider>
     </ApplicationProvider>
   )
 }
 
 function PortalShell() {
   const { profile, logout } = useAuth()
+  const { pictureUrl } = useProfilePicture()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -213,7 +220,7 @@ function PortalShell() {
                   />
                 }
               >
-                <UserAvatar size="sm" />
+                <UserAvatar pictureUrl={pictureUrl} size="sm" />
                 {/* Two forms, so the user is never anonymous. Below `sm`
                     the header has no room for a full name beside three
                     other controls — it showed nothing at all — so it falls
