@@ -6,10 +6,11 @@
  * minimum of 12 characters — validated here for feedback, enforced there.
  */
 
-import { AlertTriangle, Copy, Loader2, UserPlus } from 'lucide-react'
+import { AlertTriangle, Copy, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { PasswordInput } from '@/components/shared/password-input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -199,12 +200,12 @@ function StaffForm({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!valid || create.pending}>
-            {create.pending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <UserPlus className="size-4" />
-            )}
-            Create account
+            <UserPlus className="size-4" />
+            <PendingLabel
+              idle="Create account"
+              pending="Creating…"
+              isPending={create.pending}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -289,8 +290,11 @@ function ResetPasswordForm({ user, onClose }: { user: UserRow; onClose: () => vo
             Cancel
           </Button>
           <Button onClick={submit} disabled={password.length < MIN_PASSWORD || reset.pending}>
-            {reset.pending && <Loader2 className="size-4 animate-spin" />}
-            Reset password
+            <PendingLabel
+              idle="Reset password"
+              pending="Resetting…"
+              isPending={reset.pending}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
