@@ -50,7 +50,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
-  Loader2,
   Mail,
   MailCheck,
   MailQuestion,
@@ -59,6 +58,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import { Reveal } from '@/components/motion/reveal'
+import { AppLoader } from '@/components/shared/app-loader'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -149,7 +149,7 @@ function VerifyingState() {
   return (
     <Reveal direction="none" className="flex flex-col items-center gap-4 py-6 text-center">
       <span className="grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-        <Loader2 className="size-6 animate-spin" />
+        <AppLoader size="sm" bare className="size-6" />
       </span>
       <p className="text-sm text-muted-foreground">Checking your confirmation link…</p>
     </Reveal>
@@ -252,7 +252,6 @@ function ErrorState({ description }: { description: string | null }) {
             >
               {sendState === 'sending' ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" />
                   Sending...
                 </>
               ) : (
