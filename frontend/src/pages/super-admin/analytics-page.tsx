@@ -17,7 +17,7 @@ import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { platformApi } from '@/features/admin/api'
-import { AsyncSection, CardsSkeleton } from '@/features/admin/components'
+import { AsyncSection } from '@/features/admin/components'
 import { useAsync } from '@/hooks/use-async'
 import { CHART_COLORS, chartTooltipStyle } from '@/lib/chart-theme'
 import { STAGE_LABEL, type PlatformStats } from '@/lib/types'
@@ -55,7 +55,6 @@ export default function SuperAdminAnalyticsPage() {
         initialLoading={initialLoading}
         error={error}
         onRetry={refetch}
-        skeleton={<CardsSkeleton count={3} />}
       >
         {data && <Charts stats={data} />}
       </AsyncSection>
