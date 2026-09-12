@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import { FormProvider, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowLeft, ArrowRight, Loader2, Send } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Send } from 'lucide-react'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -247,7 +247,6 @@ export function RegistrationForm() {
           <Button type="button" onClick={goNext} disabled={sending}>
             {sending ? (
               <>
-                <Loader2 className="size-4 animate-spin" />
                 Submitting
               </>
             ) : isLast ? (
