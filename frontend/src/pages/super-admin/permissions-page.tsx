@@ -54,7 +54,6 @@ export default function SuperAdminPermissionsPage() {
           initialLoading={grants.initialLoading}
           error={grants.error}
           onRetry={grants.refetch}
-          skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
         >
           {(grants.data?.length ?? 0) === 0 ? (
             <EmptyState
