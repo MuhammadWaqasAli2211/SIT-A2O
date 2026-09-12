@@ -1,6 +1,64 @@
-> **Branch:** `waqas` — last updated 2026-09-04
+> **Branch:** `waqas` — last updated 2026-09-11
 
 # Project Status
+
+## Where things stand — 2026-09-11 (Agilytics invitation flow + Onboarded Stats)
+
+**Fully built and code-verified. End-to-end testing is blocked on Agilytics'
+own API, not on anything in this codebase.**
+
+- Admin can invite an intake's cleared candidates (`FORM`/`ONBOARDED`,
+  independent of paperwork progress) to Agilytics in bulk from a new
+  "Invitation to Agilytics" button on the Onboarding tab — a modal shows the
+  exact new-candidate list, requires a deliberate confirm, and shows a clear
+  empty state with the confirm action disabled when nobody new is eligible.
+- Duplicate prevention is a per-candidate timestamp
+  (`applications.agilytics_invited_at`), written only after each candidate's
+  membership is individually confirmed against Agilytics' per-member lookup
+  — never from their bulk endpoint's aggregate count, which says how many
+  were staged but never who. Re-verified against the live database: inviting
+  a candidate moves them out of the eligible list and they cannot be
+  re-invited without the stamp being cleared.
+- A join (`agilytics_joined_at`, status `APPROVED`) advances the candidate to
+  `ONBOARDED` through the existing `advance_stage` path — real transition,
+  audit row, candidate notification — checked on an explicit "Check for new
+  joins" button on the new stats page rather than on every page load, since
+  each check costs one request to their API.
+- New admin-only "Onboarded stats" page, two tabs: onboarding paperwork
+  progress (reusing the Onboarding tab's own data) and Agilytics join stats
+  (invited/joined/join-rate, plus their full status and track breakdown, now
+  fully surfaced where before only two of five status buckets were read).
+- Per-candidate "Not invited / Invited / Joined" badge and a "Resend" action
+  on the Onboarding tab's folder cards.
+
+**Investigation surfaced three things worth knowing about the partner API
+itself**, not this codebase: their `/api/v1/external/*` endpoints currently
+return an HTML 404 rather than JSON (host is up, the API is not); their
+`bulk-invite` call sends no email itself — it only stages tokens, and the
+task brief's assumption that Agilytics sends the invitation was incorrect,
+confirmed against the client code before anything was built on top of it;
+and there is no add-member endpoint, so a candidate who reaches onboarding
+after their intake was provisioned can never be added by this integration —
+handled by detecting the gap per candidate (a 404 on their lookup) and
+leaving that candidate retryable rather than silently miscounting them as
+invited.
+
+**Verified:** 467 backend tests pass (13 new), `tsc --noEmit` clean,
+production build clean. Duplicate prevention and the corrected
+error-reporting path (an HTML dump was reaching the admin's error toast; now
+reports the real problem) both re-verified against the live database and
+live API respectively. Six Playwright screenshots confirm the modal, its
+candidate list, the deliberate confirm step, the empty state, the folder
+badges, and both stats tabs all render correctly — captured with the network
+layer mocked, since no admin login was available; this proves the UI, not
+the live integration. Nothing committed or pushed — awaiting explicit
+sign-off.
+
+**Blocked on Agilytics' side:** the invite send, per-member confirmation,
+and join sync are all untested against a real response — see *Blocked*
+below.
+
+---
 
 ## Where things stand — 2026-09-04 (admin dashboard visual redesign)
 
@@ -1181,10 +1239,26 @@ lint need a fresh pass now that both branches' code shares one tree. See
 
 ## Blocked
 
-Nothing blocks development. The candidate-journey migration that previously
-blocked `/applications/mine` was, in fact, already applied directly against
-the live database — only its ledger entry was missing, which is now fixed
-(see *Resolved* below). No further database action is required.
+### Agilytics end-to-end verification — blocked on their API, not ours
+
+Every call to `https://agilytics-preview.vercel.app/api/v1/external/*`
+currently returns an HTML 404 (the host itself answers `/` with 200, so this
+is their API layer, not a DNS/network/credential problem —
+`PORTAL_AGILYTICS_SECRET` is present and correctly shaped). Confirmed with
+the user 2026-09-11; their Agilytics team is aware and working on it.
+
+This blocks live verification of three things, all otherwise complete and
+unit-tested against the boundary: sending a real bulk invite, confirming a
+candidate's membership individually, and detecting a real join to advance a
+candidate to `ONBOARDED`. Resume verification once their API answers real
+requests again — no code change is expected to be needed on this side; this
+is a "wait and re-test" item, not an open implementation task.
+
+Nothing else blocks development. The candidate-journey migration that
+previously blocked `/applications/mine` was, in fact, already applied
+directly against the live database — only its ledger entry was missing,
+which is now fixed (see *Resolved* below). No further database action is
+required for that one.
 
 ### Resolved — migration ledger corrected
 
