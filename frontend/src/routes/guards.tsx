@@ -1,7 +1,8 @@
-import { ArrowRight, ClipboardPen, Loader2 } from 'lucide-react'
+import { ArrowRight, ClipboardPen } from 'lucide-react'
 import { Suspense } from 'react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 
+import { AppLoader } from '@/components/shared/app-loader'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,12 +10,15 @@ import { useApplication } from '@/features/applications/application-context'
 import { useAuth } from '@/hooks/use-auth'
 import { HOME_BY_ROLE, type UserRole } from '@/lib/types'
 
+/**
+ * The pre-shell wait, before we know who is signed in.
+ *
+ * `fullScreen` here and nowhere else: at this point there is no sidebar or
+ * header to leave usable, because the portal shell has not been decided yet.
+ * Every other use of this loader fills the outlet instead.
+ */
 function FullPageSpinner() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Loading" />
-    </div>
-  )
+  return <AppLoader size="lg" fullScreen />
 }
 
 /** Requires a session. Remembers where the user was headed. */
