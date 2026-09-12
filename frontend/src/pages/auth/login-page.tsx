@@ -1,5 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { CheckCircle2, Loader2, Lock, Mail, MailWarning } from 'lucide-react'
+import {
+  CheckCircle2,
+  Lock,
+  Mail,
+  MailWarning,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -126,7 +131,6 @@ export default function LoginPage() {
                   >
                     {resendState === 'sending' ? (
                       <>
-                        <Loader2 className="size-4 animate-spin" />
                         Sending...
                       </>
                     ) : (
@@ -178,7 +182,6 @@ export default function LoginPage() {
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="size-4 animate-spin" />
               Signing in...
             </>
           ) : (
