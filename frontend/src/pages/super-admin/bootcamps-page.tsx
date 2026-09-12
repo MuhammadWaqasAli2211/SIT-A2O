@@ -30,7 +30,6 @@ import { bootcampApi, platformApi } from '@/features/admin/api'
 import {
   AsyncSection,
   BootcampStatusBadge,
-  CardsSkeleton,
   ConfirmDialog,
   useConfirm,
 } from '@/features/admin/components'
@@ -99,7 +98,6 @@ export default function SuperAdminBootcampsPage() {
         initialLoading={initialLoading}
         error={error}
         onRetry={refetch}
-        skeleton={<CardsSkeleton count={4} />}
       >
         {bootcamps.length === 0 ? (
           <EmptyState
