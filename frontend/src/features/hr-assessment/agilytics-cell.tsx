@@ -14,9 +14,10 @@
  * both would state something we have not checked.
  */
 
-import { Loader2, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useState } from 'react'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { agilyticsApi } from '@/features/admin/api'
@@ -80,8 +81,8 @@ export function AgilyticsCell({
       disabled={check.pending || !email}
       aria-label={`Check Agilytics status for ${email ?? 'this candidate'}`}
     >
-      {check.pending ? <Loader2 className="size-3 animate-spin" /> : <Search className="size-3" />}
-      Check
+      <Search className="size-3" />
+      <PendingLabel idle="Check" pending="Checking…" isPending={check.pending} />
     </Button>
   )
 }
