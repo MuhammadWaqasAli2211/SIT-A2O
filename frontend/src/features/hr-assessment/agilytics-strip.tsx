@@ -19,11 +19,18 @@
  * without it rather than inventing a cross-intake aggregate.
  */
 
-import { AlertTriangle, CheckCircle2, Loader2, Send, Sparkles, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Send,
+  Sparkles,
+  Users,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Reveal } from '@/components/motion/reveal'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -78,12 +85,12 @@ export function AgilyticsStrip({
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {!state.data.provisioned ? (
                 <Button onClick={() => void openConfirm.run()} disabled={openConfirm.pending}>
-                  {openConfirm.pending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-4" />
-                  )}
-                  Provision in Agilytics
+                  <Sparkles className="size-4" />
+                  <PendingLabel
+                    idle="Provision in Agilytics"
+                    pending="Provisioning…"
+                    isPending={openConfirm.pending}
+                  />
                 </Button>
               ) : (
                 <Button variant="outline" onClick={onSendInvites}>
