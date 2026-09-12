@@ -426,10 +426,21 @@
     background-color: color-mix(in oklch, var(--primary), transparent 75%);
   }
 
-  /* Honour the OS reduced-motion setting: decoration stops, content stays. */
+  /* Honour the OS reduced-motion setting: decoration stops, content stays.
+   *
+   * `.motion-essential` opts an element out, and exactly one thing wears it:
+   * the app loader. Its rotation is not decoration — it is the only signal
+   * that the app is working rather than broken, and a frozen loader reads as
+   * a hung page. Everything else here is flourish and genuinely should stop.
+   *
+   * The opt-out has to live in this selector rather than in an override
+   * elsewhere. This rule is inside `@layer base`, and cascade layers invert
+   * for `!important`: a layered `!important` beats an unlayered one, so no
+   * amount of `!important` further down the stylesheet can escape it. The
+   * only way out is not to be matched. */
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    *, *::before, *::after {
+    *:not(.motion-essential), *::before, *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
@@ -560,5 +571,133 @@
 @media (prefers-reduced-motion: reduce) {
   .stagger-rise {
     animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- loader --
+ * The brand loader (components/shared/loader.tsx). Two motions layered: the
+ * whole arc rotates, and its dash offset runs backwards at a different rate,
+ * so the visible segment grows and shrinks as it travels instead of sliding
+ * round at a constant length. That second motion is what stops it reading as
+ * a plain spinner.
+ *
+ * The gradient endpoints are tokens rather than literals so the arc follows
+ * the theme — the same blue-into-green the mark uses, and its lighter dark
+ * mode pair — instead of staying a fixed pair of hexes over a dark ground.
+ */
+:root {
+  --loader-from: var(--primary);
+  --loader-to: var(--flow-500);
+}
+
+@keyframes brand-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes brand-spin-dash {
+  0% {
+    stroke-dasharray: 8 92;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 46 54;
+    stroke-dashoffset: -18;
+  }
+  100% {
+    stroke-dasharray: 8 92;
+    stroke-dashoffset: -100;
+  }
+}
+
+.brand-spin {
+  transform-origin: center;
+  animation: brand-spin 1.6s linear infinite;
+  color: var(--muted-foreground);
+}
+
+.brand-spin-dash {
+  animation: brand-spin-dash 1.6s cubic-bezier(0.45, 0.05, 0.35, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still turns, so it is still legible as "working" — just slowly, and
+     without the dash pulsing underneath it. */
+  .brand-spin {
+    animation-duration: 3.2s;
+  }
+  .brand-spin-dash {
+    animation: none;
+    stroke-dasharray: 28 72;
+  }
+}
+
+/* ----------------------------------------------------------- app loader --
+ * The three rings of components/shared/app-loader.tsx.
+ *
+ * Earlier versions animated a `transform: rotate()` on the ring itself (or
+ * on a point orbiting inside it) — in both cases the whole shape moved. The
+ * current design keeps every ring's ellipse completely static (a fixed 3D
+ * tilt, set once, never animated) and instead animates `stroke-dashoffset`
+ * on its SVG circle: a comet-length dash chases around a path that never
+ * itself moves, the same racetrack-with-a-moving-light technique as
+ * `.brand-spin-dash` above. Each ring's `<circle>` sets `pathLength="100"`,
+ * which lets `stroke-dasharray`/`stroke-dashoffset` here be written in
+ * normalized 0-100 units regardless of that ring's actual pixel radius —
+ * one pair of keyframes covers every size and every ring.
+ *
+ * Three durations, no two of them multiples of each other, and the middle one
+ * reversed: that is what stops the group settling into a repeating pose. Equal
+ * or harmonically related speeds make the orbits re-align every few seconds
+ * and the whole thing reads as a short looping GIF rather than as motion.
+ */
+@keyframes page-ring-cw {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes page-ring-ccw {
+  to {
+    stroke-dashoffset: 100;
+  }
+}
+
+.page-ring-a {
+  animation: page-ring-cw 0.9s linear infinite;
+}
+
+.page-ring-b {
+  animation: page-ring-ccw 1.15s linear infinite;
+}
+
+.page-ring-c {
+  animation: page-ring-cw 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* `!important`, and this is the one place in the stylesheet that earns it.
+   *
+   * The global reduced-motion reset in the base layer above sets
+   * `animation-duration: 0.01ms !important` and `animation-iteration-count: 1
+   * !important` on every element. That is right for decoration and wrong for
+   * exactly one thing: a loader is the only animation here that carries
+   * information rather than flourish. Under that reset all three comets
+   * completed instantly and parked at their start offset, so the loader
+   * rendered as a frozen graphic — three static crossed ellipses with no
+   * visible light on them, which read as a broken page rather than a busy
+   * one. Measured 2026-09-11: playState `none`, angle 0deg at every sample
+   * (from the transform-based version this replaced; the same reset applies
+   * identically to the dashoffset version).
+   *
+   * So it keeps travelling, but it respects what the setting is actually
+   * for. The vestibular risk in a spinner is speed, not motion as such — the
+   * ellipse itself was already never rotating, so there is nothing left to
+   * counter-rotate. All three simply slow down together. */
+  .page-ring-a,
+  .page-ring-b,
+  .page-ring-c {
+    animation-duration: 6s;
   }
 }
