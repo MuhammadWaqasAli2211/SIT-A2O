@@ -402,6 +402,54 @@ def assert_phase_open(db: Session, bootcamp_id: uuid.UUID, phase: PhaseType) -> 
     return row
 
 
+def phase_closure(phase: BootcampPhase, *, now: datetime | None = None) -> str | None:
+    """Why this phase is refusing activity right now, or None if it is not.
+
+    Deliberately *not* `is_phase_open()` inverted. That one answers "is this
+    phase running", and treats an untouched phase — flag false, no dates,
+    which is exactly how `create` writes all four — as not running. Gating
+    candidate activity on that would retroactively shut the Student's Folder
+    for every candidate already inside it, because nothing in the product has
+    ever opened the FORM or ONBOARDING phase.
+
+    This answers the narrower question a gate actually needs: has anybody
+    *decided* this phase is shut? Two things count, and they are precisely the
+    two the phases screen offers:
+
+      - an explicit close an admin has not since undone (`closed_at`, which
+        `set_phase_open` clears on reopen), which wins outright so that a
+        manual close beats a deadline that has not arrived yet; and
+      - a deadline that has since passed, for when nobody clicked anything.
+
+    A phase nobody has configured is neither, and so gates nothing.
+    """
+    if phase.closed_at is not None and not phase.is_open:
+        return "closed"
+
+    moment = now or datetime.now(UTC)
+    if phase.deadline_at and moment > phase.deadline_at:
+        return "expired"
+    return None
+
+
+def assert_phase_accepts(db: Session, bootcamp_id: uuid.UUID, phase: PhaseType) -> BootcampPhase:
+    """Refuse candidate activity in a phase an admin has closed or let lapse.
+
+    The counterpart to `assert_phase_open` for the back half of the journey.
+    Registration and the interview round are gated by that stricter rule —
+    they are opt-in windows an admin deliberately opens — whereas the Student's
+    Folder is opt-out: it runs by default for anyone who has cleared the
+    Physical Interview, until somebody closes it.
+    """
+    row = get_phase(db, bootcamp_id, phase)
+    reason = phase_closure(row)
+    if reason == "closed":
+        raise PhaseClosedError(f"The {phase.value.lower()} stage has been closed.")
+    if reason == "expired":
+        raise PhaseClosedError(f"The deadline for the {phase.value.lower()} stage has passed.")
+    return row
+
+
 def set_phase_open(
     db: Session, bootcamp_id: uuid.UUID, phase: PhaseType, *, is_open: bool, actor: Profile
 ) -> BootcampPhase:
