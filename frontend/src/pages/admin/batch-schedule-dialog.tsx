@@ -9,10 +9,11 @@
  * back rather than leaving an admin guessing which half was booked.
  */
 
-import { AlertTriangle, CalendarPlus, Loader2, Users } from 'lucide-react'
+import { AlertTriangle, CalendarPlus, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -248,9 +249,13 @@ export function BatchScheduleDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={slots.length === 0 || schedule.pending}>
-            {schedule.pending && <Loader2 className="size-4 animate-spin" />}
-            Schedule {slots.length > 0 ? slots.length : ''} interview
-            {slots.length === 1 ? '' : 's'}
+            <PendingLabel
+              isPending={schedule.pending}
+              idle={`Schedule ${slots.length > 0 ? slots.length : ''} interview${
+                slots.length === 1 ? '' : 's'
+              }`}
+              pending="Scheduling…"
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
