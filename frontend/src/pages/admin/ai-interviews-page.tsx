@@ -15,13 +15,7 @@
  * this only stops the click.
  */
 
-import {
-  AlertTriangle,
-  BrainCircuit,
-  CheckCircle2,
-  RefreshCw,
-  XCircle,
-} from 'lucide-react'
+import { AlertTriangle, BrainCircuit, CheckCircle2, RefreshCw, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
@@ -38,14 +32,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { aiInterviewApi } from '@/features/admin/api'
-import {
-  AsyncSection,
-  BootcampSwitcher,
-  NoBootcampSelected,
-} from '@/features/admin/components'
+import { AsyncSection, BootcampSwitcher, BootcampGate } from '@/features/admin/components'
 import { AnnounceResultsControl } from '@/features/ai-interview/announce-control'
 import { useAiPermissions } from '@/features/ai-interview/use-permissions'
 import { CompletedInterviewsPanel } from '@/features/ai-interview/completed-interviews'
@@ -91,31 +80,35 @@ export default function AdminAiInterviewsPage() {
         }
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected icon={BrainCircuit} />
-      ) : (
-        <Tabs defaultValue="results">
-          <TabsList>
-            <TabsTrigger value="results">Results</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
-            <TabsTrigger value="reinterviews">Reinterview requests</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
+      <BootcampGate icon={BrainCircuit}>
+        {(selectedId) => (
+          <Tabs defaultValue="completed">
+            {/* Completed first: it is the roster an admin actually works from,
+              and what they land on after a round of interviews. Results is
+              the one-off announce control for the whole intake — consulted
+              once, not worked through. */}
+            <TabsList>
+              <TabsTrigger value="completed">Completed</TabsTrigger>
+              <TabsTrigger value="results">Results</TabsTrigger>
+              <TabsTrigger value="reinterviews">Reinterview requests</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="results">
-            <ResultsTab bootcampId={selectedId} />
-          </TabsContent>
-          <TabsContent value="completed">
-            <CompletedInterviewsPanel bootcampId={selectedId} />
-          </TabsContent>
-          <TabsContent value="reinterviews">
-            <ReinterviewsTab bootcampId={selectedId} />
-          </TabsContent>
-          <TabsContent value="analytics">
-            <AnalyticsTab bootcampId={selectedId} bootcampName={selected?.name} />
-          </TabsContent>
-        </Tabs>
-      )}
+            <TabsContent value="completed">
+              <CompletedInterviewsPanel bootcampId={selectedId} />
+            </TabsContent>
+            <TabsContent value="results">
+              <ResultsTab bootcampId={selectedId} />
+            </TabsContent>
+            <TabsContent value="reinterviews">
+              <ReinterviewsTab bootcampId={selectedId} />
+            </TabsContent>
+            <TabsContent value="analytics">
+              <AnalyticsTab bootcampId={selectedId} bootcampName={selected?.name} />
+            </TabsContent>
+          </Tabs>
+        )}
+      </BootcampGate>
     </>
   )
 }
@@ -143,12 +136,7 @@ function ResultsTab({ bootcampId }: { bootcampId: string }) {
         </Button>
       </div>
 
-      <AsyncSection
-        initialLoading={initialLoading}
-        error={error}
-        onRetry={refresh}
-        skeleton={<Skeleton className="h-56 w-full rounded-xl" />}
-      >
+      <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
         {rows.length === 0 ? (
           <EmptyState
             icon={BrainCircuit}
@@ -158,11 +146,7 @@ function ResultsTab({ bootcampId }: { bootcampId: string }) {
         ) : (
           <div className="flex flex-col gap-3">
             {rows.map((row, index) => (
-              <InterviewRow
-                key={recordId(row) ?? index}
-                record={row}
-                onOpen={() => setOpen(row)}
-              />
+              <InterviewRow key={recordId(row) ?? index} record={row} onOpen={() => setOpen(row)} />
             ))}
           </div>
         )}
@@ -232,18 +216,13 @@ function ReinterviewsTab({ bootcampId }: { bootcampId: string }) {
         <Alert>
           <AlertTriangle className="size-4" />
           <AlertDescription>
-            You can see reinterview requests but not decide them. A super admin can grant
-            the permission.
+            You can see reinterview requests but not decide them. A super admin can grant the
+            permission.
           </AlertDescription>
         </Alert>
       )}
 
-      <AsyncSection
-        initialLoading={initialLoading}
-        error={error}
-        onRetry={refetch}
-        skeleton={<Skeleton className="h-40 w-full rounded-xl" />}
-      >
+      <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
         {rows.length === 0 ? (
           <EmptyState
             icon={RefreshCw}
@@ -314,8 +293,8 @@ function DecisionDialog({
         <DialogHeader>
           <DialogTitle>Reinterview for {record ? candidateName(record) : ''}</DialogTitle>
           <DialogDescription>
-            Approving lets this candidate take the interview again. The decision is recorded
-            in the platform audit trail either way.
+            Approving lets this candidate take the interview again. The decision is recorded in the
+            platform audit trail either way.
           </DialogDescription>
         </DialogHeader>
 
@@ -357,13 +336,7 @@ function DecisionDialog({
 
 /* ------------------------------------------------------------ analytics -- */
 
-function AnalyticsTab({
-  bootcampId,
-  bootcampName,
-}: {
-  bootcampId: string
-  bootcampName?: string
-}) {
+function AnalyticsTab({ bootcampId, bootcampName }: { bootcampId: string; bootcampName?: string }) {
   const { data, error, initialLoading, refetch } = useAsync(
     () => aiInterviewApi.analytics(bootcampId),
     [bootcampId],
@@ -371,12 +344,7 @@ function AnalyticsTab({
 
   return (
     <div className="flex flex-col gap-4 pt-4">
-      <AsyncSection
-        initialLoading={initialLoading}
-        error={error}
-        onRetry={refetch}
-        skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
-      >
+      <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
         {data && (
           <div className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-3">
@@ -394,8 +362,7 @@ function AnalyticsTab({
                 <CardHeader>
                   <CardTitle className="text-base">Score distribution</CardTitle>
                   <CardDescription>
-                    Completed AI interviews for {bootcampName ?? 'this intake'}, in ten-point
-                    bands.
+                    Completed AI interviews for {bootcampName ?? 'this intake'}, in ten-point bands.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="h-72">
@@ -413,10 +380,7 @@ function AnalyticsTab({
                       >
                         <XAxis dataKey="band" {...AXIS} />
                         <YAxis {...AXIS} allowDecimals={false} />
-                        <Tooltip
-                          {...chartTooltipStyle}
-                          cursor={{ fill: 'var(--color-muted)' }}
-                        />
+                        <Tooltip {...chartTooltipStyle} cursor={{ fill: 'var(--color-muted)' }} />
                         <Bar dataKey="count" name="Candidates" radius={[6, 6, 0, 0]}>
                           {data.distribution.map((band, index) => (
                             <Cell
