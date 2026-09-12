@@ -10,7 +10,10 @@ import { api } from '@/lib/api-client'
 import type {
   AdminApplicationDetail,
   AdminGrants,
+  AgilyticsEligibleList,
+  AgilyticsInviteOutcome,
   AgilyticsInviteResult,
+  AgilyticsJoinSyncResult,
   AgilyticsMemberStatus,
   AgilyticsProvisionResult,
   AgilyticsWorkspaceState,
@@ -627,6 +630,36 @@ export const agilyticsApi = {
     get<AgilyticsMemberStatus>(
       `/bootcamps/${bootcampId}/agilytics/members/${encodeURIComponent(email)}`,
     ),
+
+  /** Who could be invited, split by whether they already have been. Reads our
+   *  own database only — no Agilytics call, so it is cheap enough to drive the
+   *  folder badges as well as the modal. */
+  eligible: (bootcampId: string) =>
+    get<AgilyticsEligibleList>(`/bootcamps/${bootcampId}/agilytics/eligible`),
+
+  /** Stages invites, then confirms each candidate's membership before stamping
+   *  them. `application_ids` chooses whose membership is verified — it cannot
+   *  narrow the bulk-invite itself, which always covers every pending member. */
+  async invite(
+    bootcampId: string,
+    payload: { application_ids: string[]; subject?: string; body_html?: string },
+  ) {
+    const { data } = await api.post<AgilyticsInviteOutcome>(
+      `/bootcamps/${bootcampId}/agilytics/invite`,
+      payload,
+    )
+    return data
+  },
+
+  /** Checks invited candidates for a join and advances those who have to
+   *  Onboarded. One request to Agilytics per un-joined candidate, which is why
+   *  it is an explicit action rather than something a page load triggers. */
+  async syncJoins(bootcampId: string) {
+    const { data } = await api.post<AgilyticsJoinSyncResult>(
+      `/bootcamps/${bootcampId}/agilytics/sync-joins`,
+    )
+    return data
+  },
 }
 
 export const permissionApi = {
