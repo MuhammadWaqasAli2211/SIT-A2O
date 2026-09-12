@@ -7,26 +7,47 @@ alongside the reused validation and gating.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
 from app.core.exceptions import ConflictError
 from app.models.application import Application
-from app.models.enums import DocumentStatus, OnboardingDocumentType, UserRole
+from app.models.bootcamp import BootcampPhase
+from app.models.enums import DocumentStatus, OnboardingDocumentType, PhaseType, UserRole
 from app.models.onboarding import OnboardingDocument
 from app.models.user import Profile
 from app.services import onboarding_document_service as svc
+from app.services.bootcamp_service import PhaseClosedError
 
 DT = OnboardingDocumentType
 
 
+def form_phase(**kwargs) -> BootcampPhase:
+    """The FORM phase as `create` leaves it — flag false, never touched, and
+    so not a gate. See `phase_closure`."""
+    defaults = {
+        "phase": PhaseType.FORM,
+        "is_open": False,
+        "opens_at": None,
+        "deadline_at": None,
+        "closed_at": None,
+    }
+    return BootcampPhase(**{**defaults, **kwargs})
+
+
 class FakeSession:
-    def __init__(self, existing=None):
+    def __init__(self, existing=None, phase=None):
         self._existing = existing
+        self._phase = phase if phase is not None else form_phase()
         self.added = []
         self.deleted = []
 
-    def scalar(self, _stmt):
+    def scalar(self, stmt):
+        # `get_phase` and upload()'s own supersede lookup both land here, so
+        # tell them apart by what the statement selects rather than by order.
+        if stmt.column_descriptions[0]["entity"] is BootcampPhase:
+            return self._phase
         return self._existing
 
     def scalars(self, _stmt):
@@ -144,6 +165,23 @@ def test_a_second_cv_upload_supersedes_the_first(monkeypatch):
     upload(session, doc_type=DT.CV)
 
     assert existing in session.deleted
+
+
+def test_upload_is_refused_once_an_admin_closes_the_form_phase(monkeypatch):
+    """The Documents Hub is the back half of the Student's Folder, so the same
+    close that stops form submissions stops uploads — leaving one half live
+    was the state this gate replaced."""
+    monkeypatch.setattr(svc.onboarding_form_service, "hub_unlocked", lambda rows: True)
+    closed = form_phase(closed_at=datetime(2026, 9, 1, tzinfo=UTC))
+    with pytest.raises(PhaseClosedError, match="has been closed"):
+        upload(FakeSession(phase=closed), doc_type=DT.CV)
+
+
+def test_upload_is_refused_once_the_deadline_has_passed(monkeypatch):
+    monkeypatch.setattr(svc.onboarding_form_service, "hub_unlocked", lambda rows: True)
+    lapsed = form_phase(is_open=True, deadline_at=datetime(2020, 1, 1, tzinfo=UTC))
+    with pytest.raises(PhaseClosedError, match="deadline"):
+        upload(FakeSession(phase=lapsed), doc_type=DT.CV)
 
 
 def test_replacing_an_accepted_single_file_document_is_refused(monkeypatch):
