@@ -377,7 +377,52 @@ def list_completed(db: Session, actor: Profile, bootcamp_id: uuid.UUID | None = 
         if external_id in ids or (email and email.strip().lower() in emails):
             matched.append(_hydrate(interview, index))
 
+    # Catch up anyone who finished after their intake's results went out.
+    # Without this the screen self-heals only when the candidate happens to
+    # open their own portal, which is the wrong way round: this table is where
+    # an admin notices the row is stuck, so it is where it should un-stick.
+    _reconcile_announced(db, matched, actor)
+
     return {"items": matched, "stats": _completed_stats(matched)}
+
+
+def _reconcile_announced(db: Session, matched: list[dict], actor: Profile) -> None:
+    """Apply announced verdicts to rows the announce sweep could not have seen.
+
+    A write during a read, like `_mark_interviewed` in `candidate_score`, and
+    for the same reason: this backend has no scheduler and InterviewerAI sends
+    no webhook, so "somebody finished" is only ever knowable when something
+    asks. Cheap in the common case — every row is already past this point, so
+    the loop does nothing and no flush happens.
+
+    Grouped by intake so the announced-flag lookup is one query per bootcamp
+    rather than one per candidate.
+    """
+    announced: dict[uuid.UUID, bool] = {}
+    moved = False
+
+    for row in matched:
+        known = row.get("local")
+        if not known or not known.get("application_id"):
+            continue
+        application = db.get(Application, uuid.UUID(known["application_id"]))
+        if application is None:
+            continue
+        if application.bootcamp_id not in announced:
+            announced[application.bootcamp_id] = _results_announced(db, application.bootcamp_id)
+        if not announced[application.bootcamp_id]:
+            continue
+        if _apply_announced_outcome(db, application, extract_score(row), actor):
+            moved = True
+            # The row was hydrated before the move, so refresh what the table
+            # renders from — otherwise the admin sees the stale stage until
+            # their next poll and reads the fix as not having worked. These
+            # are the two fields the Decision column is derived from.
+            known["application_stage"] = application.stage.value
+            known["application_status"] = application.status.value
+
+    if moved:
+        db.flush()
 
 
 # ------------------------------------------------------------- announcing --
@@ -612,6 +657,17 @@ def _advance_on_announce(
     the only reason ConflictError is swallowed here.
     """
     for application_id, score in scores.items():
+        application = db.get(Application, application_id)
+        # Only candidates still waiting on this verdict. Without this guard the
+        # sweep walked people *backwards*: an intake announced a second time
+        # (or announced after somebody had already cleared their Physical
+        # Interview) sent a candidate sitting at FORM — paperwork submitted,
+        # documents uploaded — back to PHYSICAL_INTERVIEW, because
+        # `advance_stage` only refuses a move to the stage you are already on
+        # and has no opinion about direction. Observed on B07-008, 2026-09-10.
+        if application is None or not _awaiting_verdict(application):
+            continue
+
         if score is not None and score >= PASS_THRESHOLD:
             to_stage = ApplicationStage.PHYSICAL_INTERVIEW
             reason = f"AI interview score: {score:.0f}/100"
@@ -619,6 +675,9 @@ def _advance_on_announce(
             to_stage = ApplicationStage.REJECTED
             reason = f"AI interview score: {score:.0f}/100"
         else:
+            # Unlike the live path, a missing score here really does mean
+            # "never sat it": the announce gate has already established that
+            # the deadline has passed.
             to_stage = ApplicationStage.REJECTED
             reason = "AI interview not completed before the deadline"
 
@@ -628,6 +687,20 @@ def _advance_on_announce(
             )
         except (ConflictError, NotFoundError):
             continue
+
+
+def _awaiting_verdict(application: Application) -> bool:
+    """Whether this application is still waiting on its AI interview verdict.
+
+    The two stages that mean "interview done or due, nothing decided". Anything
+    further along was decided — by an earlier announce, or by an admin acting
+    on the Completed table, or at the Physical Interview afterwards — and
+    re-deciding it would overwrite that.
+    """
+    return application.status == ApplicationStatus.ACTIVE and application.stage in (
+        ApplicationStage.INTERVIEW_SCHEDULED,
+        ApplicationStage.AI_INTERVIEWED,
+    )
 
 
 def mark_result_seen(db: Session, user: Profile) -> None:
@@ -1038,6 +1111,14 @@ def candidate_score(db: Session, user: Profile) -> dict:
     # actually moved), so it is safe to check on every poll.
     _mark_interviewed(db, application)
 
+    # And, if this intake's results are already out, apply the verdict too.
+    # The announce sweep only covers who had finished at the time it ran; this
+    # is the same rule catching everyone who finishes after it. Idempotent —
+    # a no-op once the stage has actually moved — so it is safe on every poll,
+    # for the same reason `_mark_interviewed` above is.
+    if _results_announced(db, bootcamp_id):
+        _apply_announced_outcome(db, application, score)
+
     if invite.admin_notified_at is None:
         # Detected here rather than by a background job: this backend has no
         # scheduler and InterviewerAI sends no webhook, so "a candidate just
@@ -1079,6 +1160,57 @@ def candidate_score(db: Session, user: Profile) -> dict:
         # the popup has actually rendered, never by this read.
         "result_seen": invite.result_seen_at is not None,
     }
+
+
+def _apply_announced_outcome(
+    db: Session, application: Application, score: float | None, actor: Profile | None = None
+) -> bool:
+    """Apply this intake's announced verdict to one late-completing candidate.
+
+    `_advance_on_announce` sweeps everybody at the instant the toggle is
+    flipped, which is correct for everyone who had finished by then and does
+    nothing at all for anyone who finishes afterwards. That gap is real:
+    `results_announced_at` is a latch, `set_results_visible` refuses to run a
+    second time, and the interview deadline can be moved back into the future
+    after an announcement — so an intake can legitimately still be taking
+    interviews while its results are already out. A candidate landing in that
+    window used to see their own score (the portal reads the announced flag)
+    while their stage sat at AI-INTERVIEWED for ever and the admin's Completed
+    table said "Awaiting decision", implying a manual step the design says
+    nobody has to take.
+
+    So the announcement is a standing rule, not a one-off batch: once results
+    are out for an intake, every result that lands afterwards is applied on
+    the same terms. Same thresholds, same `advance_stage` call and therefore
+    the same audit row, stage transition and candidate notification as the
+    sweep — deliberately not a second implementation of the verdict.
+
+    Returns whether it moved anything, so callers can avoid a pointless flush.
+    """
+    # The same guard the sweep uses — one definition of "still waiting on this
+    # verdict", so the batch and the live path can never disagree about who is
+    # eligible to be moved.
+    if not _awaiting_verdict(application):
+        return False
+
+    if score is not None and score >= PASS_THRESHOLD:
+        to_stage = ApplicationStage.PHYSICAL_INTERVIEW
+        reason = f"AI interview score: {score:.0f}/100 (announced)"
+    elif score is not None:
+        to_stage = ApplicationStage.REJECTED
+        reason = f"AI interview score: {score:.0f}/100 (announced)"
+    else:
+        return False
+
+    try:
+        application_service.advance_stage(
+            db, application.id, to_stage=to_stage, actor=actor, reason=reason
+        )
+    except (ConflictError, NotFoundError, PermissionDeniedError):
+        # Same tolerance as the sweep: one row that cannot move must not break
+        # the read it was riding on.
+        return False
+    return True
 
 
 def _mark_interviewed(db: Session, application: Application) -> None:
