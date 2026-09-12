@@ -1,7 +1,13 @@
-import { GraduationCap, Loader2, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import {
+  GraduationCap,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -392,8 +398,11 @@ function ProgramForm({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSave}>
-            {save.pending && <Loader2 className="size-4 animate-spin" />}
-            {isEdit ? 'Save changes' : 'Create program'}
+            <PendingLabel
+              isPending={save.pending}
+              idle={isEdit ? 'Save changes' : 'Create program'}
+              pending={isEdit ? 'Saving…' : 'Creating…'}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>
