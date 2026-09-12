@@ -25,8 +25,7 @@ import {
   AsyncSection,
   BootcampStatusBadge,
   BootcampSwitcher,
-  CardsSkeleton,
-  NoBootcampSelected,
+  BootcampGate,
 } from '@/features/admin/components'
 import { ApplicationHeatmap } from '@/features/admin/application-heatmap'
 import { bootcampApi } from '@/features/admin/api'
@@ -68,7 +67,7 @@ function formatDateTime(iso: string) {
 }
 
 export default function AdminDashboardPage() {
-  const { selected, selectedId } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading } = useBootcamp()
 
   // Live rather than a one-shot fetch: an admin advancing a candidate from
   // the AI interview report screen (or any other screen) has no shared cache
@@ -85,9 +84,11 @@ export default function AdminDashboardPage() {
       <PageHeader
         title="Bootcamp dashboard"
         description={
-          selected
-            ? `Live figures for ${selected.name}.`
-            : 'Pick an intake to see how it is tracking.'
+          bootcampLoading
+            ? undefined
+            : selected
+              ? `Live figures for ${selected.name}.`
+              : 'Pick an intake to see how it is tracking.'
         }
         actions={
           <>
@@ -99,21 +100,16 @@ export default function AdminDashboardPage() {
         }
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected />
-      ) : (
-        <>
-          <LiveIndicator lastUpdated={lastUpdated} live={live} className="mb-4" />
-          <AsyncSection
-            initialLoading={initialLoading}
-            error={error}
-            onRetry={refresh}
-            skeleton={<CardsSkeleton />}
-          >
-            {data && <DashboardBody stats={data} />}
-          </AsyncSection>
-        </>
-      )}
+      <BootcampGate>
+        {(_selectedId) => (
+          <>
+            <LiveIndicator lastUpdated={lastUpdated} live={live} className="mb-4" />
+            <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
+              {data && <DashboardBody stats={data} />}
+            </AsyncSection>
+          </>
+        )}
+      </BootcampGate>
     </>
   )
 }
@@ -227,7 +223,10 @@ function DashboardBody({ stats }: { stats: BootcampStats }) {
           is what made it read as an afterthought. */}
       <ApplicationHeatmap points={stats.application_activity} />
 
-      <FunnelWidget bootcampId={stats.bootcamp_id} physicalInterviewFunnel={stats.physical_interview_funnel} />
+      <FunnelWidget
+        bootcampId={stats.bootcamp_id}
+        physicalInterviewFunnel={stats.physical_interview_funnel}
+      />
 
       <Suspense fallback={<Skeleton className="h-80 w-full rounded-xl" />}>
         <DashboardCharts stats={stats} />
@@ -284,7 +283,9 @@ function MiniStat({
           <span className="text-[0.6rem] font-medium tracking-wide text-muted-foreground uppercase">
             {label}
           </span>
-          <span className="text-base font-bold tracking-tight tabular-nums sm:text-lg">{value}</span>
+          <span className="text-base font-bold tracking-tight tabular-nums sm:text-lg">
+            {value}
+          </span>
           <span className="truncate text-[0.7rem] text-muted-foreground">{hint}</span>
         </div>
       </CardContent>
@@ -325,7 +326,11 @@ function PipelineCard({ stats }: { stats: BootcampStats }) {
                 className={cn('h-full rounded-full', STAGE_BAR[row.stage])}
                 initial={{ width: 0 }}
                 animate={{ width: `${(row.count / max) * 100}%` }}
-                transition={{ duration: 0.6, delay: 0.1 + index * 0.04, ease: 'easeOut' }}
+                transition={{
+                  duration: 0.6,
+                  delay: 0.1 + index * 0.04,
+                  ease: 'easeOut',
+                }}
               />
             </div>
             <span className="w-16 shrink-0 text-right text-sm font-medium tabular-nums">
@@ -351,10 +356,7 @@ function UpcomingCard({ stats }: { stats: BootcampStats }) {
           <CardTitle className="text-base">Next interviews</CardTitle>
           <CardDescription>The soonest scheduled slots.</CardDescription>
         </div>
-        <Link
-          to="/admin/interviews"
-          className={buttonVariants({ size: 'sm', variant: 'outline' })}
-        >
+        <Link to="/admin/interviews" className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           <CalendarClock className="size-3.5" />
           Manage
         </Link>
@@ -393,4 +395,3 @@ function UpcomingCard({ stats }: { stats: BootcampStats }) {
     </Card>
   )
 }
-
