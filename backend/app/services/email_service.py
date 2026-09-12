@@ -18,6 +18,7 @@ from string import Template
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, aliased
 
+from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError
 from app.integrations import gmail_api
 from app.models.application import Application
@@ -485,3 +486,194 @@ def send_registration_confirmation(
             candidate_code,
             to,
         )
+
+
+# ------------------------------------ physical interview outcome emails --
+# Both are sent from `physical_interview_service.record_result`, after the
+# stage move is already committed. They follow send_registration_confirmation's
+# contract exactly: never raise, log the candidate code on failure so a
+# missing message can be traced and resent by hand. A decision that has been
+# recorded must not be reported back to the admin as a failure because Gmail
+# was unreachable.
+
+
+def _shell(body_html: str) -> str:
+    """The wrapper every transactional email shares.
+
+    Extracted when the outcome emails below were added rather than pasting a
+    third copy of the same container and footer.
+    """
+    return f"""\
+<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;
+            color:#1f2937;max-width:600px">
+{body_html}
+  <p style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;
+            color:#9ca3af;font-size:13px">
+    Saylani Mass IT Training
+  </p>
+</div>"""
+
+
+def _deliver(*, to: str, subject: str, html_body: str, text_body: str, what: str, code: str) -> None:
+    try:
+        message_id = send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+        logger.info("%s sent", what, extra={"code": code, "id": message_id})
+    except Exception:
+        logger.exception(
+            "%s FAILED to send for %s (%s). The decision was still recorded; "
+            "resend by hand.",
+            what,
+            code,
+            to,
+        )
+
+
+def send_physical_interview_selected(
+    *, to: str, full_name: str | None, candidate_code: str, bootcamp_name: str
+) -> None:
+    """Tell a candidate they cleared the Physical Interview, and what to do next.
+
+    The single action is the onboarding form in Student's Folder, so the email
+    says that once, plainly, with one link. Everything the candidate has to do
+    is inside that tab — listing the four forms here would only go stale
+    against the sequence the folder itself enforces.
+    """
+    name = (full_name or "").strip() or "there"
+    folder_url = f"{settings.FRONTEND_URL.rstrip('/')}/dashboard/documents"
+
+    subject = f"You have been selected — {candidate_code}"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        f"Congratulations. You have cleared the Physical Interview for "
+        f"{bootcamp_name} and have been selected to continue.\n\n"
+        "WHAT TO DO NEXT\n"
+        "Sign in to your bootcamp portal and open Student's Folder, then "
+        "complete the onboarding form. You will be asked to upload your "
+        "documents once the form is done.\n\n"
+        f"{folder_url}\n\n"
+        f"Quote your candidate code, {candidate_code}, in any email you send "
+        "us.\n\n"
+        "Please complete this promptly — your place is confirmed only once "
+        "your paperwork has been submitted and approved.\n\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hi {name},</p>
+
+  <p>
+    Congratulations. You have cleared the Physical Interview for
+    <strong>{bootcamp_name}</strong> and have been selected to continue.
+  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f0fdf4;
+              border-left:4px solid #16a34a;border-radius:6px">
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:1px;
+              text-transform:uppercase;color:#15803d">What to do next</p>
+    <p style="margin:0;color:#166534">
+      Sign in to your bootcamp portal, open <strong>Student's Folder</strong>,
+      and complete the onboarding form. You will be asked to upload your
+      documents once the form is done.
+    </p>
+  </div>
+
+  <p style="margin:24px 0">
+    <a href="{folder_url}"
+       style="display:inline-block;padding:12px 22px;background:#1800AD;color:#ffffff;
+              text-decoration:none;border-radius:6px;font-weight:600">
+      Open Student's Folder
+    </a>
+  </p>
+
+  <p style="color:#6b7280">
+    Quote your candidate code,
+    <strong style="font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#1f2937">{candidate_code}</strong>,
+    in any email you send us.
+  </p>
+
+  <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
+            border-radius:6px;font-size:14px;color:#374151">
+    Please complete this promptly — your place is confirmed only once your
+    paperwork has been submitted and approved.
+  </p>""")
+
+    _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Physical Interview selection email",
+        code=candidate_code,
+    )
+
+
+def send_physical_interview_rejected(
+    *, to: str, full_name: str | None, candidate_code: str, bootcamp_name: str
+) -> None:
+    """Tell a candidate their application ended at the Physical Interview.
+
+    Deliberately short, and deliberately carries no reason: the note an admin
+    records against the invite is an internal one, and `record_result` never
+    passes it here. Saying "we cannot enter into individual correspondence"
+    would be the honest reading of a decision that is final, so the email says
+    the round is closed and points at the next intake instead.
+    """
+    name = (full_name or "").strip() or "there"
+
+    subject = f"Your application to {bootcamp_name} — {candidate_code}"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        f"Thank you for attending the Physical Interview for {bootcamp_name}.\n\n"
+        "After careful consideration, your application has not been taken "
+        "forward on this occasion. We know this is disappointing, and we do "
+        "not say it lightly — places in each intake are limited, and many "
+        "capable candidates are not able to be accommodated.\n\n"
+        "You are welcome to apply again when the next intake opens. Nothing "
+        "about this decision counts against a future application.\n\n"
+        f"Your candidate code for this application was {candidate_code}.\n\n"
+        "We wish you the very best.\n\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hi {name},</p>
+
+  <p>
+    Thank you for attending the Physical Interview for
+    <strong>{bootcamp_name}</strong>.
+  </p>
+
+  <p>
+    After careful consideration, your application has not been taken forward on
+    this occasion. We know this is disappointing, and we do not say it lightly
+    — places in each intake are limited, and many capable candidates are not
+    able to be accommodated.
+  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f9fafb;
+              border-left:4px solid #9ca3af;border-radius:6px">
+    <p style="margin:0;color:#374151">
+      You are welcome to apply again when the next intake opens. Nothing about
+      this decision counts against a future application.
+    </p>
+  </div>
+
+  <p style="color:#6b7280">
+    Your candidate code for this application was
+    <strong style="font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#1f2937">{candidate_code}</strong>.
+  </p>
+
+  <p>We wish you the very best.</p>""")
+
+    _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Physical Interview rejection email",
+        code=candidate_code,
+    )
