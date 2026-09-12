@@ -11,7 +11,11 @@ from fastapi import APIRouter
 
 from app.api.deps import AdminUser, DbSession
 from app.schemas.agilytics import (
+    AgilyticsCandidateInviteRequest,
+    AgilyticsEligibleList,
+    AgilyticsInviteOutcome,
     AgilyticsInviteRequest,
+    AgilyticsJoinSyncResult,
     AgilyticsInviteResult,
     AgilyticsMemberStatus,
     AgilyticsProvisionResult,
@@ -85,6 +89,61 @@ def send_invites(
             body_html=payload.body_html,
         )
     )
+
+
+@router.get(
+    "/bootcamps/{bootcamp_id}/agilytics/eligible", response_model=AgilyticsEligibleList
+)
+def eligible(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsEligibleList:
+    """Who this intake could invite to Agilytics, split by already-invited.
+
+    Eligibility is having cleared the Physical Interview — nothing to do with
+    form or document progress. Read-only; no Agilytics call is made.
+    """
+    return agilytics_service.eligible(db, user, bootcamp_id)
+
+
+@router.post(
+    "/bootcamps/{bootcamp_id}/agilytics/invite", response_model=AgilyticsInviteOutcome
+)
+def invite(
+    bootcamp_id: uuid.UUID,
+    payload: AgilyticsCandidateInviteRequest,
+    user: AdminUser,
+    db: DbSession,
+) -> AgilyticsInviteOutcome:
+    """Stage invites, then confirm membership per candidate before stamping.
+
+    Their bulk-invite covers every pending member of the workspace and cannot
+    be narrowed, so `application_ids` says whose membership to confirm and
+    stamp afterwards — not who Agilytics invites.
+    """
+    return agilytics_service.invite(
+        db,
+        user,
+        bootcamp_id,
+        application_ids=payload.application_ids,
+        subject=payload.subject,
+        body_html=payload.body_html,
+    )
+
+
+@router.post(
+    "/bootcamps/{bootcamp_id}/agilytics/sync-joins", response_model=AgilyticsJoinSyncResult
+)
+def sync_joins(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsJoinSyncResult:
+    """Check invited candidates for a join, and advance those who have to
+    ONBOARDED.
+
+    An explicit action rather than something a page load triggers: it costs
+    one request to Agilytics per un-joined candidate, because their
+    workspace-wide response reports students as counts only.
+    """
+    return agilytics_service.sync_joins(db, user, bootcamp_id)
 
 
 @router.get(
