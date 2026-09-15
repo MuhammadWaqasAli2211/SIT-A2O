@@ -125,22 +125,61 @@ def test_status_with_an_email_signs_that_query_string(monkeypatch):
     )
 
 
-# ------------------------------------------------------------ bulk invite --
+# ---------------------------------------------------------------- onboard --
 
 
-def test_bulk_invite_sends_no_body_and_signs_the_empty_string(monkeypatch):
-    """Their endpoint takes no body. Sending `{}` would sign `"{}"` against a
-    server hashing an empty raw body, and be refused as a bad signature."""
+def test_onboard_sends_the_student_list_and_signs_those_bytes(monkeypatch):
+    """Unlike the endpoint this replaced, the member list is the request —
+    so what is signed has to be exactly what was selected."""
     capture = run(
         monkeypatch,
-        lambda: agilytics.bulk_invite(WORKSPACE),
-        respond({"success": True, "data": {"invitesIssued": 15}}),
+        lambda: agilytics.onboard(
+            WORKSPACE,
+            [
+                {"email": "one@example.com", "trackName": "Web Dev"},
+                {"email": "two@example.com"},
+            ],
+        ),
+        respond({"success": True, "data": {"onboardedCount": 2}}),
     )
 
+    sent = capture.seen["content"]
     assert capture.seen["method"] == "POST"
-    assert capture.seen["content"] is None
+    assert capture.seen["headers"]["x-portal-signature"] == agilytics.sign(sent.decode())
+    assert json.loads(sent) == {
+        "students": [
+            {"email": "one@example.com", "trackName": "Web Dev"},
+            {"email": "two@example.com"},
+        ]
+    }
+
+
+def test_onboard_targets_the_workspaces_own_path(monkeypatch):
+    capture = run(
+        monkeypatch,
+        lambda: agilytics.onboard(WORKSPACE, [{"email": "a@example.com"}]),
+        respond({"success": True, "data": {}}),
+    )
+
+    assert capture.seen["url"].endswith(f"/workspaces/{WORKSPACE}/onboard")
+
+
+# ------------------------------------------------------------------ stats --
+
+
+def test_stats_is_a_get_with_no_query_string(monkeypatch):
+    """Nothing to sign but the empty string: the workspace is in the path,
+    not a parameter."""
+    capture = run(
+        monkeypatch,
+        lambda: agilytics.stats(WORKSPACE),
+        respond({"success": True, "data": {"totalMembers": 27}}),
+    )
+
+    assert capture.seen["method"] == "GET"
     assert capture.seen["headers"]["x-portal-signature"] == agilytics.sign("")
-    assert capture.result == {"invitesIssued": 15}
+    assert capture.seen["url"].endswith(f"/workspaces/{WORKSPACE}/stats")
+    assert capture.result == {"totalMembers": 27}
 
 
 # ------------------------------------------------------------ provisioning --
@@ -155,7 +194,6 @@ def test_provision_signs_exactly_the_bytes_it_sends(monkeypatch):
         lambda: agilytics.provision_workspace(
             name="Bootcamp 7",
             description="Q3 cohort",
-            tracks=["Web Dev"],
             students=[{"email": "s@example.com", "fullName": "John Smith"}],
         ),
         respond({"success": True, "data": {"workspaceId": WORKSPACE}}, status=201),
@@ -166,7 +204,6 @@ def test_provision_signs_exactly_the_bytes_it_sends(monkeypatch):
     assert json.loads(sent) == {
         "name": "Bootcamp 7",
         "description": "Q3 cohort",
-        "tracks": ["Web Dev"],
         "students": [{"email": "s@example.com", "fullName": "John Smith"}],
     }
 
@@ -183,14 +220,19 @@ def test_provision_omits_empty_collections(monkeypatch):
     assert json.loads(capture.seen["content"]) == {"name": "Bootcamp 8", "description": ""}
 
 
-def test_provision_deduplicates_tracks(monkeypatch):
+def test_provision_never_sends_tracks(monkeypatch):
+    """Their current schema has no `tracks` field — provisioning does not
+    create them, and a workspace's tracks are pre-configured on their side.
+    Sending one would be describing something that cannot happen."""
     capture = run(
         monkeypatch,
-        lambda: agilytics.provision_workspace(name="B8", tracks=["Web", "AI", "Web"]),
+        lambda: agilytics.provision_workspace(
+            name="B8", students=[{"email": "a@example.com", "fullName": "A"}]
+        ),
         respond({"success": True, "data": {}}, status=201),
     )
 
-    assert json.loads(capture.seen["content"])["tracks"] == ["Web", "AI"]
+    assert "tracks" not in json.loads(capture.seen["content"])
 
 
 # ---------------------------------------------------------------- errors --
@@ -238,7 +280,7 @@ def test_a_server_failure_is_an_upstream_error(monkeypatch):
     with pytest.raises(UpstreamError):
         run(
             monkeypatch,
-            lambda: agilytics.bulk_invite(WORKSPACE),
+            lambda: agilytics.stats(WORKSPACE),
             respond({"error": "Internal", "message": "boom"}, 500),
         )
 
