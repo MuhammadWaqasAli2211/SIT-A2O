@@ -11,15 +11,13 @@ from fastapi import APIRouter
 
 from app.api.deps import AdminUser, DbSession
 from app.schemas.agilytics import (
-    AgilyticsCandidateInviteRequest,
     AgilyticsEligibleList,
-    AgilyticsInviteOutcome,
-    AgilyticsInviteRequest,
-    AgilyticsJoinSyncResult,
-    AgilyticsInviteResult,
     AgilyticsMemberStatus,
+    AgilyticsOnboardOutcome,
+    AgilyticsOnboardRequest,
     AgilyticsProvisionResult,
     AgilyticsWorkspaceState,
+    AgilyticsWorkspaceStats,
 )
 from app.services import agilytics_service
 
@@ -64,31 +62,19 @@ def provision(
     return agilytics_service.provision(db, user, bootcamp_id)
 
 
-@router.post(
-    "/bootcamps/{bootcamp_id}/agilytics/invites", response_model=AgilyticsInviteResult
+@router.get(
+    "/bootcamps/{bootcamp_id}/agilytics/stats", response_model=AgilyticsWorkspaceStats
 )
-def send_invites(
-    bootcamp_id: uuid.UUID,
-    payload: AgilyticsInviteRequest,
-    user: AdminUser,
-    db: DbSession,
-) -> AgilyticsInviteResult:
-    """Issue Agilytics invites, and optionally email the selected candidates.
+def workspace_stats(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsWorkspaceStats:
+    """Workspace health: roles, statuses, per-track progress, activation.
 
-    `application_ids` does not narrow the Agilytics half — their endpoint
-    takes no member list and always covers every pending member. It selects
-    who receives our own covering email. Safe to repeat.
+    A different endpoint from the one behind `GET .../agilytics` above, not a
+    richer view of it — theirs return different things, and only this one
+    reports per-track onboarded/pending counts and account activation.
     """
-    return AgilyticsInviteResult.model_validate(
-        agilytics_service.send_invites(
-            db,
-            user,
-            bootcamp_id,
-            application_ids=payload.application_ids,
-            subject=payload.subject,
-            body_html=payload.body_html,
-        )
-    )
+    return agilytics_service.workspace_stats(db, user, bootcamp_id)
 
 
 @router.get(
@@ -97,7 +83,7 @@ def send_invites(
 def eligible(
     bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
 ) -> AgilyticsEligibleList:
-    """Who this intake could invite to Agilytics, split by already-invited.
+    """Who this intake could onboard, split by already-onboarded.
 
     Eligibility is having cleared the Physical Interview — nothing to do with
     form or document progress. Read-only; no Agilytics call is made.
@@ -106,44 +92,23 @@ def eligible(
 
 
 @router.post(
-    "/bootcamps/{bootcamp_id}/agilytics/invite", response_model=AgilyticsInviteOutcome
+    "/bootcamps/{bootcamp_id}/agilytics/onboard", response_model=AgilyticsOnboardOutcome
 )
-def invite(
+def onboard(
     bootcamp_id: uuid.UUID,
-    payload: AgilyticsCandidateInviteRequest,
+    payload: AgilyticsOnboardRequest,
     user: AdminUser,
     db: DbSession,
-) -> AgilyticsInviteOutcome:
-    """Stage invites, then confirm membership per candidate before stamping.
+) -> AgilyticsOnboardOutcome:
+    """Make the selected candidates APPROVED members of the workspace.
 
-    Their bulk-invite covers every pending member of the workspace and cannot
-    be narrowed, so `application_ids` says whose membership to confirm and
-    stamp afterwards — not who Agilytics invites.
+    Immediate: there is no invitation and no acceptance step, so a candidate
+    named here is a member when this returns. Each one is then advanced to
+    ONBOARDED and emailed their first-login instructions.
     """
-    return agilytics_service.invite(
-        db,
-        user,
-        bootcamp_id,
-        application_ids=payload.application_ids,
-        subject=payload.subject,
-        body_html=payload.body_html,
+    return agilytics_service.onboard(
+        db, user, bootcamp_id, application_ids=payload.application_ids
     )
-
-
-@router.post(
-    "/bootcamps/{bootcamp_id}/agilytics/sync-joins", response_model=AgilyticsJoinSyncResult
-)
-def sync_joins(
-    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
-) -> AgilyticsJoinSyncResult:
-    """Check invited candidates for a join, and advance those who have to
-    ONBOARDED.
-
-    An explicit action rather than something a page load triggers: it costs
-    one request to Agilytics per un-joined candidate, because their
-    workspace-wide response reports students as counts only.
-    """
-    return agilytics_service.sync_joins(db, user, bootcamp_id)
 
 
 @router.get(
