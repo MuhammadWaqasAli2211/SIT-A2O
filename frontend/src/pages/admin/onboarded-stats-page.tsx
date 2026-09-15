@@ -15,23 +15,24 @@
 
 import { GraduationCap, RefreshCw, TrendingUp, Users } from 'lucide-react'
 import { useMemo } from 'react'
-import { toast } from 'sonner'
 
 import { AppLoader } from '@/components/shared/app-loader'
-import { PendingLabel } from '@/components/shared/pending-label'
 import { PageHeader, StatCard } from '@/components/shared/portal-ui'
 import { Reveal } from '@/components/motion/reveal'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { agilyticsApi, onboardingApi } from '@/features/admin/api'
 import { AsyncSection, BootcampSwitcher, BootcampGate } from '@/features/admin/components'
 import { AgilyticsStatusBadge, agilyticsStateOf } from '@/features/agilytics/status-badge'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { useAsync } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
-import type { AgilyticsCandidateRow, OnboardingCandidateSummary } from '@/lib/types'
+import type {
+  AgilyticsCandidateRow,
+  AgilyticsWorkspaceStats,
+  OnboardingCandidateSummary,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 /** Big enough to cover an intake in one fetch — these are per-cohort figures,
@@ -197,31 +198,18 @@ function AgilyticsStatsTab({
   bootcampName?: string
 }) {
   const membership = useAsync(() => agilyticsApi.eligible(bootcampId), [bootcampId])
-  // Their workspace-wide read. Kept separate from the membership lookup above
-  // because it is the half that can fail on their side, and our own figures
-  // stay meaningful when it does.
-  const workspace = useAsync(() => agilyticsApi.state(bootcampId), [bootcampId])
-
-  const sync = useMutation(() => agilyticsApi.syncJoins(bootcampId))
+  // Their workspace read, kept separate from the membership lookup above
+  // because it is the half that can fail on their side — our own figures stay
+  // meaningful when it does. `/stats` rather than the workspace-state
+  // endpoint: only this one reports per-track progress and account
+  // activation.
+  const workspace = useAsync(() => agilyticsApi.stats(bootcampId), [bootcampId])
 
   const rows = useMemo(
-    () => [...(membership.data?.new ?? []), ...(membership.data?.already_invited ?? [])],
+    () => [...(membership.data?.new ?? []), ...(membership.data?.already_onboarded ?? [])],
     [membership.data],
   )
-  const invited = rows.filter((r) => r.invited_at)
-  const joined = rows.filter((r) => r.joined_at)
-
-  async function check() {
-    const out = await sync.run()
-    if (!out) return
-    toast.success(
-      out.advanced.length > 0
-        ? `${out.advanced.length} candidate(s) joined and moved to Onboarded`
-        : `Checked ${out.checked} — no new joins`,
-    )
-    membership.refetch()
-    workspace.refetch()
-  }
+  const onboarded = rows.filter((r) => r.onboarded_at)
 
   return (
     <AsyncSection
@@ -232,33 +220,35 @@ function AgilyticsStatsTab({
       <div className="flex flex-col gap-4 pt-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Eligible" value={rows.length} icon={Users} tone="primary" />
-          <StatCard label="Invited" value={invited.length} icon={RefreshCw} tone="info" />
-          <StatCard label="Joined" value={joined.length} icon={GraduationCap} tone="success" />
           <StatCard
-            label="Join rate"
-            value={invited.length === 0 ? 0 : Math.round((joined.length / invited.length) * 100)}
+            label="Onboarded"
+            value={onboarded.length}
+            icon={GraduationCap}
+            tone="success"
+          />
+          <StatCard
+            label="Not yet onboarded"
+            value={rows.length - onboarded.length}
+            icon={Users}
+            tone="warning"
+          />
+          <StatCard
+            label="Handover rate"
+            value={rows.length === 0 ? 0 : Math.round((onboarded.length / rows.length) * 100)}
             suffix="%"
             icon={TrendingUp}
-            tone="warning"
-            hint={invited.length === 0 ? 'Nobody invited yet' : `of ${invited.length} invited`}
+            tone="info"
+            hint={rows.length === 0 ? 'Nobody eligible yet' : `of ${rows.length} eligible`}
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            Join state is our own record, stamped when Agilytics confirmed it.
-          </p>
-          <Button variant="outline" onClick={check} disabled={sync.pending || invited.length === 0}>
-            <RefreshCw className="size-4" />
-            <PendingLabel idle="Check for new joins" pending="Checking…" isPending={sync.pending} />
-          </Button>
-        </div>
-
-        {sync.error && (
-          <Alert variant="destructive">
-            <AlertDescription>{sync.error}</AlertDescription>
-          </Alert>
-        )}
+        {/* No "check for joins" action any more: onboarding is immediate and
+            recorded when it happens, so there is no later event to poll for.
+            What their side reports about those members is the panel below. */}
+        <p className="text-sm text-muted-foreground">
+          Onboarding state is our own record, stamped when Agilytics confirmed the
+          membership. The workspace figures below are read live from Agilytics.
+        </p>
 
         <WorkspacePanel state={workspace} bootcampName={bootcampName} />
 
@@ -298,20 +288,18 @@ function CandidateLine({ row }: { row: AgilyticsCandidateRow }) {
 }
 
 /**
- * Their side of the workspace.
+ * Their side of the workspace, from `/stats`.
  *
  * Rendered as a soft failure rather than an error boundary: their endpoint
  * being unreachable is a fact about them, and it must not blank out our own
- * invited/joined figures above, which are read from our database and stay
- * true regardless.
+ * onboarding figures above, which are read from our database and stay true
+ * regardless.
  */
 function WorkspacePanel({
   state,
   bootcampName,
 }: {
-  state: ReturnType<
-    typeof useAsync<ReturnType<typeof agilyticsApi.state> extends Promise<infer T> ? T : never>
-  >
+  state: ReturnType<typeof useAsync<AgilyticsWorkspaceStats>>
   bootcampName?: string
 }) {
   const data = state.data
@@ -393,17 +381,47 @@ function WorkspacePanel({
             ))}
           </div>
 
+          {/* Per track, their own onboarded-against-total split — which the
+              workspace-state endpoint cannot report, and is the reason this
+              panel reads `/stats` instead. */}
           {data.tracks.length > 0 && (
             <div className="flex flex-col gap-2 border-t border-border pt-3">
               {data.tracks.map((track) => (
                 <ProgressBar
                   key={track.track_id ?? track.track_name ?? 'track'}
                   label={track.track_name ?? 'Untitled track'}
-                  done={track.member_count}
-                  total={data.total_members || track.member_count}
+                  done={track.onboarded}
+                  total={track.total_students || track.onboarded}
                   tone="bg-primary"
                 />
               ))}
+            </div>
+          )}
+
+          {/* Account activation. Displayed exactly as reported: their spec
+              also says accounts are created auto-verified, which is hard to
+              square with a non-zero unverified count, but reinterpreting a
+              partner's own figure is how a dashboard starts lying. */}
+          {data.activation && (
+            <div className="flex flex-col gap-2 border-t border-border pt-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium">Account activation</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {data.activation.verified}/{data.activation.total_students} verified
+                </span>
+              </div>
+              <ProgressBar
+                label="Verified their account"
+                done={data.activation.verified}
+                total={data.activation.total_students || data.activation.verified}
+                tone="bg-success"
+              />
+              {data.activation.unverified > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {data.activation.unverified} student
+                  {data.activation.unverified === 1 ? ' has' : 's have'} not signed in yet.
+                </p>
+              )}
             </div>
           )}
         </CardContent>
