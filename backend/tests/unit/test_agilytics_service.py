@@ -71,11 +71,12 @@ def _allow_and_configure(monkeypatch):
     monkeypatch.setattr(audit_service, "record", lambda *a, **k: None)
 
 
-# Student rows: (candidate_code, email, full_name, program_title)
+# Student rows: (candidate_code, email, full_name). No program column —
+# provisioning creates accounts, and their schema has no track field for it.
 STUDENTS = [
-    ("B08-001", "one@example.com", "Ayesha Khan", "Web Dev"),
-    ("B08-002", "two@example.com", None, "Web Dev"),
-    ("B08-003", "three@example.com", "Bilal Ahmed", None),
+    ("B08-001", "one@example.com", "Ayesha Khan"),
+    ("B08-002", "two@example.com", None),
+    ("B08-003", "three@example.com", "Bilal Ahmed"),
 ]
 # Lead rows: (email, full_name)
 LEADS = [("admin@example.com", "Sara Admin")]
@@ -128,15 +129,20 @@ def test_a_response_without_a_workspace_id_is_surfaced_not_swallowed(monkeypatch
     assert target.agilytics_workspace_id is None
 
 
-def test_invites_before_provisioning_are_refused(monkeypatch):
+def test_onboarding_before_provisioning_is_refused(monkeypatch):
+    """There is no workspace to be a member of yet, and their endpoint is
+    addressed by workspace id — so this is refused here rather than sent and
+    404'd."""
     called = []
     monkeypatch.setattr(
-        agilytics_service.agilytics, "bulk_invite", lambda wid: called.append(wid) or {}
+        agilytics_service.agilytics, "onboard", lambda wid, students: called.append(wid) or {}
     )
     target = bootcamp()
 
     with pytest.raises(ConflictError):
-        agilytics_service.send_invites(FakeSession(target), profile(), target.id)
+        agilytics_service.onboard(
+            FakeSession(target), profile(), target.id, application_ids=[uuid.uuid4()]
+        )
 
     assert called == []
 
@@ -165,16 +171,18 @@ def test_students_are_sent_in_their_camel_case_shape(monkeypatch):
     agilytics_service.provision(FakeSession(target, STUDENTS, LEADS), profile(), target.id)
 
     assert captured["students"] == [
-        {"email": "one@example.com", "fullName": "Ayesha Khan", "trackName": "Web Dev"},
+        {"email": "one@example.com", "fullName": "Ayesha Khan"},
         # No name on file — the candidate code is the one identifier we can
         # always produce, and an empty fullName is refused by their validator.
-        {"email": "two@example.com", "fullName": "B08-002", "trackName": "Web Dev"},
-        # No program — trackName omitted rather than sent as null.
+        {"email": "two@example.com", "fullName": "B08-002"},
         {"email": "three@example.com", "fullName": "Bilal Ahmed"},
     ]
 
 
-def test_tracks_are_deduplicated_from_the_students_programs(monkeypatch):
+def test_provisioning_sends_no_track_information(monkeypatch):
+    """Tracks are pre-configured in their workspace and assigned per student
+    at onboard time. Provisioning has no track field at all, so sending one
+    would describe something that cannot happen."""
     captured = {}
     monkeypatch.setattr(
         agilytics_service.agilytics,
@@ -185,7 +193,8 @@ def test_tracks_are_deduplicated_from_the_students_programs(monkeypatch):
 
     agilytics_service.provision(FakeSession(target, STUDENTS, LEADS), profile(), target.id)
 
-    assert captured["tracks"] == ["Web Dev"]
+    assert "tracks" not in captured
+    assert not any("trackName" in s for s in captured["students"])
 
 
 def test_leads_are_the_intakes_own_admins(monkeypatch):
@@ -208,8 +217,10 @@ def test_a_successful_provision_stores_the_id_and_commits(monkeypatch):
         "provision_workspace",
         lambda **k: {
             "workspaceId": "d8c42c93-abc",
-            "tracksCreated": ["Web Dev"],
-            "summary": {"leadsProvisioned": 1, "studentsProvisioned": 3},
+            "summary": {
+                "leadsProvisioned": 1,
+                "students": {"total": 3, "newlyCreated": 2, "alreadyExisted": 1},
+            },
         },
     )
     target = bootcamp()
@@ -219,8 +230,32 @@ def test_a_successful_provision_stores_the_id_and_commits(monkeypatch):
 
     assert target.agilytics_workspace_id == "d8c42c93-abc"
     assert session.committed
-    assert result.students == 3
     assert result.already_provisioned is True
+    # Their split, reported as their split: re-running on a grown intake
+    # should show mostly already-existed, and a total that does not add up is
+    # the signal something is wrong.
+    assert (result.students, result.students_created, result.students_already_existed) == (
+        3,
+        2,
+        1,
+    )
+
+
+def test_their_student_summary_is_never_replaced_by_our_own_count(monkeypatch):
+    """A missing key should leave a figure at zero, not quietly echo the
+    request back as though it were their answer."""
+    monkeypatch.setattr(
+        agilytics_service.agilytics,
+        "provision_workspace",
+        lambda **k: {"workspaceId": "w-1", "summary": {}},
+    )
+    target = bootcamp()
+
+    result = agilytics_service.provision(
+        FakeSession(target, STUDENTS, LEADS), profile(), target.id
+    )
+
+    assert (result.students_created, result.students_already_existed) == (0, 0)
 
 
 # ---------------------------------------------------------------- state --
@@ -261,135 +296,96 @@ def test_workspace_state_flattens_their_status_breakdown(monkeypatch):
     assert state.members["lead@example.com"].status == "APPROVED"
 
 
-def test_invites_report_what_was_issued(monkeypatch):
+# ---------------------------------------------------------------- stats --
+# Their `/stats` endpoint, which is not the same thing as `onboarding-status`
+# above and is modelled separately for that reason.
+
+
+def test_an_unprovisioned_intake_reports_stats_rather_than_erroring():
+    stats = agilytics_service.workspace_stats(FakeSession(bootcamp()), profile(), uuid.uuid4())
+
+    assert stats.provisioned is False
+    assert stats.tracks == []
+    assert stats.activation is None
+
+
+def test_stats_carries_every_breakdown_their_endpoint_reports(monkeypatch):
+    """Including the three status buckets the older screen dropped: a member
+    who left or was revoked is exactly what a completion figure must not
+    quietly omit."""
     monkeypatch.setattr(
         agilytics_service.agilytics,
-        "bulk_invite",
-        lambda wid: {"invitesIssued": 15, "expiresAt": "2026-09-12T00:00:00.000Z"},
+        "stats",
+        lambda wid: {
+            "workspaceName": "Bootcamp 7",
+            "totalMembers": 27,
+            "roleBreakdown": {"leads": 1, "subLeads": 1, "students": 25},
+            "statusBreakdown": {
+                "approved": 22,
+                "pending": 3,
+                "left": 1,
+                "rejected": 0,
+                "revoked": 0,
+            },
+            "trackBreakdown": [
+                {
+                    "trackId": "abc-123",
+                    "trackName": "Web Dev",
+                    "totalStudents": 15,
+                    "onboarded": 12,
+                    "pending": 3,
+                }
+            ],
+            "activationHealth": {"totalStudents": 25, "verified": 22, "unverified": 3},
+        },
     )
     target = bootcamp(agilytics_workspace_id="w-1")
 
-    result = agilytics_service.send_invites(FakeSession(target), profile(), target.id)
+    stats = agilytics_service.workspace_stats(FakeSession(target), profile(), target.id)
 
-    assert result == {
-        "invites_issued": 15,
-        "expires_at": "2026-09-12T00:00:00.000Z",
-        "emailed": 0,
-        "email_failed": 0,
-    }
+    assert (stats.total_members, stats.students_count, stats.sub_leads_count) == (27, 25, 1)
+    assert (stats.approved, stats.pending, stats.left) == (22, 3, 1)
+    assert stats.activation.unverified == 3
+    assert stats.tracks[0].track_name == "Web Dev"
+    # The split their `/stats` reports and `onboarding-status` does not.
+    assert (stats.tracks[0].onboarded, stats.tracks[0].pending) == (12, 3)
 
 
-def test_a_selection_never_reaches_agilytics(monkeypatch):
-    """The trap this guards: their bulk-invite takes no member list and always
-    covers every pending member. If a selection ever appeared to narrow it,
-    an admin would believe they invited three people when they invited all."""
-    seen = {}
+def test_stats_survives_a_response_missing_its_optional_blocks(monkeypatch):
+    """Read defensively: a partner trimming a field should degrade one figure,
+    not 500 the whole screen."""
     monkeypatch.setattr(
-        agilytics_service.agilytics,
-        "bulk_invite",
-        lambda *args, **kwargs: seen.update(args=args, kwargs=kwargs)
-        or {"invitesIssued": 9},
-    )
-    monkeypatch.setattr(
-        agilytics_service.email_service,
-        "send_to_applications",
-        lambda *a, **k: _EmailResult(sent=3, failed=0),
+        agilytics_service.agilytics, "stats", lambda wid: {"workspaceName": "B7"}
     )
     target = bootcamp(agilytics_workspace_id="w-1")
 
-    result = agilytics_service.send_invites(
-        FakeSession(target),
-        profile(),
-        target.id,
-        application_ids=[uuid.uuid4(), uuid.uuid4(), uuid.uuid4()],
-        subject="Hello",
-        body_html="<p>Hi</p>",
-    )
+    stats = agilytics_service.workspace_stats(FakeSession(target), profile(), target.id)
 
-    # Only the workspace id — no member list of any kind.
-    assert seen == {"args": ("w-1",), "kwargs": {}}
-    assert result["invites_issued"] == 9
-    assert result["emailed"] == 3
-
-
-def test_no_covering_email_is_sent_when_none_was_composed(monkeypatch):
-    """Invites-only is a real choice, not a degraded one — an intake whose
-    candidates have already been told does not need telling again."""
-    monkeypatch.setattr(
-        agilytics_service.agilytics, "bulk_invite", lambda wid: {"invitesIssued": 4}
-    )
-    called = []
-    monkeypatch.setattr(
-        agilytics_service.email_service,
-        "send_to_applications",
-        lambda *a, **k: called.append(1) or _EmailResult(0, 0),
-    )
-    target = bootcamp(agilytics_workspace_id="w-1")
-
-    result = agilytics_service.send_invites(
-        FakeSession(target), profile(), target.id, application_ids=[uuid.uuid4()]
-    )
-
-    assert called == [], "no body composed means no email"
-    assert result["emailed"] == 0
-
-
-def test_email_failures_are_reported_not_swallowed(monkeypatch):
-    monkeypatch.setattr(
-        agilytics_service.agilytics, "bulk_invite", lambda wid: {"invitesIssued": 2}
-    )
-    monkeypatch.setattr(
-        agilytics_service.email_service,
-        "send_to_applications",
-        lambda *a, **k: _EmailResult(sent=1, failed=2),
-    )
-    target = bootcamp(agilytics_workspace_id="w-1")
-
-    result = agilytics_service.send_invites(
-        FakeSession(target),
-        profile(),
-        target.id,
-        application_ids=[uuid.uuid4()],
-        body_html="<p>Hi</p>",
-    )
-
-    assert (result["emailed"], result["email_failed"]) == (1, 2)
-
-
-class _EmailResult:
-    def __init__(self, sent, failed):
-        self.sent = sent
-        self.failed = failed
-
-
-def test_zero_pending_members_is_a_normal_answer(monkeypatch):
-    """Not an error: an intake whose members are all approved has nobody left
-    to invite, and saying so is the correct outcome."""
-    monkeypatch.setattr(
-        agilytics_service.agilytics, "bulk_invite", lambda wid: {"invitesIssued": 0}
-    )
-    target = bootcamp(agilytics_workspace_id="w-1")
-
-    assert agilytics_service.send_invites(FakeSession(target), profile(), target.id)[
-        "invites_issued"
-    ] == 0
+    assert stats.provisioned is True
+    assert stats.tracks == []
+    assert stats.activation is None
+    assert stats.approved is None
 
 
 # -------------------------------------------------------------- preview --
 
 
 def test_preview_sends_nothing(monkeypatch):
-    """It exists precisely so the admin can look before acting."""
-    sent = []
+    """The confirm step reads real counts without creating anything — their
+    provisioning call cannot be undone from our side."""
+    called = []
     monkeypatch.setattr(
-        agilytics_service.agilytics, "provision_workspace", lambda **k: sent.append(k) or {}
+        agilytics_service.agilytics,
+        "provision_workspace",
+        lambda **k: called.append(k) or {},
     )
     target = bootcamp()
 
-    result = agilytics_service.preview(FakeSession(target, STUDENTS, LEADS), profile(), target.id)
+    result = agilytics_service.preview(
+        FakeSession(target, STUDENTS, LEADS), profile(), target.id
+    )
 
-    assert sent == []
+    assert called == []
     assert (result.students, result.leads) == (3, 1)
     assert result.already_provisioned is False
-    # Whose accounts get created on their side, shown before the button.
     assert result.lead_emails == ["admin@example.com"]
