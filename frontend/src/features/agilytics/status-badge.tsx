@@ -9,35 +9,37 @@
  * cheap, and it is honest about being our record rather than their live state.
  */
 
-import { CircleDashed, CircleCheck, Send } from 'lucide-react'
+import { CircleDashed, CircleCheck } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-export type AgilyticsState = 'not-invited' | 'invited' | 'joined'
+/**
+ * Two states, not three.
+ *
+ * There used to be an "invited" middle state, because their API staged an
+ * invitation and the candidate accepted it some time later. Their onboard
+ * call has no such gap — a student is an APPROVED member the moment it
+ * returns — so a badge distinguishing "invited" from "joined" would be
+ * drawing a distinction that can no longer exist.
+ */
+export type AgilyticsState = 'not-onboarded' | 'onboarded'
 
-export function agilyticsStateOf(row: {
-  invited_at?: string | null
-  joined_at?: string | null
-}): AgilyticsState {
-  if (row.joined_at) return 'joined'
-  if (row.invited_at) return 'invited'
-  return 'not-invited'
+export function agilyticsStateOf(row: { onboarded_at?: string | null }): AgilyticsState {
+  return row.onboarded_at ? 'onboarded' : 'not-onboarded'
 }
 
-const STYLE: Record<AgilyticsState, { label: string; className: string; icon: typeof Send }> = {
-  'not-invited': {
-    label: 'Not invited',
+const STYLE: Record<
+  AgilyticsState,
+  { label: string; className: string; icon: typeof CircleCheck }
+> = {
+  'not-onboarded': {
+    label: 'Not onboarded',
     className: 'text-muted-foreground',
     icon: CircleDashed,
   },
-  invited: {
-    label: 'Invited',
-    className: 'border-info/40 text-info',
-    icon: Send,
-  },
-  joined: {
-    label: 'Joined',
+  onboarded: {
+    label: 'In Agilytics',
     className: 'border-success/40 text-success',
     icon: CircleCheck,
   },
