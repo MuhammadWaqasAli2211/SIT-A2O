@@ -70,6 +70,7 @@ const AdminAiInterviewsPage = lazy(() => import('@/pages/admin/ai-interviews-pag
 const AdminHrAssessmentPage = lazy(() => import('@/pages/admin/hr-assessment-page'))
 const AdminOnboardingCandidatesPage = lazy(() => import('@/pages/admin/onboarding-candidates-page'))
 const AdminOnboardingCandidatePage = lazy(() => import('@/pages/admin/onboarding-candidate-page'))
+const AdminOnboardedStatsPage = lazy(() => import('@/pages/admin/onboarded-stats-page'))
 const AdminBackgroundVerificationPreviewPage = lazy(
   () => import('@/pages/admin/onboarding-preview/background-verification-page'),
 )
@@ -203,6 +204,9 @@ export const router = createBrowserRouter([
                   { path: '/admin/hr-assessment', element: <AdminHrAssessmentPage /> },
                   // Review of the 4 onboarding forms + Documents Hub uploads.
                   { path: '/admin/onboarding', element: <AdminOnboardingCandidatesPage /> },
+                  // Statistics, so a page of its own rather than a modal —
+                  // same reasoning as the dashboard.
+                  { path: '/admin/onboarded-stats', element: <AdminOnboardedStatsPage /> },
                   {
                     path: '/admin/onboarding/:applicationId',
                     element: <AdminOnboardingCandidatePage />,

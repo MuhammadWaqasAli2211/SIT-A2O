@@ -34,6 +34,12 @@ class Program(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
+    # What Agilytics calls this track. Sent as `trackName` when onboarding a
+    # student on this program; null sends no track and leaves them ungrouped
+    # there. Not derived from `title` on purpose — their API ignores an
+    # unmatched name silently, so a guessed mapping fails invisibly.
+    agilytics_track_name: Mapped[str | None] = mapped_column(String)
+
     def __repr__(self) -> str:
         return f"<Program {self.slug}>"
 

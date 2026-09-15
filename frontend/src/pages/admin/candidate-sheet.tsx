@@ -5,10 +5,18 @@
  * act, and close without losing their scroll position or their filters.
  */
 
-import { AlertTriangle, CalendarClock, Loader2, Mail, MapPin, Phone, RotateCcw } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  Mail,
+  MapPin,
+  Phone,
+  RotateCcw,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -273,8 +281,11 @@ function Body({
             onClick={submit}
             disabled={move.pending || (!isClosed && target === application.stage)}
           >
-            {move.pending && <Loader2 className="size-4 animate-spin" />}
-            {isClosed ? 'Reinstate' : `Move to ${STAGE_LABEL[target]}`}
+            <PendingLabel
+              isPending={move.pending}
+              idle={isClosed ? 'Reinstate' : `Move to ${STAGE_LABEL[target]}`}
+              pending="Moving…"
+            />
           </Button>
         </section>
         )}

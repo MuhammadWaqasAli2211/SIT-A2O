@@ -17,7 +17,13 @@ from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError
 from app.integrations import supabase_storage
 from app.models.application import Application
-from app.models.enums import ApplicationStage, DocumentStatus, OnboardingDocumentType, OnboardingFormStatus
+from app.models.enums import (
+    ApplicationStage,
+    DocumentStatus,
+    OnboardingDocumentType,
+    OnboardingFormStatus,
+    PhaseType,
+)
 from app.models.onboarding import OnboardingDocument
 from app.models.user import Profile
 from app.schemas.onboarding import OnboardingCandidateSummary, RequiredOnboardingDocument
@@ -152,6 +158,11 @@ def upload(
     actor: Profile,
 ) -> OnboardingDocument:
     assert_hub_unlocked(db, application)
+    # Same window as the forms above it — the Documents Hub is the back half
+    # of the Student's Folder, not a stage of its own, so closing the FORM
+    # phase stops uploads as well as submissions rather than leaving half the
+    # folder live.
+    bootcamp_service.assert_phase_accepts(db, application.bootcamp_id, PhaseType.FORM)
 
     if content_type not in ALLOWED_CONTENT_TYPES:
         raise ConflictError(

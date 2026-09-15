@@ -12,8 +12,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.core.exceptions import ConflictError
+from app.models.application import Application
+from app.models.bootcamp import Bootcamp
 from app.models.enums import PhysicalInterviewResult
 from app.models.physical_interview import PhysicalInterviewBatch, PhysicalInterviewInvite
+from app.models.user import Profile
+from app.services import physical_interview_service as svc
 from app.services.physical_interview_service import row_status
 
 
@@ -113,3 +117,93 @@ def test_a_naive_deadline_is_treated_as_utc_not_left_uncomparable(monkeypatch):
     )
     with pytest.raises(ConflictError, match="future"):
         physical_interview_service.send_bulk(None, uuid.uuid4(), payload, None)
+
+
+# ------------------------------------------------- outcome email routing --
+# The decision itself is already covered above and by the route tests. What
+# these pin is the half added for the selection/rejection flow: which email
+# goes out, that the internal note never travels with it, and that a mail
+# failure cannot undo a decision an admin recorded in person.
+
+
+class _FakeDb:
+    """Enough Session for _email_outcome: it only ever `get`s two rows."""
+
+    def __init__(self, profile, bootcamp):
+        self._by_type = {Profile: profile, Bootcamp: bootcamp}
+
+    def get(self, model, _pk):
+        return self._by_type.get(model)
+
+
+def _application():
+    return Application(
+        id=uuid.uuid4(),
+        candidate_code="B08-042",
+        bootcamp_id=uuid.uuid4(),
+        profile_id=uuid.uuid4(),
+    )
+
+
+def _fake_db(email="candidate@example.com"):
+    return _FakeDb(
+        Profile(id=uuid.uuid4(), email=email, full_name="Ayesha Khan"),
+        Bootcamp(id=uuid.uuid4(), name="Bootcamp 08"),
+    )
+
+
+def test_selection_sends_the_selected_email(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_selected",
+        lambda **kw: sent.update({"selected": kw}),
+    )
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_rejected",
+        lambda **kw: sent.update({"rejected": kw}),
+    )
+
+    svc._email_outcome(_fake_db(), _application(), PhysicalInterviewResult.SELECTED)
+
+    assert "rejected" not in sent
+    assert sent["selected"]["candidate_code"] == "B08-042"
+    assert sent["selected"]["bootcamp_name"] == "Bootcamp 08"
+
+
+def test_rejection_sends_the_rejection_email(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_selected",
+        lambda **kw: sent.update({"selected": kw}),
+    )
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_rejected",
+        lambda **kw: sent.update({"rejected": kw}),
+    )
+
+    svc._email_outcome(_fake_db(), _application(), PhysicalInterviewResult.REJECTED)
+
+    assert "selected" not in sent
+    assert sent["rejected"]["candidate_code"] == "B08-042"
+
+
+def test_the_internal_note_never_reaches_the_candidate_email(monkeypatch):
+    """The rejection note is the admin's own record. `_email_outcome` is not
+    even given it, and this is the test that keeps it that way."""
+    sent = {}
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_rejected",
+        lambda **kw: sent.update(kw),
+    )
+    svc._email_outcome(_fake_db(), _application(), PhysicalInterviewResult.REJECTED)
+
+    assert "rejection_note" not in sent
+    assert not any("note" in key for key in sent)
+
+
+def test_a_candidate_with_no_email_is_skipped_rather_than_erroring(monkeypatch):
+    monkeypatch.setattr(
+        svc.email_service, "send_physical_interview_selected",
+        lambda **kw: pytest.fail("should not have tried to send"),
+    )
+    svc._email_outcome(_fake_db(email=""), _application(), PhysicalInterviewResult.SELECTED)

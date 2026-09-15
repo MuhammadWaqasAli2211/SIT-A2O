@@ -15,7 +15,6 @@
  * page that owns the actions composes them around it.
  */
 
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { onboardingApi } from '@/features/admin/api'
@@ -106,7 +105,6 @@ export function OnboardingSubmissionView({
       initialLoading={rows.initialLoading}
       error={rows.error}
       onRetry={rows.refetch}
-      skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
     >
       {rows.data && (
         <Tabs defaultValue={rows.data[0]?.form_type} orientation="vertical">

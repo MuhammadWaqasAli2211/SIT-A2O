@@ -9,7 +9,6 @@ import { useState } from 'react'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { Stagger, StaggerItem } from '@/components/motion/reveal'
 import { Progress, ProgressIndicator, ProgressTrack } from '@/components/ui/progress'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { useApplication } from '@/features/applications/application-context'
 import { candidateApi } from '@/features/candidate/api'
@@ -45,7 +44,6 @@ function Hub({ applicationId }: { applicationId: string }) {
       initialLoading={initialLoading}
       error={error}
       onRetry={refetch}
-      skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
     >
       {data && (
         <div className="flex flex-col gap-6">

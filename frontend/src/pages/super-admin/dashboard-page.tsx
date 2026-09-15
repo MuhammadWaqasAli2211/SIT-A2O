@@ -18,7 +18,6 @@ import { platformApi } from '@/features/admin/api'
 import {
   AsyncSection,
   BootcampStatusBadge,
-  CardsSkeleton,
 } from '@/features/admin/components'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
@@ -59,7 +58,6 @@ export default function SuperAdminDashboardPage() {
         initialLoading={initialLoading}
         error={error}
         onRetry={refresh}
-        skeleton={<CardsSkeleton />}
       >
         {data && <Body stats={data} />}
       </AsyncSection>

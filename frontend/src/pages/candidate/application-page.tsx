@@ -6,11 +6,17 @@
  * mean guessing that before the data loads.
  */
 
-import { AlertTriangle, CalendarClock, CheckCircle2, Loader2, Send } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  CheckCircle2,
+  Send,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Stagger, StaggerItem } from '@/components/motion/reveal'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { EmptyState, PageHeader, StageBadge, Timeline } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -18,7 +24,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { candidateApi } from '@/features/candidate/api'
 import { useAsync, useMutation } from '@/hooks/use-async'
@@ -56,7 +61,6 @@ export default function CandidateApplicationPage() {
         initialLoading={initialLoading}
         error={error}
         onRetry={refetch}
-        skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
       >
         {applications.length === 0 ? (
           <ApplyFlow onApplied={refetch} />
@@ -181,7 +185,6 @@ function ApplyFlow({ onApplied }: { onApplied: () => void }) {
       initialLoading={initialLoading}
       error={error}
       onRetry={refetch}
-      skeleton={<Skeleton className="h-64 w-full rounded-xl" />}
     >
       {open.length === 0 ? (
         <EmptyState
@@ -291,12 +294,12 @@ function ApplyFlow({ onApplied }: { onApplied: () => void }) {
                 </Alert>
 
                 <Button onClick={apply} disabled={submit.pending} className="self-start">
-                  {submit.pending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Send className="size-4" />
-                  )}
-                  Submit application
+                  <Send className="size-4" />
+                  <PendingLabel
+                    idle="Submit application"
+                    pending="Submitting…"
+                    isPending={submit.pending}
+                  />
                 </Button>
               </CardContent>
             </Card>

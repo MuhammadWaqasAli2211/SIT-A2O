@@ -1,15 +1,20 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { Loader2 } from 'lucide-react'
 import { Suspense, type ReactNode } from 'react'
 import { useLocation, useOutlet } from 'react-router-dom'
 
-/** Shown while a lazily-loaded route chunk is still downloading. */
+import { AppLoader } from '@/components/shared/app-loader'
+
+/**
+ * Shown while a lazily-loaded route chunk is still downloading.
+ *
+ * Sits inside the keyed element below, so it belongs to the *incoming* route:
+ * the outgoing view stays painted until its replacement is ready, and the
+ * loader takes over the outlet rather than the whole window. That is what
+ * removes the blank frame between two routes — there is never a moment where
+ * neither view is rendered.
+ */
 function RouteFallback() {
-  return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Loading" />
-    </div>
-  )
+  return <AppLoader size="lg" />
 }
 
 /**

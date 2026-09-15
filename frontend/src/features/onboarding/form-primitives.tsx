@@ -1,5 +1,6 @@
-import { CheckCircle2, Download, Loader2, Plus, RotateCcw, Send, Trash2 } from "lucide-react"
+import { CheckCircle2, Download, Plus, RotateCcw, Send, Trash2 } from "lucide-react"
 import type { ReactNode } from "react"
+import { PendingLabel } from '@/components/shared/pending-label'
 
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -218,8 +219,8 @@ export function OnboardingToolbar({
         </Button>
         {!readOnly && onSubmit && (
           <Button type="button" size="sm" onClick={onSubmit} disabled={submitting}>
-            {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-            {submitLabel}
+            <Send className="size-3.5" />
+            <PendingLabel idle={submitLabel} pending="Submitting…" isPending={Boolean(submitting)} />
           </Button>
         )}
       </div>

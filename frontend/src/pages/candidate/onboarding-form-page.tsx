@@ -13,7 +13,6 @@ import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { useApplication } from '@/features/applications/application-context'
 import {
@@ -91,7 +90,6 @@ function FormBody({
       initialLoading={rows.initialLoading}
       error={rows.error}
       onRetry={rows.refetch}
-      skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
     >
       {rows.data && (() => {
         const row = rows.data.find((r) => r.form_type === formType)

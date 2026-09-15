@@ -9,10 +9,17 @@
  * those are on separate super-admin endpoints by design.
  */
 
-import { AlertTriangle, Loader2, LogOut, Mail, Save, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  LogOut,
+  Mail,
+  Save,
+  ShieldCheck,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { UserAvatar } from '@/components/shared/user-avatar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -22,13 +29,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Skeleton } from '@/components/ui/skeleton'
 import { authApi } from '@/features/auth/api'
 import { candidateApi } from '@/features/candidate/api'
 import { RegistrationDetails } from '@/features/candidate/registration-details'
 import { applicationsApi } from '@/features/applications/api'
-import { pictureApi } from '@/features/registration/picture-api'
 import { AsyncSection } from '@/features/admin/components'
+import { useProfilePicture } from '@/features/profile/picture-context'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
 import { ROLE_LABEL } from '@/lib/portal-nav'
@@ -40,13 +46,13 @@ export default function AccountPage() {
 
   const isCandidate = profile?.role === UserRole.CANDIDATE
 
-  // Both are candidate-only and non-essential: staff have neither, and a
-  // failure in either should leave the rest of the page working. `useAsync`
-  // surfaces its own error, which is why neither is folded into `myDetail`.
-  const { data: picture } = useAsync(
-    () => (isCandidate ? pictureApi.current() : Promise.resolve(null)),
-    [isCandidate],
-  )
+  // Shared with the header's own avatar via `ProfilePictureProvider` — one
+  // fetch, not two, so the two cannot show different pictures.
+  const { pictureUrl } = useProfilePicture()
+
+  // Candidate-only and non-essential: staff have no application, and a
+  // failure here should leave the rest of the page working. `useAsync`
+  // surfaces its own error, which is why it is not folded into `myDetail`.
   const { data: applications } = useAsync(
     () => (isCandidate ? applicationsApi.mine() : Promise.resolve([])),
     [isCandidate],
@@ -79,13 +85,12 @@ export default function AccountPage() {
         initialLoading={initialLoading}
         error={error}
         onRetry={refetch}
-        skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
       >
         {data && (
           <div className="grid gap-5 lg:grid-cols-3">
             <IdentityCard
               detail={data}
-              pictureUrl={picture?.url ?? null}
+              pictureUrl={pictureUrl}
               onSignOut={() => void logout()}
             />
             {/* Keyed on the server's own values so a save remounts the form
@@ -298,12 +303,8 @@ function DetailsForm({
 
         <div className="flex justify-end">
           <Button onClick={submit} disabled={save.pending}>
-            {save.pending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
-            )}
-            Save changes
+            <Save className="size-4" />
+            <PendingLabel idle="Save changes" pending="Saving…" isPending={save.pending} />
           </Button>
         </div>
       </CardContent>

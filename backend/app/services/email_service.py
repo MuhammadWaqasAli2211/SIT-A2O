@@ -18,6 +18,7 @@ from string import Template
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, aliased
 
+from app.core.config import settings
 from app.core.exceptions import AppError, ConflictError
 from app.integrations import gmail_api
 from app.models.application import Application
@@ -485,3 +486,339 @@ def send_registration_confirmation(
             candidate_code,
             to,
         )
+
+
+# ------------------------------------ physical interview outcome emails --
+# Both are sent from `physical_interview_service.record_result`, after the
+# stage move is already committed. They follow send_registration_confirmation's
+# contract exactly: never raise, log the candidate code on failure so a
+# missing message can be traced and resent by hand. A decision that has been
+# recorded must not be reported back to the admin as a failure because Gmail
+# was unreachable.
+
+
+def _shell(body_html: str) -> str:
+    """The wrapper every transactional email shares.
+
+    Extracted when the outcome emails below were added rather than pasting a
+    third copy of the same container and footer.
+    """
+    return f"""\
+<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6;
+            color:#1f2937;max-width:600px">
+{body_html}
+  <p style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;
+            color:#9ca3af;font-size:13px">
+    Saylani Mass IT Training
+  </p>
+</div>"""
+
+
+def _deliver(*, to: str, subject: str, html_body: str, text_body: str, what: str, code: str) -> bool:
+    """Send, swallow, and say whether it worked.
+
+    Returns rather than raises so a caller sending to a whole cohort can
+    count failures and report them, while a caller sending one message can
+    ignore the result exactly as before.
+    """
+    try:
+        message_id = send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+        logger.info("%s sent", what, extra={"code": code, "id": message_id})
+        return True
+    except Exception:
+        logger.exception(
+            "%s FAILED to send for %s (%s). The decision was still recorded; "
+            "resend by hand.",
+            what,
+            code,
+            to,
+        )
+        return False
+
+
+def send_physical_interview_selected(
+    *, to: str, full_name: str | None, candidate_code: str, bootcamp_name: str
+) -> None:
+    """Tell a candidate they cleared the Physical Interview, and what to do next.
+
+    The single action is the onboarding form in Student's Folder, so the email
+    says that once, plainly, with one link. Everything the candidate has to do
+    is inside that tab — listing the four forms here would only go stale
+    against the sequence the folder itself enforces.
+    """
+    name = (full_name or "").strip() or "there"
+    folder_url = f"{settings.FRONTEND_URL.rstrip('/')}/dashboard/documents"
+
+    subject = f"You have been selected — {candidate_code}"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        f"Congratulations. You have cleared the Physical Interview for "
+        f"{bootcamp_name} and have been selected to continue.\n\n"
+        "WHAT TO DO NEXT\n"
+        "Sign in to your bootcamp portal and open Student's Folder, then "
+        "complete the onboarding form. You will be asked to upload your "
+        "documents once the form is done.\n\n"
+        f"{folder_url}\n\n"
+        f"Quote your candidate code, {candidate_code}, in any email you send "
+        "us.\n\n"
+        "Please complete this promptly — your place is confirmed only once "
+        "your paperwork has been submitted and approved.\n\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hi {name},</p>
+
+  <p>
+    Congratulations. You have cleared the Physical Interview for
+    <strong>{bootcamp_name}</strong> and have been selected to continue.
+  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f0fdf4;
+              border-left:4px solid #16a34a;border-radius:6px">
+    <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:1px;
+              text-transform:uppercase;color:#15803d">What to do next</p>
+    <p style="margin:0;color:#166534">
+      Sign in to your bootcamp portal, open <strong>Student's Folder</strong>,
+      and complete the onboarding form. You will be asked to upload your
+      documents once the form is done.
+    </p>
+  </div>
+
+  <p style="margin:24px 0">
+    <a href="{folder_url}"
+       style="display:inline-block;padding:12px 22px;background:#1800AD;color:#ffffff;
+              text-decoration:none;border-radius:6px;font-weight:600">
+      Open Student's Folder
+    </a>
+  </p>
+
+  <p style="color:#6b7280">
+    Quote your candidate code,
+    <strong style="font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#1f2937">{candidate_code}</strong>,
+    in any email you send us.
+  </p>
+
+  <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
+            border-radius:6px;font-size:14px;color:#374151">
+    Please complete this promptly — your place is confirmed only once your
+    paperwork has been submitted and approved.
+  </p>""")
+
+    _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Physical Interview selection email",
+        code=candidate_code,
+    )
+
+
+def send_physical_interview_rejected(
+    *, to: str, full_name: str | None, candidate_code: str, bootcamp_name: str
+) -> None:
+    """Tell a candidate their application ended at the Physical Interview.
+
+    Deliberately short, and deliberately carries no reason: the note an admin
+    records against the invite is an internal one, and `record_result` never
+    passes it here. Saying "we cannot enter into individual correspondence"
+    would be the honest reading of a decision that is final, so the email says
+    the round is closed and points at the next intake instead.
+    """
+    name = (full_name or "").strip() or "there"
+
+    subject = f"Your application to {bootcamp_name} — {candidate_code}"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        f"Thank you for attending the Physical Interview for {bootcamp_name}.\n\n"
+        "After careful consideration, your application has not been taken "
+        "forward on this occasion. We know this is disappointing, and we do "
+        "not say it lightly — places in each intake are limited, and many "
+        "capable candidates are not able to be accommodated.\n\n"
+        "You are welcome to apply again when the next intake opens. Nothing "
+        "about this decision counts against a future application.\n\n"
+        f"Your candidate code for this application was {candidate_code}.\n\n"
+        "We wish you the very best.\n\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hi {name},</p>
+
+  <p>
+    Thank you for attending the Physical Interview for
+    <strong>{bootcamp_name}</strong>.
+  </p>
+
+  <p>
+    After careful consideration, your application has not been taken forward on
+    this occasion. We know this is disappointing, and we do not say it lightly
+    — places in each intake are limited, and many capable candidates are not
+    able to be accommodated.
+  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f9fafb;
+              border-left:4px solid #9ca3af;border-radius:6px">
+    <p style="margin:0;color:#374151">
+      You are welcome to apply again when the next intake opens. Nothing about
+      this decision counts against a future application.
+    </p>
+  </div>
+
+  <p style="color:#6b7280">
+    Your candidate code for this application was
+    <strong style="font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#1f2937">{candidate_code}</strong>.
+  </p>
+
+  <p>We wish you the very best.</p>""")
+
+    _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Physical Interview rejection email",
+        code=candidate_code,
+    )
+
+
+# ------------------------------------------- Agilytics onboarding email --
+# Sent from `agilytics_service.onboard`, once per candidate their API
+# confirmed as a member. Same never-raise contract as the outcome emails
+# above, and for a stronger reason: the membership already exists on their
+# side by the time this runs, so a mail failure must not make a completed
+# handover look like a failed one.
+#
+# Two of the values in this message are assumptions rather than documented
+# fact, and both live in configuration so confirming them is a settings
+# change and not an edit here:
+#
+#   settings.agilytics_login_url           where a student signs in
+#   settings.agilytics_password_reset_url  where they set their password
+#
+# Agilytics' spec documents neither. It says student accounts are created
+# "auto-verified, no confirmation email" and stops, so how somebody actually
+# gets in for the first time is inferred: an account exists against their
+# address, but nobody has ever given them a password, therefore the first
+# step has to be setting one. `/reset-password` is a convention, not a
+# promise. If their real flow turns out to be a magic link or an invitation
+# they send themselves, the wording below needs revisiting and not just the
+# URLs — which is why the steps are written as prose in one place rather
+# than scattered.
+
+
+def send_agilytics_onboarded(
+    *, to: str, full_name: str | None, candidate_code: str, bootcamp_name: str
+) -> bool:
+    """Tell a candidate they are in the Agilytics workspace, and how to log in.
+
+    The whole job of this email is the first login. They have been added to a
+    system they have never heard of, with an account they never created and
+    no password — so the instructions are numbered, the address they must use
+    is stated explicitly (it is the one thing they can get wrong), and the
+    password step comes first because nothing else works before it.
+    """
+    name = (full_name or "").strip() or "there"
+    login_url = settings.agilytics_login_url
+    reset_url = settings.agilytics_password_reset_url
+
+    subject = f"Your Agilytics access — {bootcamp_name}"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        f"You have been onboarded to Agilytics, the platform where the rest of "
+        f"your {bootcamp_name} journey takes place — your track, your progress "
+        "and your coursework all live there from here on.\n\n"
+        "An account has already been created for you using this email address:\n"
+        f"    {to}\n\n"
+        "HOW TO GET IN (first time)\n"
+        "1. Set your password. You do not have one yet, so start here:\n"
+        f"   {reset_url}\n"
+        "   Enter the email address above and follow the link they send you.\n"
+        "2. Sign in with that email address and your new password:\n"
+        f"   {login_url}\n\n"
+        "Use the same email address at both steps — your account is tied to "
+        "it, and a different address will not find it.\n\n"
+        f"Your candidate code is {candidate_code}. Quote it in any email you "
+        "send us.\n\n"
+        "If the password step does not recognise your address, reply to this "
+        "email and we will sort it out.\n\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hi {name},</p>
+
+  <p>
+    You have been onboarded to <strong>Agilytics</strong>, the platform where
+    the rest of your {bootcamp_name} journey takes place — your track, your
+    progress and your coursework all live there from here on.
+  </p>
+
+  <p style="margin:0 0 6px">An account has already been created for you using this email address:</p>
+  <p style="margin:0 0 24px;padding:10px 14px;background:#f9fafb;border-radius:6px;
+            font-family:ui-monospace,'SF Mono',Consolas,monospace;font-size:14px">
+    {to}
+  </p>
+
+  <div style="margin:24px 0;padding:18px 20px;background:#f5f3ff;
+              border-left:4px solid #1800AD;border-radius:6px">
+    <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:1px;
+              text-transform:uppercase;color:#1800AD">How to get in — first time</p>
+
+    <p style="margin:0 0 10px;color:#312e81">
+      <strong>1. Set your password.</strong> You do not have one yet, so start
+      here and enter the email address above:
+    </p>
+    <p style="margin:0 0 16px">
+      <a href="{reset_url}" style="color:#1800AD;font-weight:600">{reset_url}</a>
+    </p>
+
+    <p style="margin:0 0 10px;color:#312e81">
+      <strong>2. Sign in</strong> with that same email address and your new
+      password:
+    </p>
+    <p style="margin:0">
+      <a href="{login_url}" style="color:#1800AD;font-weight:600">{login_url}</a>
+    </p>
+  </div>
+
+  <p style="margin:24px 0">
+    <a href="{reset_url}"
+       style="display:inline-block;padding:12px 22px;background:#1800AD;color:#ffffff;
+              text-decoration:none;border-radius:6px;font-weight:600">
+      Set your password
+    </a>
+  </p>
+
+  <p style="color:#6b7280">
+    Use the same email address at both steps — your account is tied to it, and
+    a different address will not find it.
+  </p>
+
+  <p style="color:#6b7280">
+    Your candidate code is
+    <strong style="font-family:ui-monospace,'SF Mono',Consolas,monospace;
+                   color:#1f2937">{candidate_code}</strong>.
+    Quote it in any email you send us.
+  </p>
+
+  <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
+            border-radius:6px;font-size:14px;color:#374151">
+    If the password step does not recognise your address, reply to this email
+    and we will sort it out.
+  </p>""")
+
+    return _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Agilytics onboarding email",
+        code=candidate_code,
+    )

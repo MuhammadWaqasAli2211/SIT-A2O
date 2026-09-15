@@ -1,7 +1,13 @@
-import { GraduationCap, Loader2, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import {
+  GraduationCap,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -125,6 +131,22 @@ export default function SuperAdminProgramsPage() {
                             {[program.duration, program.mode, program.level]
                               .filter(Boolean)
                               .join(' · ')}
+                          </span>
+                          {/* Visible in the list, not just the edit dialog: a
+                              missing mapping is silent everywhere else — their
+                              API accepts an unknown track without complaint —
+                              so this is where somebody notices it. */}
+                          <span className="mt-1 block text-xs">
+                            {program.agilytics_track_name ? (
+                              <>
+                                Agilytics:{' '}
+                                <span className="font-mono">{program.agilytics_track_name}</span>
+                              </>
+                            ) : (
+                              <span className="text-warning-foreground dark:text-warning">
+                                No Agilytics track mapped
+                              </span>
+                            )}
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
@@ -262,6 +284,7 @@ function ProgramForm({
   const [mode, setMode] = useState(program?.mode ?? '')
   const [level, setLevel] = useState(program?.level ?? '')
   const [sortOrder, setSortOrder] = useState(String(program?.sort_order ?? 0))
+  const [trackName, setTrackName] = useState(program?.agilytics_track_name ?? '')
 
   const save = useMutation(async () => {
     const fields = {
@@ -271,6 +294,9 @@ function ProgramForm({
       mode: mode || null,
       level: level || null,
       sort_order: Number(sortOrder) || 0,
+      // Empty means "no mapping", which is a real choice rather than a blank:
+      // students on this program get onboarded without a track.
+      agilytics_track_name: trackName.trim() || null,
     }
     return isEdit
       ? programApi.update(program.id, fields)
@@ -380,6 +406,25 @@ function ProgramForm({
             </div>
           </div>
 
+          {/* Full width and set apart from the marketing fields above: this
+              one is not copy, it is a key into a partner's system, and an
+              admin filling in a tagline should not mistake it for one. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="pg-agilytics">Agilytics track name</Label>
+            <Input
+              id="pg-agilytics"
+              value={trackName}
+              onChange={(event) => setTrackName(event.target.value)}
+              placeholder="e.g. Web Dev"
+            />
+            <p className="text-xs text-muted-foreground">
+              Must match the track name in the Agilytics workspace exactly. Their API
+              silently ignores a name it does not recognise, so a typo does not fail —
+              it just leaves those students in no track. Leave blank to onboard this
+              program&apos;s students without one.
+            </p>
+          </div>
+
           {save.error && (
             <Alert variant="destructive">
               <AlertDescription>{save.error}</AlertDescription>
@@ -392,8 +437,11 @@ function ProgramForm({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSave}>
-            {save.pending && <Loader2 className="size-4 animate-spin" />}
-            {isEdit ? 'Save changes' : 'Create program'}
+            <PendingLabel
+              isPending={save.pending}
+              idle={isEdit ? 'Save changes' : 'Create program'}
+              pending={isEdit ? 'Saving…' : 'Creating…'}
+            />
           </Button>
         </DialogFooter>
       </DialogContent>

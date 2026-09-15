@@ -11,6 +11,7 @@ different arrangement of data they can see, not a wider one.
 """
 
 import uuid
+from datetime import date, datetime, time
 from typing import Any
 
 from pydantic import BaseModel
@@ -54,6 +55,46 @@ class HrAssessmentRow(BaseModel):
     hub_unlocked: bool
 
 
+class HrAssessmentAwaitingRow(BaseModel):
+    """One candidate invited to a Physical Interview and not yet decided.
+
+    A different population from `HrAssessmentRow` above, not a subset of it:
+    these people have an open invite, whereas that list is everyone who has
+    already cleared the round. The two are disjoint by construction — recording
+    a result here is exactly what moves somebody from this list into that one.
+
+    Carries the screening result for the same reason the roster does: an HR
+    reviewer deciding in the room wants the AI score in front of them, and it
+    arrived with the page either way.
+    """
+
+    invite_id: uuid.UUID
+    application_id: uuid.UUID
+    candidate_code: str
+    full_name: str | None = None
+    email: str | None = None
+
+    bootcamp_id: uuid.UUID | None = None
+    bootcamp_name: str | None = None
+    program_title: str | None = None
+
+    # The batch's details, so the reviewer can tell two rounds apart without
+    # opening the invite dialog.
+    venue: str
+    interview_date: date
+    start_time: time | None = None
+    deadline_at: datetime
+
+    sent_at: datetime | None = None
+    send_failed: bool = False
+    # "pending" or "missed" — never a decided one, or it would not be here.
+    # Same derivation as the invite dialog's own column, from `row_status`.
+    status: str
+
+    ai_score: float | None = None
+    interview: dict[str, Any] | None = None
+
+
 class HrAssessmentStats(BaseModel):
     """The figures above the table. Computed over the same fetch the rows come
     from, not a second pass — the screen already holds the data to answer them.
@@ -63,8 +104,15 @@ class HrAssessmentStats(BaseModel):
     forms_complete: int
     documents_pending: int
     average_ai_score: float | None = None
+    # Open Physical Interview invites — the top section's headline count.
+    awaiting_decision: int = 0
 
 
 class HrAssessmentPage(BaseModel):
     items: list[HrAssessmentRow]
+    # Answered by the same request as `items` rather than a second endpoint:
+    # the screen shows both sections at once, and a decision recorded in the
+    # first moves a candidate into the second, so one fetch keeps them
+    # consistent with each other instead of racing.
+    awaiting: list[HrAssessmentAwaitingRow] = []
     stats: HrAssessmentStats

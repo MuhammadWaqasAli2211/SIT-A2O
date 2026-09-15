@@ -22,15 +22,26 @@ the onboarding list — the same shape that list has today, not a new burden.
 import uuid
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.application import Application
 from app.models.bootcamp import Bootcamp, Program
 from app.models.enums import UserRole
+from app.models.physical_interview import PhysicalInterviewBatch, PhysicalInterviewInvite
 from app.models.user import Profile
-from app.schemas.hr_assessment import HrAssessmentPage, HrAssessmentRow, HrAssessmentStats
-from app.services import ai_interview_service, bootcamp_service, onboarding_document_service
+from app.schemas.hr_assessment import (
+    HrAssessmentAwaitingRow,
+    HrAssessmentPage,
+    HrAssessmentRow,
+    HrAssessmentStats,
+)
+from app.services import (
+    ai_interview_service,
+    bootcamp_service,
+    onboarding_document_service,
+    physical_interview_service,
+)
 
 # Matches _COMPLETED_FETCH_LIMIT's reasoning in ai_interview_service: the
 # screening results this joins against are themselves capped, so listing more
@@ -71,10 +82,12 @@ def list_rows(
         query = query.where(Application.bootcamp_id == bootcamp_id)
 
     records = db.execute(query).all()
-    if not records:
-        return HrAssessmentPage(items=[], stats=_stats([]))
+    awaiting_records = _awaiting_records(db, bootcamp_id)
 
-    # One external call for the whole page, not one per row.
+    if not records and not awaiting_records:
+        return HrAssessmentPage(items=[], awaiting=[], stats=_stats([], []))
+
+    # One external call for the whole page — both sections — not one per row.
     interviews = ai_interview_service.best_interviews_by_application(db, actor, bootcamp_id)
 
     items = []
@@ -105,15 +118,73 @@ def list_rows(
             )
         )
 
-    return HrAssessmentPage(items=items, stats=_stats(items))
+    awaiting = [
+        HrAssessmentAwaitingRow(
+            invite_id=invite.id,
+            application_id=application.id,
+            candidate_code=application.candidate_code,
+            full_name=profile.full_name,
+            email=profile.email,
+            bootcamp_id=application.bootcamp_id,
+            bootcamp_name=bootcamp_name,
+            program_title=program_title,
+            venue=invite.batch.venue,
+            interview_date=invite.batch.interview_date,
+            start_time=invite.batch.start_time,
+            deadline_at=invite.batch.deadline_at,
+            sent_at=invite.sent_at,
+            send_failed=invite.send_failed,
+            status=physical_interview_service.row_status(invite),
+            ai_score=_score_of(interviews.get(application.id)),
+            interview=interviews.get(application.id),
+        )
+        for invite, application, profile, bootcamp_name, program_title in awaiting_records
+    ]
+
+    return HrAssessmentPage(items=items, awaiting=awaiting, stats=_stats(items, awaiting))
 
 
-def _stats(items: list[HrAssessmentRow]) -> HrAssessmentStats:
+def _awaiting_records(db: Session, bootcamp_id: uuid.UUID | None) -> list:
+    """Open Physical Interview invites — invited, no result recorded yet.
+
+    `result IS NULL` is the whole definition: `record_result` writes it in the
+    same flush as the stage move, so an undecided invite and a candidate who
+    has not moved on are the same fact, asked once. A lapsed deadline does not
+    drop a row — the reviewer still has to decide, and `row_status` labels it
+    "missed" so they can see which ones did not turn up.
+
+    Ordered by deadline so the round that closes first is at the top.
+    """
+    query = (
+        select(PhysicalInterviewInvite, Application, Profile, Bootcamp.name, Program.title)
+        .join(PhysicalInterviewBatch, PhysicalInterviewBatch.id == PhysicalInterviewInvite.batch_id)
+        .join(Application, Application.id == PhysicalInterviewInvite.application_id)
+        .join(Profile, Profile.id == Application.profile_id)
+        .outerjoin(Bootcamp, Bootcamp.id == Application.bootcamp_id)
+        .outerjoin(Program, Program.id == Application.program_id)
+        .where(PhysicalInterviewInvite.result.is_(None))
+        .options(selectinload(PhysicalInterviewInvite.batch))
+        .order_by(PhysicalInterviewBatch.deadline_at, Application.candidate_code)
+        .limit(_MAX_ROWS)
+    )
+    if bootcamp_id is not None:
+        query = query.where(PhysicalInterviewBatch.bootcamp_id == bootcamp_id)
+    return db.execute(query).all()
+
+
+def _stats(
+    items: list[HrAssessmentRow], awaiting: list[HrAssessmentAwaitingRow]
+) -> HrAssessmentStats:
+    # Averaged across both sections: an HR reviewer reads it as "the calibre of
+    # this intake at this point", and excluding the people still to be decided
+    # would make the figure jump every time somebody was selected.
     scored = [row.ai_score for row in items if row.ai_score is not None]
+    scored += [row.ai_score for row in awaiting if row.ai_score is not None]
     return HrAssessmentStats(
         total=len(items),
         forms_complete=sum(1 for row in items if row.forms_submitted >= row.forms_total),
         documents_pending=sum(row.documents_pending for row in items),
         # Rounded because it is a headline figure, not an input to anything.
         average_ai_score=round(sum(scored) / len(scored), 1) if scored else None,
+        awaiting_decision=len(awaiting),
     )

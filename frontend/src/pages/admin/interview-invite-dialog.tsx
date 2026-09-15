@@ -17,7 +17,6 @@ import {
   Eye,
   FileText,
   Lightbulb,
-  Loader2,
   Mail,
   Pencil,
   Plus,
@@ -32,6 +31,8 @@ import {
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { AppLoader } from '@/components/shared/app-loader'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -590,9 +591,7 @@ function SendPanel({
             )}
 
             {initialLoading ? (
-              <div className="grid place-items-center py-10 text-sm text-muted-foreground">
-                <Loader2 className="size-5 animate-spin" />
-              </div>
+              <AppLoader size="sm" />
             ) : error ? (
               <Alert variant="destructive">
                 <AlertTriangle className="size-4" />
@@ -683,8 +682,12 @@ function SendPanel({
               onClick={attemptSend}
               disabled={blockedReason !== null || send.pending}
             >
-              {send.pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-              Send {recipientCount > 0 ? recipientCount : ''}
+              <Send className="size-4" />
+              <PendingLabel
+                isPending={send.pending}
+                idle={`Send ${recipientCount > 0 ? recipientCount : ''}`}
+                pending="Sending…"
+              />
             </Button>
           </div>
         </div>
@@ -754,8 +757,14 @@ function SendPanel({
             <p className="text-xs text-muted-foreground">{blockedReason}</p>
           )}
           <Button onClick={attemptSend} disabled={blockedReason !== null || send.pending}>
-            {send.pending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            Send {recipientCount > 0 ? recipientCount : ''} invite{recipientCount === 1 ? '' : 's'}
+            <Send className="size-4" />
+            <PendingLabel
+              isPending={send.pending}
+              idle={`Send ${recipientCount > 0 ? recipientCount : ''} invite${
+                recipientCount === 1 ? '' : 's'
+              }`}
+              pending="Sending…"
+            />
           </Button>
           <Button variant="outline" onClick={onClose} disabled={send.pending}>
             Cancel
@@ -1187,11 +1196,7 @@ function HistoryPanel({ bootcampId, active }: { bootcampId: string; active: bool
   const [expanded, setExpanded] = useState<string | null>(null)
 
   if (initialLoading) {
-    return (
-      <div className="grid place-items-center py-10 text-sm text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-      </div>
-    )
+    return <AppLoader size="sm" />
   }
   if (error) {
     return (
@@ -1297,14 +1302,14 @@ function BatchRow({
           onClick={doRefresh}
           disabled={refresh.pending}
         >
-          {refresh.pending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          <RefreshCw className="size-3.5" />
         </Button>
       </div>
 
       {expanded && (
         <div className="border-t border-border px-3.5 py-3">
           {detailQuery.initialLoading ? (
-            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            <AppLoader size="sm" />
           ) : (
             <div className="flex flex-col gap-1.5">
               {(detailQuery.data as InviteBatchDetail | undefined)?.invites.map((invite) => (

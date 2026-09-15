@@ -11,11 +11,13 @@ from fastapi import APIRouter
 
 from app.api.deps import AdminUser, DbSession
 from app.schemas.agilytics import (
-    AgilyticsInviteRequest,
-    AgilyticsInviteResult,
+    AgilyticsEligibleList,
     AgilyticsMemberStatus,
+    AgilyticsOnboardOutcome,
+    AgilyticsOnboardRequest,
     AgilyticsProvisionResult,
     AgilyticsWorkspaceState,
+    AgilyticsWorkspaceStats,
 )
 from app.services import agilytics_service
 
@@ -60,30 +62,52 @@ def provision(
     return agilytics_service.provision(db, user, bootcamp_id)
 
 
-@router.post(
-    "/bootcamps/{bootcamp_id}/agilytics/invites", response_model=AgilyticsInviteResult
+@router.get(
+    "/bootcamps/{bootcamp_id}/agilytics/stats", response_model=AgilyticsWorkspaceStats
 )
-def send_invites(
+def workspace_stats(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsWorkspaceStats:
+    """Workspace health: roles, statuses, per-track progress, activation.
+
+    A different endpoint from the one behind `GET .../agilytics` above, not a
+    richer view of it — theirs return different things, and only this one
+    reports per-track onboarded/pending counts and account activation.
+    """
+    return agilytics_service.workspace_stats(db, user, bootcamp_id)
+
+
+@router.get(
+    "/bootcamps/{bootcamp_id}/agilytics/eligible", response_model=AgilyticsEligibleList
+)
+def eligible(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsEligibleList:
+    """Who this intake could onboard, split by already-onboarded.
+
+    Eligibility is having cleared the Physical Interview — nothing to do with
+    form or document progress. Read-only; no Agilytics call is made.
+    """
+    return agilytics_service.eligible(db, user, bootcamp_id)
+
+
+@router.post(
+    "/bootcamps/{bootcamp_id}/agilytics/onboard", response_model=AgilyticsOnboardOutcome
+)
+def onboard(
     bootcamp_id: uuid.UUID,
-    payload: AgilyticsInviteRequest,
+    payload: AgilyticsOnboardRequest,
     user: AdminUser,
     db: DbSession,
-) -> AgilyticsInviteResult:
-    """Issue Agilytics invites, and optionally email the selected candidates.
+) -> AgilyticsOnboardOutcome:
+    """Make the selected candidates APPROVED members of the workspace.
 
-    `application_ids` does not narrow the Agilytics half — their endpoint
-    takes no member list and always covers every pending member. It selects
-    who receives our own covering email. Safe to repeat.
+    Immediate: there is no invitation and no acceptance step, so a candidate
+    named here is a member when this returns. Each one is then advanced to
+    ONBOARDED and emailed their first-login instructions.
     """
-    return AgilyticsInviteResult.model_validate(
-        agilytics_service.send_invites(
-            db,
-            user,
-            bootcamp_id,
-            application_ids=payload.application_ids,
-            subject=payload.subject,
-            body_html=payload.body_html,
-        )
+    return agilytics_service.onboard(
+        db, user, bootcamp_id, application_ids=payload.application_ids
     )
 
 

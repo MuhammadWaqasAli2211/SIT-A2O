@@ -8,9 +8,8 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
-  ExternalLink,
+  Eye,
   FileText,
-  Loader2,
   RotateCcw,
   XCircle,
 } from 'lucide-react'
@@ -18,6 +17,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,11 +30,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { applicationApi, onboardingApi } from '@/features/admin/api'
 import { AsyncSection } from '@/features/admin/components'
+import { DocumentReviewDialog } from '@/features/onboarding/document-review-dialog'
 import { OnboardingSubmissionView } from '@/features/onboarding/submission-view'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import {
@@ -65,8 +65,17 @@ export default function AdminOnboardingCandidatePage() {
         <ArrowLeft className="size-3.5" />
         Back to Onboarding
       </Link>
+      {/* No "Loading…" placeholder title: the loader below already says the
+          page is busy, and repeating that in words was the one spot in the
+          app that still spelled it out — everywhere else the motion alone
+          carries it. A neutral static title until the real one is known,
+          same as every other page here reads while its data is in flight. */}
       <PageHeader
-        title={application.data ? `${application.data.candidate_code} — ${application.data.full_name ?? 'Unnamed'}` : 'Loading…'}
+        title={
+          application.data
+            ? `${application.data.candidate_code} — ${application.data.full_name ?? 'Unnamed'}`
+            : 'Candidate folder'
+        }
         description={application.data?.bootcamp_name}
       />
 
@@ -74,7 +83,6 @@ export default function AdminOnboardingCandidatePage() {
         initialLoading={application.initialLoading}
         error={application.error}
         onRetry={application.refetch}
-        skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
       >
         {application.data && (
           <Tabs defaultValue="forms">
@@ -180,8 +188,7 @@ function ReopenDialog({
             Cancel
           </Button>
           <Button onClick={confirm} disabled={reopen.pending}>
-            {reopen.pending && <Loader2 className="size-3.5 animate-spin" />}
-            Reopen
+            <PendingLabel idle="Reopen" pending="Reopening…" isPending={reopen.pending} />
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -193,23 +200,16 @@ function ReopenDialog({
 
 function DocumentsPanel({ applicationId }: { applicationId: string }) {
   const rows = useAsync(() => onboardingApi.documents(applicationId), [applicationId])
-  const [rejectTarget, setRejectTarget] = useState<OnboardingDocumentRecord | null>(null)
-
-  const approve = useMutation((id: string) => onboardingApi.reviewDocument(id, 'ACCEPTED'))
-
-  async function doApprove(doc: OnboardingDocumentRecord) {
-    if (await approve.run(doc.id)) {
-      toast.success('Approved')
-      rows.refetch()
-    }
-  }
+  // One target, one modal: the preview and both decisions now live in the same
+  // frame, so there is no separate "which document am I rejecting" state to
+  // keep in step with "which document am I looking at".
+  const [reviewing, setReviewing] = useState<OnboardingDocumentRecord | null>(null)
 
   return (
     <AsyncSection
       initialLoading={rows.initialLoading}
       error={rows.error}
       onRetry={rows.refetch}
-      skeleton={<Skeleton className="h-96 w-full rounded-xl" />}
     >
       {rows.data && (
         <Tabs defaultValue={rows.data[0]?.doc_type} orientation="vertical">
@@ -238,9 +238,7 @@ function DocumentsPanel({ applicationId }: { applicationId: string }) {
                       <AdminDocumentRow
                         key={doc.id}
                         doc={doc}
-                        onApprove={() => doApprove(doc)}
-                        onReject={() => setRejectTarget(doc)}
-                        approving={approve.pending}
+                        onReview={() => setReviewing(doc)}
                       />
                     ))
                   )}
@@ -251,7 +249,11 @@ function DocumentsPanel({ applicationId }: { applicationId: string }) {
         </Tabs>
       )}
 
-      <RejectDialog doc={rejectTarget} onClose={() => setRejectTarget(null)} onDone={rows.refetch} />
+      <DocumentReviewDialog
+        doc={reviewing}
+        onClose={() => setReviewing(null)}
+        onReviewed={rows.refetch}
+      />
     </AsyncSection>
   )
 }
@@ -269,19 +271,11 @@ const STATUS_TONE: Record<DocumentStatus, string> = {
 
 function AdminDocumentRow({
   doc,
-  onApprove,
-  onReject,
-  approving,
+  onReview,
 }: {
   doc: OnboardingDocumentRecord
-  onApprove: () => void
-  onReject: () => void
-  approving: boolean
+  onReview: () => void
 }) {
-  const view = useMutation(async () => {
-    const { url } = await onboardingApi.documentLink(doc.id)
-    window.open(url, '_blank', 'noopener,noreferrer')
-  })
   const StatusIcon = STATUS_ICON[doc.status]
 
   return (
@@ -307,84 +301,15 @@ function AdminDocumentRow({
         </Alert>
       )}
 
+      {/* One button, not three. Approve and reject moved inside the review
+          modal, next to the document they are decisions about — deciding from
+          the list meant deciding on a filename. */}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="outline" onClick={() => view.run()} disabled={view.pending}>
-          {view.pending ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
-          View
+        <Button size="sm" variant="outline" onClick={onReview}>
+          <Eye className="size-3.5" />
+          Review
         </Button>
-        {doc.status !== 'ACCEPTED' && (
-          <Button size="sm" onClick={onApprove} disabled={approving}>
-            <CheckCircle2 className="size-3.5" />
-            Approve
-          </Button>
-        )}
-        {doc.status !== 'REJECTED' && (
-          <Button size="sm" variant="destructive" onClick={onReject}>
-            <XCircle className="size-3.5" />
-            Reject
-          </Button>
-        )}
       </div>
     </div>
-  )
-}
-
-function RejectDialog({
-  doc,
-  onClose,
-  onDone,
-}: {
-  doc: OnboardingDocumentRecord | null
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [reason, setReason] = useState('')
-  const reject = useMutation((id: string, note: string) => onboardingApi.reviewDocument(id, 'REJECTED', note))
-
-  async function confirm() {
-    if (!doc || !reason.trim()) return
-    if (await reject.run(doc.id, reason.trim())) {
-      toast.success('Rejected')
-      setReason('')
-      onClose()
-      onDone()
-    }
-  }
-
-  return (
-    <Dialog open={doc !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Reject this document</DialogTitle>
-          <DialogDescription>
-            {doc?.file_name} — the candidate sees this reason and can re-upload.
-          </DialogDescription>
-        </DialogHeader>
-
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="e.g. Image is blurry, please re-upload"
-          rows={3}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        />
-        {reject.error && (
-          <Alert variant="destructive">
-            <AlertTriangle className="size-4" />
-            <AlertDescription>{reject.error}</AlertDescription>
-          </Alert>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={reject.pending}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={confirm} disabled={reject.pending || !reason.trim()}>
-            {reject.pending && <Loader2 className="size-3.5 animate-spin" />}
-            Reject
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

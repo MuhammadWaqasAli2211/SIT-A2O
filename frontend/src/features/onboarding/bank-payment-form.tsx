@@ -1,5 +1,6 @@
-import { CheckCircle2, Loader2, Send } from "lucide-react"
+import { CheckCircle2, Send } from "lucide-react"
 import * as React from "react"
+import { PendingLabel } from '@/components/shared/pending-label'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -151,8 +152,8 @@ export function BankPaymentForm({
             </span>
             {onSubmit && (
               <Button type="button" size="sm" onClick={handleSubmit} disabled={submitting || missing}>
-                {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                Submit
+                <Send className="size-3.5" />
+                <PendingLabel idle="Submit" pending="Submitting…" isPending={submitting} />
               </Button>
             )}
           </div>

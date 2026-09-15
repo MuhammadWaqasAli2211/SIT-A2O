@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarRange, Loader2, Lock, LockOpen, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, CalendarRange, Lock, LockOpen, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -10,13 +10,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { PageHeader } from '@/components/shared/portal-ui'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { bootcampApi, phaseApi } from '@/features/admin/api'
 import {
   AsyncSection,
-  BootcampStatusBadge,
   BootcampSwitcher,
   ConfirmDialog,
-  NoBootcampSelected,
+  BootcampGate,
 } from '@/features/admin/components'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
@@ -52,6 +52,11 @@ function fromLocalInput(value: string): string | null {
   return value ? new Date(value).toISOString() : null
 }
 
+/** Now, in the same `YYYY-MM-DDTHH:mm` local shape the input wants. */
+function nowLocalInput(): string {
+  return toLocalInput(new Date().toISOString())
+}
+
 /** A phase is genuinely open only if the flag is set and the clock agrees. */
 function effectivelyOpen(phase: Phase, now = Date.now()): boolean {
   if (!phase.is_open) return false
@@ -74,11 +79,14 @@ function closedReason(phase: Phase, now = Date.now()): 'not-yet-open' | 'window-
 }
 
 function formatMoment(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
 }
 
 export default function AdminPhasesPage() {
-  const { selected, selectedId, refresh } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading, refresh } = useBootcamp()
 
   const { data, error, initialLoading, refetch } = useAsync(
     () => (selectedId ? bootcampApi.detail(selectedId) : Promise.resolve(undefined)),
@@ -90,57 +98,51 @@ export default function AdminPhasesPage() {
       <PageHeader
         title="Phases"
         description={
-          selected
-            ? `Control when each stage of ${selected.name} opens and closes.`
-            : 'Pick an intake to manage its phases.'
+          bootcampLoading
+            ? undefined
+            : selected
+              ? `Control when each stage of ${selected.name} opens and closes.`
+              : 'Pick an intake to manage its phases.'
         }
         actions={<BootcampSwitcher />}
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected icon={ShieldCheck} />
-      ) : (
-        <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
-          {data && (
-            <div className="flex flex-col gap-5">
-              <Card>
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium">{data.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {data.application_count} application
-                      {data.application_count === 1 ? '' : 's'} received
-                    </span>
-                  </div>
-                  <BootcampStatusBadge status={data.status} />
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                {PHASE_ORDER.map((type) => {
-                  const phase = data.phases.find((p) => p.phase === type)
-                  return phase ? (
-                    <PhaseCard
-                      // Keyed on the server's own values so a save (or another
-                      // admin's edit) remounts the card with fresh inputs,
-                      // rather than syncing form state through an effect.
-                      key={`${type}:${phase.opens_at}:${phase.deadline_at}`}
-                      bootcamp={data}
-                      phase={phase}
-                      onChanged={() => {
-                        refetch()
-                        // The registration gate drives the bootcamp's headline
-                        // status, so the switcher's copy has to be refreshed too.
-                        if (type === 'REGISTRATION') refresh()
-                      }}
-                    />
-                  ) : null
-                })}
+      <BootcampGate icon={ShieldCheck}>
+        {(_selectedId) => (
+          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
+            {data && (
+              <div className="flex flex-col gap-5">
+                {/* No summary banner above the grid. The intake's name is already
+                  in the switcher and the page description, and its application
+                  count belongs to the dashboard — repeating both here cost a
+                  card's height and pushed the four phase cards into a scroll on
+                  a laptop, which is the one thing this screen should not need. */}
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {PHASE_ORDER.map((type) => {
+                    const phase = data.phases.find((p) => p.phase === type)
+                    return phase ? (
+                      <PhaseCard
+                        // Keyed on the server's own values so a save (or another
+                        // admin's edit) remounts the card with fresh inputs,
+                        // rather than syncing form state through an effect.
+                        key={`${type}:${phase.opens_at}:${phase.deadline_at}`}
+                        bootcamp={data}
+                        phase={phase}
+                        onChanged={() => {
+                          refetch()
+                          // The registration gate drives the bootcamp's headline
+                          // status, so the switcher's copy has to be refreshed too.
+                          if (type === 'REGISTRATION') refresh()
+                        }}
+                      />
+                    ) : null
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </AsyncSection>
-      )}
+            )}
+          </AsyncSection>
+        )}
+      </BootcampGate>
     </>
   )
 }
@@ -154,14 +156,38 @@ function PhaseCard({
   phase: Phase
   onChanged: () => void
 }) {
+  /**
+   * A phase nobody has given an opening time yet starts with "now" filled in.
+   *
+   * A real value, not the `placeholder` attribute: `datetime-local` barely
+   * renders one and submits nothing at all, so a placeholder could not become
+   * the saved value by doing nothing — which is the whole point of the
+   * convenience. The admin saves and the phase opens from now; typing over it
+   * replaces it with no restriction; a phase that already has a saved opening
+   * time shows that instead and never sees this.
+   *
+   * Computed once at mount rather than per render, so the field does not tick
+   * forward under the cursor while somebody is reading it.
+   */
+  const neverConfigured = phase.opens_at === null
+  const [suggestedOpensAt] = useState(nowLocalInput)
+
   // Seeded from the server values; the parent's key remounts this card when
   // those change, so there is no effect keeping the two in step.
-  const [opensAt, setOpensAt] = useState(() => toLocalInput(phase.opens_at))
+  const [opensAt, setOpensAt] = useState(() =>
+    neverConfigured ? suggestedOpensAt : toLocalInput(phase.opens_at),
+  )
   const [deadlineAt, setDeadlineAt] = useState(() => toLocalInput(phase.deadline_at))
   const [confirmClose, setConfirmClose] = useState(false)
 
+  // Still showing the untouched suggestion — worth saying so under the field,
+  // and the reason "Unsaved changes" stays quiet below: the admin has not
+  // changed anything, we filled it in for them.
+  const showingSuggestion = neverConfigured && opensAt === suggestedOpensAt
+
   const dirty =
     opensAt !== toLocalInput(phase.opens_at) || deadlineAt !== toLocalInput(phase.deadline_at)
+  const edited = dirty && !showingSuggestion
 
   const open = effectivelyOpen(phase)
   const reason = closedReason(phase)
@@ -177,9 +203,7 @@ function PhaseCard({
     return phaseApi.update(bootcamp.id, phase.phase, payload)
   })
 
-  const toggle = useMutation((next: boolean) =>
-    phaseApi.setOpen(bootcamp.id, phase.phase, next),
-  )
+  const toggle = useMutation((next: boolean) => phaseApi.setOpen(bootcamp.id, phase.phase, next))
 
   async function onSave() {
     if (await save.run()) {
@@ -245,8 +269,8 @@ function PhaseCard({
           <Alert>
             <AlertTriangle className="size-4" />
             <AlertDescription>
-              The flag is on, but the window has passed — this phase is closed to candidates.
-              Extend the deadline to reopen it.
+              The flag is on, but the window has passed — this phase is closed to candidates. Extend
+              the deadline to reopen it.
             </AlertDescription>
           </Alert>
         )}
@@ -259,7 +283,15 @@ function PhaseCard({
               type="datetime-local"
               value={opensAt}
               onChange={(event) => setOpensAt(event.target.value)}
+              className={cn(showingSuggestion && 'text-muted-foreground')}
             />
+            {/* Sized by the taller of the two states via the sibling field, so
+                showing this line does not make the card grow. */}
+            <span
+              className={cn('text-xs text-muted-foreground', !showingSuggestion && 'invisible')}
+            >
+              Suggested — saving opens this phase now.
+            </span>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${phase.id}-deadline`}>Deadline</Label>
@@ -281,11 +313,16 @@ function PhaseCard({
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={onSave} disabled={!dirty || save.pending}>
-            {save.pending && <Loader2 className="size-4 animate-spin" />}
             <CalendarRange className="size-4" />
-            Save window
+            <PendingLabel idle="Save window" pending="Saving…" isPending={save.pending} />
           </Button>
 
+          {/* The switch is the admin's *intent*, the badge above is the
+              effective state, and the two legitimately differ once a deadline
+              has passed. Labelling this one "Open"/"Closed" too made the same
+              card read "Closed" in the header and "Open" here, which looked
+              like the toggle had failed to take. It says what it controls
+              instead. */}
           <div className="flex items-center gap-2">
             <Switch
               checked={phase.is_open}
@@ -293,13 +330,25 @@ function PhaseCard({
               disabled={toggle.pending}
               aria-label={phase.is_open ? 'Close phase' : 'Open phase'}
             />
+            {/* The label carries the in-flight state itself. `reserve` holds
+                the width of every string this can show — both resting labels
+                and both verbs — so the switch, this text and the Save button
+                beside it never move, in any state. */}
             <span className="text-sm text-muted-foreground">
-              {toggle.pending && <Loader2 className="mr-1 inline size-3.5 animate-spin" />}
-              {phase.is_open ? 'Open' : 'Closed'}
+              <PendingLabel
+                isPending={toggle.pending}
+                idle={phase.is_open ? 'Manually opened' : 'Manually closed'}
+                pending={phase.is_open ? 'Closing…' : 'Opening…'}
+                reserve={['Manually opened', 'Manually closed']}
+              />
             </span>
           </div>
 
-          {dirty && (
+          {/* `edited`, not `dirty`: a card sitting on its suggested opening
+              time is savable, but nobody has changed anything, and announcing
+              unsaved changes on four untouched cards at page load would be
+              noise that means nothing. */}
+          {edited && (
             <span className="self-center text-xs text-muted-foreground">Unsaved changes</span>
           )}
         </div>
@@ -315,6 +364,7 @@ function PhaseCard({
             : 'This stage will stop accepting activity until it is reopened.'
         }
         confirmLabel="Close phase"
+        pendingLabel="Closing…"
         pending={toggle.pending}
         error={toggle.error}
         onConfirm={() => onToggle(false)}

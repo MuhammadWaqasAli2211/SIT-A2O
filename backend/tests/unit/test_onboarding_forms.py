@@ -8,18 +8,39 @@ those are tested directly against the pure helpers rather than only through
 """
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
 from app.core.exceptions import ConflictError
 from app.models.application import Application
-from app.models.enums import ApplicationStage, OnboardingFormStatus, OnboardingFormType, UserRole
+from app.models.bootcamp import BootcampPhase
+from app.models.enums import (
+    ApplicationStage,
+    OnboardingFormStatus,
+    OnboardingFormType,
+    PhaseType,
+    UserRole,
+)
 from app.models.onboarding import OnboardingFormSubmission
 from app.models.user import CandidateProfile, Profile
 from app.services import onboarding_form_service as svc
+from app.services.bootcamp_service import PhaseClosedError
 
 FT = OnboardingFormType
+
+
+def form_phase(**kwargs) -> BootcampPhase:
+    """The FORM phase as `create` leaves it — flag false, never touched, and
+    so not a gate. See `phase_closure`."""
+    defaults = {
+        "phase": PhaseType.FORM,
+        "is_open": False,
+        "opens_at": None,
+        "deadline_at": None,
+        "closed_at": None,
+    }
+    return BootcampPhase(**{**defaults, **kwargs})
 
 
 def row(form_type, status=OnboardingFormStatus.SUBMITTED):
@@ -30,10 +51,16 @@ class FakeSession:
     """Enough Session for submit()/reopen(): one canned scalars() result and
     one canned get() result, plus no-op writes."""
 
-    def __init__(self, rows=None, candidate_profile=None):
+    def __init__(self, rows=None, candidate_profile=None, phase=None):
         self._rows = rows or []
         self._candidate_profile = candidate_profile
+        self._phase = phase if phase is not None else form_phase()
         self.added = []
+
+    def scalar(self, _stmt):
+        # Only `get_phase` reaches here — submit()'s own lookups all go
+        # through scalars() or get().
+        return self._phase
 
     def scalars(self, _stmt):
         return list(self._rows)
@@ -245,6 +272,51 @@ def test_submit_succeeds_for_the_first_form():
     )
     assert submission.status == OnboardingFormStatus.SUBMITTED
     assert submission.submitted_data == {"a": 1}
+
+
+def test_submit_is_refused_once_an_admin_closes_the_form_phase():
+    """The toggle bug, at the layer it was missing from. Before this gate
+    existed, closing the FORM phase on the phases screen changed a boolean and
+    an audit row and stopped precisely nothing."""
+    closed = form_phase(closed_at=datetime(2026, 9, 1, tzinfo=UTC))
+    with pytest.raises(PhaseClosedError, match="has been closed"):
+        svc.submit(
+            FakeSession(rows=[], phase=closed),
+            application=application(),
+            form_type=FT.BACKGROUND_VERIFICATION,
+            submitted_data={"a": 1},
+            actor=actor(),
+        )
+
+
+def test_a_manual_close_refuses_a_submit_even_before_the_deadline():
+    """Requirement 1: the manual toggle wins outright over a deadline that is
+    still days away."""
+    closed = form_phase(
+        closed_at=datetime(2026, 9, 1, tzinfo=UTC),
+        deadline_at=datetime(2099, 1, 1, tzinfo=UTC),
+    )
+    with pytest.raises(PhaseClosedError):
+        svc.submit(
+            FakeSession(rows=[], phase=closed),
+            application=application(),
+            form_type=FT.BACKGROUND_VERIFICATION,
+            submitted_data={"a": 1},
+            actor=actor(),
+        )
+
+
+def test_submit_is_refused_once_the_deadline_has_passed():
+    """Requirement 2: nobody clicked anything, the clock closed it."""
+    lapsed = form_phase(is_open=True, deadline_at=datetime(2020, 1, 1, tzinfo=UTC))
+    with pytest.raises(PhaseClosedError, match="deadline"):
+        svc.submit(
+            FakeSession(rows=[], phase=lapsed),
+            application=application(),
+            form_type=FT.BACKGROUND_VERIFICATION,
+            submitted_data={"a": 1},
+            actor=actor(),
+        )
 
 
 def test_resubmitting_a_reopened_form_flips_it_back_to_submitted():

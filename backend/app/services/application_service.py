@@ -322,11 +322,22 @@ def advance_stage(
     application_id: uuid.UUID,
     *,
     to_stage: ApplicationStage,
-    actor: Profile,
+    actor: Profile | None,
     reason: str | None = None,
 ) -> Application:
+    """Move an application to another stage.
+
+    `actor=None` means the system did this, not a person — the announced AI
+    interview verdict being applied to a candidate who finished after the
+    announcement, for instance. There is no permission check to run in that
+    case: nobody is asserting a right, the decision was already made and
+    audited when the results were announced. The transition and audit rows
+    both record a null actor, exactly as the automatic
+    INTERVIEW_SCHEDULED -> AI-INTERVIEWED move already does.
+    """
     application = get_detail(db, application_id)
-    bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
+    if actor is not None:
+        bootcamp_service.assert_can_manage(db, actor, application.bootcamp_id)
 
     if application.stage == to_stage:
         raise ConflictError(f"Application is already at {to_stage.value}.")
@@ -360,7 +371,7 @@ def advance_stage(
             application_id=application.id,
             from_stage=previous,
             to_stage=to_stage,
-            actor_id=actor.id,
+            actor_id=actor.id if actor else None,
             reason=reason,
         )
     )

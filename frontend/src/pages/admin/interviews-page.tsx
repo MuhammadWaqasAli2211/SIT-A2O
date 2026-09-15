@@ -26,7 +26,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -41,20 +47,17 @@ import {
   AsyncSection,
   BootcampSwitcher,
   ConfirmDialog,
-  NoBootcampSelected,
+  BootcampGate,
   Pagination,
   useConfirm,
 } from '@/features/admin/components'
 import { BatchScheduleDialog } from '@/pages/admin/batch-schedule-dialog'
 import { InterviewInviteDialog } from '@/pages/admin/interview-invite-dialog'
+import { PhysicalInterviewInviteDialog } from '@/pages/admin/physical-interview-invite-dialog'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
-import {
-  INTERVIEW_STATUS_LABEL,
-  type InterviewRow,
-  type InterviewStatus,
-} from '@/lib/types'
+import { INTERVIEW_STATUS_LABEL, type InterviewRow, type InterviewStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 25
@@ -77,13 +80,14 @@ function formatDateTime(iso: string) {
 }
 
 export default function AdminInterviewsPage() {
-  const { selected, selectedId } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading } = useBootcamp()
 
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>(ALL)
   const [offset, setOffset] = useState(0)
   const [batchOpen, setBatchOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [physicalOpen, setPhysicalOpen] = useState(false)
   const [scoring, setScoring] = useState<InterviewRow | null>(null)
 
   const debouncedSearch = useDebounced(search, 300)
@@ -132,20 +136,26 @@ export default function AdminInterviewsPage() {
       <PageHeader
         title="Interviews"
         description={
-          selected
-            ? `Screening schedule for ${selected.name}.`
-            : 'Pick an intake to manage its interviews.'
+          bootcampLoading
+            ? undefined
+            : selected
+              ? `Screening schedule for ${selected.name}.`
+              : 'Pick an intake to manage its interviews.'
         }
         actions={
           <>
             <BootcampSwitcher />
-            <Button
-              variant="outline"
-              onClick={() => setInviteOpen(true)}
-              disabled={!selectedId}
-            >
+            <Button variant="outline" onClick={() => setInviteOpen(true)} disabled={!selectedId}>
               <Mail className="size-4" />
               AI interview invites
+            </Button>
+            {/* Both invite entry points sit together here rather than one
+                being stranded on the Candidates screen: an admin sending a
+                round of invites is doing one job, and the two rounds differ
+                only in which gate they open. */}
+            <Button variant="outline" onClick={() => setPhysicalOpen(true)} disabled={!selectedId}>
+              <CalendarClock className="size-4" />
+              Physical interview invites
             </Button>
             <Button onClick={() => setBatchOpen(true)} disabled={!selectedId}>
               <CalendarPlus className="size-4" />
@@ -155,184 +165,190 @@ export default function AdminInterviewsPage() {
         }
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected icon={CalendarClock} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
+      <BootcampGate icon={CalendarClock}>
+        {(_selectedId) => (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    setOffset(0)
+                  }}
+                  placeholder="Search by candidate name, email, or code"
+                  className="pl-9"
+                />
+              </div>
+
+              <Select
+                value={status}
+                onValueChange={(value) => {
+                  if (!value) return
+                  setStatus(value)
                   setOffset(0)
                 }}
-                placeholder="Search by candidate name, email, or code"
-                className="pl-9"
-              />
+              >
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All statuses</SelectItem>
+                  {(Object.keys(INTERVIEW_STATUS_LABEL) as InterviewStatus[]).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {INTERVIEW_STATUS_LABEL[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select
-              value={status}
-              onValueChange={(value) => {
-                if (!value) return
-                setStatus(value)
-                setOffset(0)
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All statuses</SelectItem>
-                {(Object.keys(INTERVIEW_STATUS_LABEL) as InterviewStatus[]).map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {INTERVIEW_STATUS_LABEL[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
-            {rows.length === 0 ? (
-              <EmptyState
-                icon={CalendarClock}
-                title={debouncedSearch || status !== ALL ? 'No matches' : 'No interviews yet'}
-                description={
-                  debouncedSearch || status !== ALL
-                    ? 'Try a different search or status filter.'
-                    : 'Schedule a batch to invite candidates for screening.'
-                }
-                action={
-                  !debouncedSearch && status === ALL ? (
-                    <Button size="sm" onClick={() => setBatchOpen(true)}>
-                      <CalendarPlus className="size-4" />
-                      Schedule batch
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Candidate</TableHead>
-                          <TableHead>When</TableHead>
-                          <TableHead className="hidden lg:table-cell">Where</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="hidden md:table-cell">Score</TableHead>
-                          <TableHead className="w-10" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">
-                                  {row.candidate_name ?? row.candidate_email}
-                                </span>
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  {row.candidate_code}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm whitespace-nowrap">
-                              {formatDateTime(row.scheduled_at)}
-                              <span className="block text-xs text-muted-foreground">
-                                {row.duration_minutes} min · {row.mode === 'ONLINE' ? 'Online' : 'On-site'}
-                              </span>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                              <span className="block max-w-48 truncate">{row.location ?? '—'}</span>
-                              {row.batch_label && (
-                                <Badge variant="outline" className="mt-1 text-[0.7rem] font-normal">
-                                  {row.batch_label}
-                                </Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <span
-                                className={cn(
-                                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap',
-                                  STATUS_TONE[row.status],
-                                )}
-                              >
-                                {INTERVIEW_STATUS_LABEL[row.status]}
-                              </span>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell tabular-nums">
-                              {row.score === null ? (
-                                <span className="text-sm text-muted-foreground">—</span>
-                              ) : (
-                                <span className="font-medium">{row.score}</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger
-                                  render={
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label={`Actions for ${row.candidate_code}`}
-                                    />
-                                  }
-                                >
-                                  <MoreHorizontal className="size-4" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  {/* GroupLabel must be inside a Group or Base UI throws. */}
-                                  <DropdownMenuGroup>
-                                    <DropdownMenuLabel>{row.candidate_code}</DropdownMenuLabel>
-                                  </DropdownMenuGroup>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => setScoring(row)}>
-                                    <CalendarClock className="size-4" />
-                                    Record outcome
-                                  </DropdownMenuItem>
-                                  {row.status === 'SCHEDULED' && (
-                                    <DropdownMenuItem onClick={() => cancel.ask(row)}>
-                                      <XCircle className="size-4" />
-                                      Cancel
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => remove.ask(row)}
-                                  >
-                                    <Trash2 className="size-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
+            <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
+              {rows.length === 0 ? (
+                <EmptyState
+                  icon={CalendarClock}
+                  title={debouncedSearch || status !== ALL ? 'No matches' : 'No interviews yet'}
+                  description={
+                    debouncedSearch || status !== ALL
+                      ? 'Try a different search or status filter.'
+                      : 'Schedule a batch to invite candidates for screening.'
+                  }
+                  action={
+                    !debouncedSearch && status === ALL ? (
+                      <Button size="sm" onClick={() => setBatchOpen(true)}>
+                        <CalendarPlus className="size-4" />
+                        Schedule batch
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Candidate</TableHead>
+                            <TableHead>When</TableHead>
+                            <TableHead className="hidden lg:table-cell">Where</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="hidden md:table-cell">Score</TableHead>
+                            <TableHead className="w-10" />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                        </TableHeader>
+                        <TableBody>
+                          {rows.map((row) => (
+                            <TableRow key={row.id}>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    {row.candidate_name ?? row.candidate_email}
+                                  </span>
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    {row.candidate_code}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm whitespace-nowrap">
+                                {formatDateTime(row.scheduled_at)}
+                                <span className="block text-xs text-muted-foreground">
+                                  {row.duration_minutes} min ·{' '}
+                                  {row.mode === 'ONLINE' ? 'Online' : 'On-site'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                                <span className="block max-w-48 truncate">
+                                  {row.location ?? '—'}
+                                </span>
+                                {row.batch_label && (
+                                  <Badge
+                                    variant="outline"
+                                    className="mt-1 text-[0.7rem] font-normal"
+                                  >
+                                    {row.batch_label}
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap',
+                                    STATUS_TONE[row.status],
+                                  )}
+                                >
+                                  {INTERVIEW_STATUS_LABEL[row.status]}
+                                </span>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell tabular-nums">
+                                {row.score === null ? (
+                                  <span className="text-sm text-muted-foreground">—</span>
+                                ) : (
+                                  <span className="font-medium">{row.score}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Actions for ${row.candidate_code}`}
+                                      />
+                                    }
+                                  >
+                                    <MoreHorizontal className="size-4" />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48">
+                                    {/* GroupLabel must be inside a Group or Base UI throws. */}
+                                    <DropdownMenuGroup>
+                                      <DropdownMenuLabel>{row.candidate_code}</DropdownMenuLabel>
+                                    </DropdownMenuGroup>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={() => setScoring(row)}>
+                                      <CalendarClock className="size-4" />
+                                      Record outcome
+                                    </DropdownMenuItem>
+                                    {row.status === 'SCHEDULED' && (
+                                      <DropdownMenuItem onClick={() => cancel.ask(row)}>
+                                        <XCircle className="size-4" />
+                                        Cancel
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => remove.ask(row)}
+                                    >
+                                      <Trash2 className="size-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            {data && (
-              <Pagination
-                total={data.total}
-                limit={data.limit}
-                offset={data.offset}
-                onChange={setOffset}
-              />
-            )}
-          </AsyncSection>
-        </div>
-      )}
+              {data && (
+                <Pagination
+                  total={data.total}
+                  limit={data.limit}
+                  offset={data.offset}
+                  onChange={setOffset}
+                />
+              )}
+            </AsyncSection>
+          </div>
+        )}
+      </BootcampGate>
 
       {selectedId && (
         <BatchScheduleDialog
@@ -349,6 +365,20 @@ export default function AdminInterviewsPage() {
           onOpenChange={setInviteOpen}
           bootcampId={selectedId}
           bootcampName={selected?.name}
+        />
+      )}
+
+      {selectedId && (
+        <PhysicalInterviewInviteDialog
+          open={physicalOpen}
+          onOpenChange={(next) => {
+            setPhysicalOpen(next)
+            // Sending a round moves candidates on, which this page's own
+            // list reflects — same refresh-on-close the Candidates screen
+            // did when the button lived there.
+            if (!next) refetch()
+          }}
+          bootcampId={selectedId}
         />
       )}
 

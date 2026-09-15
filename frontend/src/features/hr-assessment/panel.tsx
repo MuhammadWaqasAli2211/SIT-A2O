@@ -22,36 +22,48 @@
  * list either way.
  */
 
-import { ClipboardList, Download, FileText, Gauge, RefreshCw, Search, Send } from 'lucide-react'
+import {
+  ClipboardList,
+  Download,
+  FileText,
+  Gauge,
+  RefreshCw,
+  Search,
+  UserCheck,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Counter } from '@/components/motion/counter'
+import { AppLoader } from '@/components/shared/app-loader'
 import { Reveal } from '@/components/motion/reveal'
 import { MotionTableBody, MotionTableRow } from '@/components/motion/table-row'
 import { EmptyState } from '@/components/shared/portal-ui'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { agilyticsApi, hrAssessmentApi } from '@/features/admin/api'
 import { AsyncSection } from '@/features/admin/components'
+import { LiveIndicator } from '@/features/live/live-indicator'
+import { useLiveResource } from '@/features/live/use-live-resource'
 import { AI_PASS_THRESHOLD } from '@/features/ai-interview/records'
 import { EvidenceDialog } from '@/features/ai-interview/report-view'
 import { AgilyticsCell } from '@/features/hr-assessment/agilytics-cell'
 import { AgilyticsStrip } from '@/features/hr-assessment/agilytics-strip'
 import { OnboardingFormDialog } from '@/features/hr-assessment/onboarding-form-dialog'
-import { SendInvitesDialog } from '@/features/hr-assessment/send-invites-dialog'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import {
+  RecordResultDialog,
+  type RecordResultTarget,
+} from '@/features/physical-interview/record-result-dialog'
+import { useAsync } from '@/hooks/use-async'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
 import {
   STAGE_LABEL,
   type ExternalRecord,
+  type HrAssessmentAwaitingRow,
   type HrAssessmentRow,
   type HrAssessmentStats,
 } from '@/lib/types'
@@ -66,10 +78,23 @@ export function HrAssessmentPanel({
   bootcampId?: string
   bootcampName?: string
 }) {
-  const { data, error, initialLoading, refetch } = useAsync(
-    () => hrAssessmentApi.list(bootcampId),
-    [bootcampId],
-  )
+  // Live, not a one-shot fetch. Two different admins work this screen at once
+  // during a decision round, and a result recorded by one of them has to leave
+  // the other's queue without a manual reload — the same reasoning, and the
+  // same hook, as the Candidates and AI Interviews screens. A slower cadence
+  // than those: this page costs an external call per refresh, and a decision
+  // queue does not turn over by the second.
+  const {
+    data,
+    error,
+    initialLoading,
+    lastUpdated,
+    live,
+    refresh: refetch,
+  } = useLiveResource(() => hrAssessmentApi.list(bootcampId), [bootcampId], {
+    activeMs: 15_000,
+    hiddenMs: 60_000,
+  })
   // One workspace per intake, so this only means anything in the scoped view.
   // The platform page renders the roster without the Agilytics column rather
   // than inventing a cross-intake aggregate that does not exist.
@@ -88,20 +113,14 @@ export function HrAssessmentPanel({
 
   const [openInterview, setOpenInterview] = useState<ExternalRecord | null>(null)
   const [openForms, setOpenForms] = useState<HrAssessmentRow | null>(null)
+  /** The awaiting-decision row whose select/reject dialog is open. */
+  const [deciding, setDeciding] = useState<RecordResultTarget | null>(null)
 
-  // Selection drives our covering email only — the Agilytics invite itself
-  // always covers every pending member, because their endpoint takes no
-  // member list. The send dialog says so plainly.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [sending, setSending] = useState(false)
-
-  const toggleRow = (id: string) =>
-    setSelectedIds((current) => {
-      const next = new Set(current)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
-
+  // No candidate selection on this screen any more. It existed to choose who
+  // received the covering email alongside an Agilytics invite, and that whole
+  // flow is gone: onboarding is a single immediate action, it lives on the
+  // Onboarding screen next to the folder cards it affects, and it sends its
+  // own email to exactly the people it onboarded.
   // Memoized so its identity is stable across renders where `data` has not
   // changed — a fresh `?? []` literal every render is what trips the
   // exhaustive-deps warning on the useMemo calls below.
@@ -135,36 +154,24 @@ export function HrAssessmentPanel({
     })
   }, [items, track, bootcamp, platform, debouncedSearch])
 
+  // The same search and track filters drive the decision queue, so one term
+  // narrows the whole screen rather than only its bottom half.
+  const awaitingFiltered = useMemo(() => {
+    const rows = data?.awaiting ?? []
+    const term = debouncedSearch.trim().toLowerCase()
+    return rows.filter((row) => {
+      if (track !== ALL && row.program_title !== track) return false
+      if (platform && bootcamp !== ALL && row.bootcamp_name !== bootcamp) return false
+      if (!term) return true
+      return (
+        (row.full_name ?? '').toLowerCase().includes(term) ||
+        row.candidate_code.toLowerCase().includes(term)
+      )
+    })
+  }, [data, track, bootcamp, platform, debouncedSearch])
+
   // Only the rows still on screen: a selection hidden by a filter must not be
   // silently emailed, and the count in the toolbar has to mean what it says.
-  const selectedRows = useMemo(
-    () => filtered.filter((row) => selectedIds.has(row.application_id)),
-    [filtered, selectedIds],
-  )
-  const allVisibleSelected = filtered.length > 0 && selectedRows.length === filtered.length
-
-  const send = useMutation(async (message: { subject: string; body_html: string } | null) => {
-    if (!bootcampId) return
-    const result = await agilyticsApi.sendInvites(bootcampId, {
-      application_ids: selectedRows.map((row) => row.application_id),
-      ...(message ?? {}),
-    })
-    toast.success(
-      [
-        result.invites_issued === 0
-          ? 'No pending members to invite'
-          : `${result.invites_issued} Agilytics invite(s) issued`,
-        result.emailed > 0 ? `${result.emailed} candidate(s) emailed` : null,
-        result.email_failed > 0 ? `${result.email_failed} email(s) failed` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    )
-    setSending(false)
-    setSelectedIds(new Set())
-    agilytics.refetch()
-  })
-
   const exportRows = () => {
     const header = [
       'Code',
@@ -193,17 +200,22 @@ export function HrAssessmentPanel({
     downloadCsv(header, rows, `hr-assessment-${new Date().toISOString().slice(0, 10)}.csv`)
   }
 
+  // One loader for the screen, not one per block. The stats, the decision
+  // queue and the roster all come from the *same* request, so three separate
+  // loading states meant three sets of rings on one page for one wait — which
+  // reads as a broken layout, and is exactly the "several loading systems"
+  // feeling this was meant to remove. The whole panel waits together because
+  // it arrives together.
+  if (initialLoading) return <AppLoader size="lg" />
+
   return (
     <div className="flex flex-col gap-4 pt-4">
-      <StatCards stats={data?.stats} loading={initialLoading} />
+      <LiveIndicator lastUpdated={lastUpdated} live={live} />
+
+      <StatCards stats={data?.stats} loading={false} />
 
       {bootcampId && (
-        <AgilyticsStrip
-          bootcampId={bootcampId}
-          bootcampName={bootcampName}
-          state={agilytics}
-          onSendInvites={() => setSending(true)}
-        />
+        <AgilyticsStrip bootcampId={bootcampId} bootcampName={bootcampName} state={agilytics} />
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -259,33 +271,24 @@ export function HrAssessmentPanel({
         </Button>
       </div>
 
-      {bootcampId && selectedRows.length > 0 && (
-        <Reveal direction="none" duration={0.25}>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-            <span className="text-sm font-medium">
-              {selectedRows.length} candidate{selectedRows.length === 1 ? '' : 's'} selected
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setSending(true)}
-                disabled={!agilytics.data?.provisioned}
-                title={
-                  agilytics.data?.provisioned
-                    ? undefined
-                    : 'Provision this intake in Agilytics first'
-                }
-              >
-                <Send className="size-4" />
-                Send Agilytics invite
-              </Button>
-            </div>
-          </div>
-        </Reveal>
-      )}
+
+      {/* The decision queue, above the roster it feeds. A reviewer opens this
+          screen to act on the people still waiting; the cleared roster below
+          is what they consult afterwards. */}
+      <AwaitingDecisionSection
+        rows={awaitingFiltered}
+        loading={initialLoading}
+        onRecorded={() => {
+          setDeciding(null)
+          // Both sections come from the one request, and a decision moves a
+          // candidate across them, so this refetch is what keeps the two
+          // consistent rather than leaving a ghost row in the top list.
+          refetch()
+        }}
+        deciding={deciding}
+        setDeciding={setDeciding}
+        onOpenInterview={setOpenInterview}
+      />
 
       <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
         {filtered.length === 0 ? (
@@ -305,21 +308,6 @@ export function HrAssessmentPanel({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {bootcampId && (
-                        <TableHead className="w-10">
-                          <Checkbox
-                            aria-label="Select all candidates in view"
-                            checked={allVisibleSelected}
-                            onCheckedChange={(next) =>
-                              setSelectedIds(
-                                next === true
-                                  ? new Set(filtered.map((row) => row.application_id))
-                                  : new Set(),
-                              )
-                            }
-                          />
-                        </TableHead>
-                      )}
                       <TableHead>Code</TableHead>
                       <TableHead>Candidate</TableHead>
                       {platform && (
@@ -342,15 +330,6 @@ export function HrAssessmentPanel({
                   <MotionTableBody key={`${debouncedSearch}|${track}|${bootcamp}`}>
                     {filtered.map((row) => (
                       <MotionTableRow key={row.application_id}>
-                        {bootcampId && (
-                          <TableCell>
-                            <Checkbox
-                              aria-label={`Select ${row.full_name ?? row.candidate_code}`}
-                              checked={selectedIds.has(row.application_id)}
-                              onCheckedChange={() => toggleRow(row.application_id)}
-                            />
-                          </TableCell>
-                        )}
                         <TableCell className="font-mono text-xs whitespace-nowrap">
                           {row.candidate_code}
                         </TableCell>
@@ -437,17 +416,156 @@ export function HrAssessmentPanel({
         }}
       />
       <OnboardingFormDialog row={openForms} onClose={() => setOpenForms(null)} />
-
-      <SendInvitesDialog
-        open={sending}
-        onOpenChange={(next) => !next && setSending(false)}
-        selected={selectedRows}
-        workspace={agilytics.data}
-        pending={send.pending}
-        error={send.error}
-        onSend={(message) => void send.run(message)}
-      />
     </div>
+  )
+}
+
+/* ---------------------------------------------------- awaiting decision -- */
+
+/** dd Mon, and the time only when the batch actually pinned one. */
+function formatSlot(row: HrAssessmentAwaitingRow): string {
+  const day = new Date(row.interview_date).toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'short',
+  })
+  return row.start_time ? `${day}, ${row.start_time.slice(0, 5)}` : day
+}
+
+function AwaitingDecisionSection({
+  rows,
+  loading,
+  deciding,
+  setDeciding,
+  onRecorded,
+  onOpenInterview,
+}: {
+  rows: HrAssessmentAwaitingRow[]
+  loading: boolean
+  deciding: RecordResultTarget | null
+  setDeciding: (target: RecordResultTarget | null) => void
+  onRecorded: () => void
+  onOpenInterview: (record: ExternalRecord | null) => void
+}) {
+  if (loading) return <AppLoader size="sm" />
+
+  // Nothing to decide is the ordinary resting state of this screen, not an
+  // empty state worth a full panel — the roster below is the page then.
+  if (rows.length === 0) return null
+
+  return (
+    <Reveal direction="none" duration={0.25}>
+      <Card className="border-warning/40">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-lg bg-warning/15 text-warning-foreground dark:text-warning">
+                <UserCheck className="size-4" />
+              </span>
+              <div className="flex flex-col">
+                <span className="font-medium">Awaiting your decision</span>
+                <CardDescription>
+                  Invited to a Physical Interview, no result recorded yet.
+                </CardDescription>
+              </div>
+            </div>
+            <Badge variant="outline" className="whitespace-nowrap">
+              {rows.length} pending
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Candidate</TableHead>
+                  <TableHead className="hidden md:table-cell">Venue</TableHead>
+                  <TableHead className="hidden sm:table-cell">Slot</TableHead>
+                  <TableHead className="text-right">AI score</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Decision</TableHead>
+                </TableRow>
+              </TableHeader>
+              <MotionTableBody key={rows.length}>
+                {rows.map((row) => (
+                  <MotionTableRow key={row.invite_id}>
+                    <TableCell className="font-mono text-xs whitespace-nowrap">
+                      {row.candidate_code}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{row.full_name ?? '—'}</span>
+                        {row.email && (
+                          <span className="text-xs text-muted-foreground">{row.email}</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">
+                      {row.venue}
+                    </TableCell>
+                    <TableCell className="hidden whitespace-nowrap text-muted-foreground sm:table-cell">
+                      {formatSlot(row)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <ScoreCell value={row.ai_score} />
+                    </TableCell>
+                    <TableCell>
+                      {/* "missed" means the batch deadline passed with no
+                          result — still the reviewer's to decide, which is
+                          why the row is here rather than dropped. */}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'whitespace-nowrap',
+                          row.status === 'missed' && 'border-destructive/40 text-destructive',
+                        )}
+                      >
+                        {row.status === 'missed' ? 'Deadline passed' : 'Pending'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => onOpenInterview(row.interview)}
+                          disabled={row.interview === null}
+                          aria-label={`Interview results for ${row.full_name ?? row.candidate_code}`}
+                        >
+                          <Gauge className="size-3.5" />
+                          <span className="hidden lg:inline">Evidence</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setDeciding({
+                              invite_id: row.invite_id,
+                              candidate_code: row.candidate_code,
+                              full_name: row.full_name,
+                            })
+                          }
+                        >
+                          Record result
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </MotionTableRow>
+                ))}
+              </MotionTableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* The same dialog the invite screen's batch history opens. */}
+      <RecordResultDialog
+        target={deciding}
+        onClose={() => setDeciding(null)}
+        onRecorded={onRecorded}
+      />
+    </Reveal>
   )
 }
 
@@ -508,17 +626,17 @@ function DocumentsCell({ row }: { row: HrAssessmentRow }) {
 function StatCards({ stats, loading }: { stats: HrAssessmentStats | undefined; loading: boolean }) {
   if (loading) {
     return (
-      <div className="grid gap-4 sm:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-xl" />
-        ))}
-      </div>
+      <AppLoader size="sm" />
     )
   }
   if (!stats) return null
 
   return (
-    <div className="grid gap-4 sm:grid-cols-4">
+    // Five now, not four: the decision queue is the first thing a reviewer
+    // needs a number for, and it leads because it is the only one of these
+    // that is a call to act rather than a state of play.
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <StatCard label="Awaiting decision" value={stats.awaiting_decision} />
       <StatCard label="In onboarding" value={stats.total} />
       <StatCard label="Forms complete" value={stats.forms_complete} />
       <StatCard label="Documents pending" value={stats.documents_pending} />

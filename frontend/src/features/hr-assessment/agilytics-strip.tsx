@@ -1,13 +1,16 @@
 /**
  * The intake's Agilytics workspace: whether it exists, what is in it, and the
- * two actions that change that.
+ * one action that creates it.
  *
- * Both actions are deliberate button presses. Provisioning is not idempotent
- * on their side — calling it twice creates two workspaces, and their API
- * exposes no delete — so it happens because an admin decided it should, not
- * because a candidate crossed a stage boundary while nobody was watching.
- * The backend refuses a second provision independently; this only stops the
- * click.
+ * Provisioning only. It creates the workspace and an account for every
+ * student, but makes none of them members — that is the Onboard action on
+ * the Onboarding screen, which lives next to the folder cards it changes
+ * rather than here.
+ *
+ * A deliberate button press, because whether re-provisioning an existing
+ * intake returns the same workspace or creates a second one is undocumented,
+ * and their API exposes no delete. The backend refuses a second provision
+ * independently; this only stops the click.
  *
  * The confirm step names the staff whose accounts will be created on their
  * side. That is not decoration: provisioning sends our admins' names and
@@ -19,11 +22,17 @@
  * without it rather than inventing a cross-intake aggregate.
  */
 
-import { AlertTriangle, CheckCircle2, Loader2, Send, Sparkles, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  Users,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Reveal } from '@/components/motion/reveal'
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,16 +48,12 @@ export function AgilyticsStrip({
   bootcampId,
   bootcampName,
   state,
-  onSendInvites,
 }: {
   bootcampId: string
   bootcampName?: string
   /** Owned by the panel: the per-row Agilytics column reads the same fetch,
    *  and both need to refresh together after a provision. */
   state: ReturnType<typeof useAsync<AgilyticsWorkspaceState | undefined>>
-  /** Opens the panel's send dialog, so there is one sending flow rather than
-   *  a second one here that would drift from it. */
-  onSendInvites: () => void
 }) {
   const [confirming, setConfirming] = useState<AgilyticsProvisionResult | null>(null)
 
@@ -78,18 +83,20 @@ export function AgilyticsStrip({
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               {!state.data.provisioned ? (
                 <Button onClick={() => void openConfirm.run()} disabled={openConfirm.pending}>
-                  {openConfirm.pending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="size-4" />
-                  )}
-                  Provision in Agilytics
+                  <Sparkles className="size-4" />
+                  <PendingLabel
+                    idle="Provision in Agilytics"
+                    pending="Provisioning…"
+                    isPending={openConfirm.pending}
+                  />
                 </Button>
               ) : (
-                <Button variant="outline" onClick={onSendInvites}>
-                  <Send className="size-4" />
-                  Send pending invites
-                </Button>
+                /* Provisioned: nothing more to do from here. Making
+                   students members is the Onboard action on the Onboarding
+                   screen, next to the folder cards it changes. */
+                <Badge variant="outline" className="font-normal">
+                  Workspace ready
+                </Badge>
               )}
             </div>
           </CardContent>
@@ -128,7 +135,7 @@ function WorkspaceSummary({ state }: { state: AgilyticsWorkspaceState }) {
           Not provisioned in Agilytics
         </span>
         <span className="text-xs text-muted-foreground">
-          Creates the workspace, its tracks, and everyone currently in onboarding.
+          Creates the workspace and an account for everyone currently in onboarding.
         </span>
       </div>
     )
@@ -162,11 +169,12 @@ function ProvisionSummary({ preview }: { preview: AgilyticsProvisionResult }) {
   return (
     <span className="flex flex-col gap-3">
       <span>
-        Creates one workspace containing <strong>{preview.students}</strong> student
-        {preview.students === 1 ? '' : 's'} across{' '}
-        <strong>{preview.tracks.length || 'no'}</strong> track
-        {preview.tracks.length === 1 ? '' : 's'}
-        {preview.tracks.length > 0 && <> ({preview.tracks.join(', ')})</>}.
+        Creates one workspace and an Agilytics account for{' '}
+        <strong>{preview.students}</strong> student{preview.students === 1 ? '' : 's'}.
+        {/* Said explicitly because the two used to be one step and are not
+            any more: accounts alone do not put anybody in the workspace. */}{' '}
+        They are not workspace members yet — that is the separate Onboard
+        action on the Onboarding screen, which also assigns their track.
       </span>
 
       {preview.leads > 0 && (

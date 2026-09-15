@@ -6,10 +6,16 @@
  * and gets a 409 for their trouble.
  */
 
-import { AlertTriangle, Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-react'
+import {
+  AlertTriangle,
+  ShieldCheck,
+  UserMinus,
+  UserPlus,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PendingLabel } from '@/components/shared/pending-label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -171,12 +177,8 @@ export function ManageAdminsDialog({
                   </SelectContent>
                 </Select>
                 <Button onClick={doAssign} disabled={!picked || assign.pending}>
-                  {assign.pending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <UserPlus className="size-4" />
-                  )}
-                  Assign
+                  <UserPlus className="size-4" />
+                  <PendingLabel idle="Assign" pending="Assigning…" isPending={assign.pending} />
                 </Button>
               </div>
             )}

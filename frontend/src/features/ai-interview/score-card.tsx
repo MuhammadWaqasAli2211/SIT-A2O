@@ -17,12 +17,20 @@
  * approaching, not as a surprise.
  */
 
-import { AlertTriangle, BrainCircuit, CheckCircle2, Clock, Eye, Loader2, Send } from 'lucide-react'
+import {
+  AlertTriangle,
+  BrainCircuit,
+  CheckCircle2,
+  Clock,
+  Eye,
+  Send,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Counter } from '@/components/motion/counter'
 import { Reveal } from '@/components/motion/reveal'
+import { AppLoader } from '@/components/shared/app-loader'
 import { Countdown } from '@/components/shared/countdown'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -146,7 +154,7 @@ function WaitingCard({ result }: { result: CandidateScore }) {
       <Card className={invited ? 'border-primary/40' : undefined}>
         <CardHeader className="flex-row items-start gap-3 space-y-0">
           <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-            {invited ? <Clock className="size-4" /> : <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />}
+            {invited ? <Clock className="size-4" /> : <AppLoader size="sm" bare className="size-4" />}
           </span>
           <div className="flex flex-col gap-1">
             <CardTitle className="text-base">

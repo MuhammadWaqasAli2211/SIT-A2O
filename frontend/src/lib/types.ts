@@ -169,6 +169,10 @@ export interface Program {
 export interface ProgramAdmin extends Program {
   is_active: boolean
   sort_order: number
+  /** This program's track name in Agilytics, sent as `trackName` when
+   *  onboarding its students. Null onboards them with no track. Admin-only:
+   *  deliberately absent from the public `Program`. */
+  agilytics_track_name: string | null
   bootcamp_count: number
   application_count: number
 }
@@ -856,15 +860,47 @@ export interface HrAssessmentRow {
   hub_unlocked: boolean
 }
 
+/**
+ * A candidate invited to a Physical Interview whose result is not yet in.
+ *
+ * A different population from HrAssessmentRow, not a subset: that one is
+ * everybody who has already cleared the round. Recording a result here is
+ * exactly what moves somebody from this list into that one.
+ */
+export interface HrAssessmentAwaitingRow {
+  invite_id: string
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  email: string | null
+  bootcamp_id: string | null
+  bootcamp_name: string | null
+  program_title: string | null
+  /** The batch's details, so two rounds are tellable apart in the list. */
+  venue: string
+  interview_date: string
+  start_time: string | null
+  deadline_at: string
+  sent_at: string | null
+  send_failed: boolean
+  /** 'pending' or 'missed' — a decided invite is not in this list at all. */
+  status: string
+  ai_score: number | null
+  interview: ExternalRecord | null
+}
+
 export interface HrAssessmentStats {
   total: number
   forms_complete: number
   documents_pending: number
   average_ai_score: number | null
+  /** Open Physical Interview invites — the top section's headline count. */
+  awaiting_decision: number
 }
 
 export interface HrAssessmentPage {
   items: HrAssessmentRow[]
+  awaiting: HrAssessmentAwaitingRow[]
   stats: HrAssessmentStats
 }
 
@@ -884,6 +920,12 @@ export interface AgilyticsMemberStatus {
   joined_at: string | null
 }
 
+export interface AgilyticsTrackCount {
+  track_id: string | null
+  track_name: string | null
+  member_count: number
+}
+
 export interface AgilyticsWorkspaceState {
   /** False is the ordinary state before anyone has provisioned, not an error. */
   provisioned: boolean
@@ -892,6 +934,15 @@ export interface AgilyticsWorkspaceState {
   total_members: number | null
   approved: number | null
   pending: number | null
+  /** The rest of their statusBreakdown — a member who left or was revoked is
+   *  exactly what a join-rate figure must not omit. */
+  left: number | null
+  rejected: number | null
+  revoked: number | null
+  leads_count: number | null
+  sub_leads_count: number | null
+  students_count: number | null
+  tracks: AgilyticsTrackCount[]
   /** Keyed by lowercased email. Covers leads only — their workspace-wide
    *  response reports students as counts rather than rows. */
   members: Record<string, AgilyticsMemberStatus>
@@ -900,20 +951,52 @@ export interface AgilyticsWorkspaceState {
 export interface AgilyticsProvisionResult {
   workspace_id: string | null
   already_provisioned: boolean
-  tracks: string[]
+  /** Their `summary.students` split. Provisioning creates accounts only —
+   *  membership is a separate call — so re-running on a grown intake should
+   *  show mostly already-existed. */
   students: number
+  students_created: number
+  students_already_existed: number
   leads: number
   /** Shown before confirming: provisioning creates accounts for these people
    *  in a third-party system. */
   lead_emails: string[]
 }
 
-export interface AgilyticsInviteResult {
-  invites_issued: number
-  expires_at: string | null
-  /** Our covering email, not theirs. Zero when none was requested. */
-  emailed: number
-  email_failed: number
+/* -------------------------------------------- agilytics workspace stats -- */
+/* `GET .../agilytics/stats`. A different endpoint from the workspace state
+ * above, not a richer view of it: only this one reports per-track progress
+ * and account activation, and only that one carries the leads roster. */
+
+export interface AgilyticsTrackProgress {
+  track_id: string | null
+  track_name: string | null
+  total_students: number
+  onboarded: number
+  pending: number
+}
+
+export interface AgilyticsActivationHealth {
+  total_students: number
+  verified: number
+  unverified: number
+}
+
+export interface AgilyticsWorkspaceStats {
+  provisioned: boolean
+  workspace_id: string | null
+  workspace_name: string | null
+  total_members: number | null
+  leads_count: number | null
+  sub_leads_count: number | null
+  students_count: number | null
+  approved: number | null
+  pending: number | null
+  left: number | null
+  rejected: number | null
+  revoked: number | null
+  tracks: AgilyticsTrackProgress[]
+  activation: AgilyticsActivationHealth | null
 }
 
 /* ---------------------------------------------------------- candidate view -- */
@@ -940,4 +1023,60 @@ export interface PublicBootcamp {
   starts_at: string | null
   registration_deadline: string | null
   programs: Program[]
+}
+
+/**
+ * Per-candidate Agilytics membership.
+ *
+ * One timestamp, not two: their onboard call makes a student an APPROVED
+ * member outright, so there is no invited-but-not-yet-joined state to
+ * distinguish. Null means not onboarded; set means they are in, and have
+ * been advanced to Onboarded on our side.
+ */
+export interface AgilyticsCandidateRow {
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  email: string
+  program_title: string | null
+  /** What we will send as `trackName`, from this candidate's program. Null
+   *  means the program has no Agilytics mapping and the student will be
+   *  onboarded ungrouped. */
+  track_name: string | null
+  onboarded_at: string | null
+}
+
+export interface AgilyticsEligibleList {
+  provisioned: boolean
+  workspace_id: string | null
+  /** Cleared the Physical Interview and not yet onboarded. */
+  new: AgilyticsCandidateRow[]
+  /** Carried alongside so the modal can say "9 already onboarded" rather than
+   *  silently showing fewer people than the admin expects. */
+  already_onboarded: AgilyticsCandidateRow[]
+  /** Programs among `new` with no track mapping set. Their API accepts an
+   *  unmatched track silently, so this is the only warning available before
+   *  a workspace fills up with ungrouped students. */
+  unmapped_programs: string[]
+}
+
+export interface AgilyticsOnboardOutcome {
+  /** Candidate codes their API confirmed as newly onboarded. */
+  onboarded: string[]
+  /** Already members on their side. Recorded as onboarded here — theirs is
+   *  the authority on membership. */
+  skipped_already_member: string[]
+  /** No account on their side yet: provisioning has not run since these
+   *  candidates arrived. Left unstamped, so still retryable. */
+  skipped_not_found: string[]
+  skipped_other: string[]
+  /** Onboarded but placed in no track, because the mapping was missing or
+   *  matched nothing. Their API reports neither case as an error. */
+  ungrouped: number
+  track_distribution: Record<string, number>
+  /** Our own onboarding email. Theirs sends nothing. */
+  emailed: number
+  email_failed: number
+  /** Moved to ONBOARDED — a real stage transition, audited and notified. */
+  advanced: string[]
 }

@@ -1,8 +1,141 @@
-> **Branch:** `waqas` — last updated 2026-09-04
+> **Branch:** `waqas` — last updated 2026-09-11
 
 # Development Logs
 
 Chronological record of what was built, when, and why. Newest first.
+
+---
+
+## 2026-09-11 — Agilytics invitation flow and Onboarded Stats tab
+
+**Branch:** `waqas`
+
+Admin-facing wiring for the Agilytics handover that earlier work had left
+deferred: a bulk-invite flow with duplicate prevention, per-candidate join
+detection that advances a candidate to `ONBOARDED`, and a new "Onboarded
+stats" page. Investigated before building, per the task's own mandatory
+first step — the findings changed the design.
+
+### Investigation findings
+
+- **Their partner API is unreachable.** The host answers `/` with 200, but
+  every `/api/v1/external/*` path returns an HTML 404 — not a JSON error,
+  the framework's own not-found page. Confirmed signed and unsigned, GET and
+  POST. `PORTAL_AGILYTICS_SECRET` is present and correctly shaped (64 hex
+  chars), so the credential is not the problem; the endpoint is. Reported to
+  the user, who confirmed their Agilytics team is aware and fixing it on
+  their side.
+- **Only three endpoints exist**, confirmed against
+  `docs/prompts/agilytics-api-spec-repaste.md`: `POST .../workspaces`
+  (provision, already used), `GET .../onboarding-status` (workspace-wide or
+  `?email=` for one member), `POST .../bulk-invite`. No add-member endpoint
+  at any point after provisioning.
+- **`bulk-invite` sends nothing to a candidate.** It stages tokens for every
+  PENDING member of the workspace, takes no member list, and returns an
+  aggregate count and no tokens — their own spec calls it "useful for
+  triggering bulk email sends from an external system." The only mail a
+  candidate actually receives from our side is our own covering email. This
+  corrected an assumption in the task brief that Agilytics sends the
+  invitation itself; confirmed against the client code and its 2026-09-05
+  verification note before building anything on top of it.
+- **No add-member endpoint** means a candidate who reaches `FORM` after
+  their intake was provisioned is never a workspace member — `bulk-invite`
+  cannot reach them, and their per-member lookup 404s. This is a permanent
+  gap in the partner API, not a bug in this codebase; the invite flow is
+  built to detect it per candidate and leave them retryable rather than
+  hide it.
+- `workspace_state()` was discarding most of what the read API returns —
+  `left`/`rejected`/`revoked` off `statusBreakdown`, all of `roleBreakdown`
+  and `trackBreakdown`. Extended to carry all of it; the stats tab uses the
+  full set.
+
+### Schema
+
+`applications.agilytics_invited_at` and `agilytics_joined_at`
+(`20260910130000_agilytics_membership.sql`), applied directly against the
+live database — the Supabase CLI is still not installed, so this went
+through the same direct-SQL path used for prior migrations, not through
+`supabase migration up`. Columns, not a table: unlike
+`physical_interview_invites`, an Agilytics invite carries no per-invite
+payload and there is exactly one workspace per intake, so a table with only
+`application_id` and a timestamp would be a column with extra steps — and
+the folder-card badges read it once per card, where a join would cost one
+per row.
+
+Both are timestamp-not-flag, the same shape `interview_invites` and
+`physical_interview_invites` already use for their own duplicate
+prevention.
+
+### Built
+
+- `agilytics_service.eligible()` — everyone at `FORM`/`ONBOARDED`
+  (independent of form/document progress, as specified), split into `new`
+  and `already_invited` by whether `agilytics_invited_at` is set.
+- `agilytics_service.invite()` — calls `bulk_invite()` once, then confirms
+  each selected candidate individually via the per-member lookup before
+  stamping. Deliberately not stamped from the aggregate count: that would
+  mark as invited candidates the workspace never actually received. A
+  candidate absent from the workspace, or whose check itself fails, is left
+  unstamped and reported separately (`not_in_workspace` /
+  `check_failed`) so they stay eligible for a retry.
+- `agilytics_service.sync_joins()` — checks every invited-not-joined
+  candidate's status; `APPROVED` stamps `agilytics_joined_at` and calls
+  `application_service.advance_stage(..., ONBOARDED, actor=None)` — the
+  same system-actor path added for the announced-AI-interview catch-up, so
+  this produces a real stage transition, audit row, and candidate
+  notification rather than a side-channel column write. Read-time,
+  triggered by an explicit "Check for new joins" button rather than a page
+  load: each un-joined candidate costs one HTTP request, since students are
+  reported as counts (not rows) in the workspace-wide response.
+- Three new routes: `GET .../agilytics/eligible`, `POST
+  .../agilytics/invite`, `POST .../agilytics/sync-joins`.
+- Frontend: `AgilyticsInviteDialog` (candidate list, deliberate confirm
+  step naming the bulk-invite limitation, empty state), `AgilyticsStatusBadge`
+  (Not invited / Invited / Joined, read from the two timestamps — no
+  Agilytics call per card), a per-candidate Resend action on the Onboarding
+  folder cards, and a new `/admin/onboarded-stats` page with two tabs
+  (onboarding paperwork progress, reusing the same data the folder cards
+  already show; Agilytics join stats, reading the now-complete
+  `workspace_state()`). New sidebar row, admin/super-admin only.
+- Fixed the error path while investigating: an HTML 404 from their host was
+  reaching the admin's error toast as a raw `<!DOCTYPE html>` dump.
+  `_detail_message` now recognises an HTML body and reports the actual
+  problem (their API not answering at the configured URL) instead.
+
+### Verified
+
+- 467 backend tests pass (13 new, covering: only-confirmed-members-stamped,
+  a failed check leaves the candidate retryable, already-invited is
+  refused, the covering email goes only to confirmed candidates, only
+  `APPROVED` counts as a join, an uninvited candidate is never checked, an
+  unreachable API is counted not raised, a 404 means "not a member" not an
+  error).
+- Duplicate prevention re-verified against the live database, read-only and
+  rolled back: `eligible()` moved B07-008 from `new` to `already_invited`
+  after stamping `agilytics_invited_at`, and back is confirmed unreachable
+  without clearing the stamp.
+- The corrected error message re-verified against the live (currently
+  broken) API: a real call now surfaces "Agilytics answered with a web page
+  rather than API data" instead of the HTML dump.
+- Six screenshots taken via Playwright against the real page components
+  with the API layer mocked at the network boundary (real render, fixture
+  data — no admin password was available to log in live): folder cards
+  with badges and Resend, the invite modal's candidate list, the deliberate
+  confirm step, the empty state with a disabled confirm, and both
+  Onboarded Stats tabs.
+- `tsc --noEmit` clean, production build clean.
+
+### Not done
+
+The invite send, the per-member confirmation, and the join sync are all
+**untested against a live Agilytics response** — every call to their API
+currently 404s at the transport level, which is their side, not this
+codebase's. Confirmed with the user, whose Agilytics team is already aware
+and fixing it. Everything up to the HTTP boundary is covered by the 13 unit
+tests above; end-to-end verification resumes once their API is reachable
+again.
+
+Nothing committed or pushed.
 
 ---
 

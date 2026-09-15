@@ -9,7 +9,6 @@ import { ClipboardCheck, FolderOpen } from 'lucide-react'
 
 import { PageHeader } from '@/components/shared/portal-ui'
 import { Stagger, StaggerItem } from '@/components/motion/reveal'
-import { Skeleton } from '@/components/ui/skeleton'
 import { AsyncSection } from '@/features/admin/components'
 import { useApplication } from '@/features/applications/application-context'
 import { candidateApi } from '@/features/candidate/api'
@@ -57,7 +56,6 @@ function Folder({ applicationId }: { applicationId: string }) {
         progress.refetch()
         forms.refetch()
       }}
-      skeleton={<Skeleton className="h-80 w-full rounded-3xl" />}
     >
       {progress.data && forms.data && (
         <Stagger className="grid grid-cols-1 gap-5 sm:grid-cols-2">

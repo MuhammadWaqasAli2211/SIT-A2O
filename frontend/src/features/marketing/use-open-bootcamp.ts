@@ -29,7 +29,7 @@ export interface OpenBootcampState {
 }
 
 /**
- * One shared request per five minutes, not one per component that asks.
+ * One shared request per minute, not one per component that asks.
  *
  * Two things mount this hook on the home page alone — the hero badge and the
  * footer's status line — and every client-side navigation back to a marketing
@@ -39,12 +39,17 @@ export interface OpenBootcampState {
  * The promise is cached rather than the value, so simultaneous mounts share
  * one in-flight request instead of racing two.
  *
- * Staleness is safe here by construction: this drives display only, and the
- * server re-checks the phase window with `assert_phase_open()` when an
- * application is actually submitted. A five-minute-old badge cannot let
- * anything through that the server would reject.
+ * Nothing unsafe gets through a stale window: this drives display only, and
+ * the server re-checks with `assert_phase_open()` when an application is
+ * actually submitted. The TTL is not about safety, it is about how long the
+ * site may contradict an admin. At the five minutes this used to hold, closing
+ * registration left the badge advertising it for five more — and because the
+ * cache is module-scoped, client-side navigation did not clear it either, so
+ * only a full reload told the truth. That is the "I closed it and it is still
+ * showing open" report. A minute keeps the shared-request property this exists
+ * for while bounding the contradiction to something an admin will not notice.
  */
-const CACHE_MS = 5 * 60 * 1000
+const CACHE_MS = 60 * 1000
 let cached: { at: number; promise: Promise<PublicBootcamp | null> } | null = null
 
 function fetchOpenBootcamp(): Promise<PublicBootcamp | null> {

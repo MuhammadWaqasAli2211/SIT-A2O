@@ -79,6 +79,27 @@ class Settings(BaseSettings):
     # an env change rather than a code change.
     AGILYTICS_API_BASE_URL: str = "https://agilytics-preview.vercel.app"
 
+    # Where we send *students*, as distinct from where we send API calls. The
+    # two are the same host today, but they are separate settings because
+    # there is no guarantee they stay that way — a partner serving its API
+    # from `api.` and its app from `app.` is the ordinary arrangement, and
+    # discovering that later should not mean unpicking one value used for two
+    # purposes.
+    #
+    # Both of these are provisional. Their spec documents no student-facing
+    # URL at all: it says accounts are created "auto-verified, no confirmation
+    # email" and stops there, so how a student actually signs in for the first
+    # time is our assumption, not their documentation. `/reset-password` is
+    # the common convention and a guess. See the note in email_service's
+    # `send_agilytics_onboarded`.
+    #
+    # Confirmed answers change these two lines and nothing else.
+    AGILYTICS_APP_URL: str = "https://agilytics-preview.vercel.app"
+    # Full URL, so a partner whose reset page lives somewhere unrelated to the
+    # app root is a one-value change rather than a path-joining puzzle. Empty
+    # derives it from AGILYTICS_APP_URL.
+    AGILYTICS_PASSWORD_RESET_URL: str = ""
+
     # Supabase signs access tokens with this audience.
     JWT_AUDIENCE: str = "authenticated"
     # Algorithms are selected per token in app/core/security.py; Supabase may
@@ -131,6 +152,23 @@ class Settings(BaseSettings):
     @property
     def agilytics_configured(self) -> bool:
         return bool(self.PORTAL_AGILYTICS_SECRET and self.AGILYTICS_API_BASE_URL)
+
+    @property
+    def agilytics_login_url(self) -> str:
+        """Where a student signs in to Agilytics. Assumed, not documented."""
+        return self.AGILYTICS_APP_URL.rstrip("/")
+
+    @property
+    def agilytics_password_reset_url(self) -> str:
+        """Where a student sets their password the first time.
+
+        Assumed, not documented — see AGILYTICS_PASSWORD_RESET_URL above.
+        Derived from the app URL unless overridden outright, so the common
+        case is one setting and the awkward case is still one setting.
+        """
+        if self.AGILYTICS_PASSWORD_RESET_URL:
+            return self.AGILYTICS_PASSWORD_RESET_URL.rstrip("/")
+        return f"{self.agilytics_login_url}/reset-password"
 
 
 @lru_cache

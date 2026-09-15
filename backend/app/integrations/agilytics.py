@@ -5,6 +5,19 @@ clear onboarding, they become a member of an Agilytics workspace and their
 learning progress lives there, not here. This module is the only place that
 talks to it.
 
+## The four endpoints
+
+    POST /workspaces                  provision: workspace, leads, student accounts
+    POST /workspaces/{id}/onboard     make students APPROVED members, at once
+    GET  /workspaces/{id}/stats       roles, statuses, tracks, activation health
+    GET  /workspaces/{id}/onboarding-status   whole workspace, or one member
+
+`bulk-invite` used to be here and is gone: their current spec does not
+document it, and the flow it served — stage a token, email an invitation,
+wait for the candidate to accept — has been replaced by `onboard`, which
+makes somebody a member outright. Nothing that waited on a "joined" signal
+survives that change; see `agilytics_service`.
+
 ## Authentication
 
 There is no bearer token. Every request carries two headers:
@@ -140,7 +153,20 @@ def _detail_message(response: httpx.Response, fallback: str) -> str:
                     return value
     except ValueError:
         pass
-    return response.text[:500] or fallback
+
+    # An HTML body means we did not reach the API at all — their host answered
+    # with a page, which is what a Next.js deployment does for a route it does
+    # not have. Echoing the markup put a screenful of `<!DOCTYPE html>` in the
+    # admin's error toast and told them nothing; this says the one thing that
+    # is actually actionable.
+    body = response.text[:500]
+    if body.lstrip()[:1] == "<":
+        return (
+            "Agilytics answered with a web page rather than API data — the "
+            "partner API is not reachable at the configured URL "
+            f"({settings.AGILYTICS_API_BASE_URL})."
+        )
+    return body or fallback
 
 
 def _request(
@@ -214,37 +240,95 @@ def provision_workspace(
     *,
     name: str,
     description: str = "",
-    tracks: list[str] | None = None,
     leads: list[dict[str, str]] | None = None,
     students: list[dict[str, str]] | None = None,
 ) -> dict:
-    """Create a workspace with its tracks, leads and students in one call.
+    """Create a workspace, its lead memberships, and student Auth accounts.
 
-    Atomic on their side, and idempotent per person rather than per call:
-    existing users are matched by email and new ones created, so a person who
-    is already in the workspace is not duplicated. The call itself is *not*
-    idempotent — calling it twice creates two workspaces — which is why the
-    id it returns has to be stored against the intake that produced it.
+    Three things this does *not* do, each of which it used to or was assumed
+    to under the previous revision of their API:
 
-    Their field names are camelCase (`fullName`, `trackName`); ours are not,
-    so the rows are built by the caller in their shape rather than converted
-    here, where a silent mismatch would just be dropped by an open schema.
+    * **It does not create tracks.** The `tracks` array is gone from their
+      schema entirely — tracks must already exist in the workspace before
+      anyone is assigned to one. See `onboard` for what that costs us.
+    * **It does not make students members.** It creates their Supabase Auth
+      account and a `User` row and stops. Membership is `onboard`'s job, and
+      a student who has been provisioned but not onboarded is in no
+      workspace at all.
+    * **It does not send anything.** No confirmation email, no invitation —
+      accounts arrive auto-verified and silent. Whatever the student hears
+      about this, they hear from us.
 
-    Leads come back APPROVED, students PENDING (a workspace lead approves
-    them, or `bulk_invite` stages invitations for them). An email appearing
-    in both lists is resolved as a lead.
+    Leads *are* made members, APPROVED, in this call. An email in both lists
+    is resolved as a lead.
+
+    Their field names are camelCase (`fullName`); ours are not, so rows are
+    built by the caller in their shape rather than converted here, where a
+    silent mismatch would just be dropped by an open schema.
+
+    Idempotent per person: re-running matches existing users by email rather
+    than duplicating them. Whether it is idempotent per *workspace* is
+    undocumented and untested — their note covers accounts and memberships
+    and says nothing about the workspace itself — so callers must keep
+    treating a second call for an already-provisioned intake as a mistake
+    until that is confirmed.
     """
     body: dict[str, Any] = {"name": name, "description": description}
-    if tracks:
-        # They deduplicate anyway; doing it here keeps the request honest
-        # about what we asked for.
-        body["tracks"] = list(dict.fromkeys(tracks))
     if leads:
         body["leads"] = leads
     if students:
         body["students"] = students
 
     return _request("POST", "/api/v1/external/workspaces", body=body) or {}
+
+
+def onboard(workspace_id: str, students: list[dict[str, str]]) -> dict:
+    """Make students APPROVED members of a workspace, immediately.
+
+    This replaces the invite-and-wait model entirely. There is no token, no
+    acceptance step and no email: a student named here is a member the moment
+    the call returns. Anything the student needs to be told is ours to send.
+
+    `trackName` is optional per student and resolved to a track UUID on their
+    side. **A name that matches nothing resolves to a null track rather than
+    an error** — the student is still onboarded, just ungrouped — so a
+    wholesale mapping failure looks exactly like success from the status code
+    alone. `trackDistribution` in the response is the only thing that
+    distinguishes them, which is why the service records it.
+
+    Two skip reasons come back per email rather than as failures:
+    "Already a workspace member" (the duplicate case, and the reason this is
+    safe to repeat) and "User not found in system" — the latter meaning the
+    student has no Auth account yet, i.e. `provision_workspace` has not run
+    for them.
+    """
+    return (
+        _request(
+            "POST",
+            f"/api/v1/external/workspaces/{workspace_id}/onboard",
+            body={"students": students},
+        )
+        or {}
+    )
+
+
+def stats(workspace_id: str) -> dict:
+    """Workspace health: roles, statuses, per-track progress, activation.
+
+    Overlaps `onboarding_status` without replacing it, and the two disagree
+    on `trackBreakdown` in the same spec revision — here each track carries
+    `totalStudents`/`onboarded`/`pending`, there a single `memberCount`. This
+    is the richer of the two and the one the stats screen reads; the other
+    stays for its `?email=` single-member lookup, which this has no
+    equivalent of.
+
+    `activationHealth` is only available here: how many student accounts are
+    verified against how many exist. Read and displayed as reported — their
+    spec also says accounts are created auto-verified, which is hard to
+    reconcile with a non-zero unverified count, but that is their number to
+    explain and not ours to reinterpret.
+    """
+    return _request("GET", f"/api/v1/external/workspaces/{workspace_id}/stats") or {}
 
 
 def onboarding_status(workspace_id: str, *, email: str | None = None) -> dict:
@@ -268,17 +352,3 @@ def onboarding_status(workspace_id: str, *, email: str | None = None) -> dict:
     )
 
 
-def bulk_invite(workspace_id: str) -> dict:
-    """Stage invitation tokens for every PENDING member of a workspace.
-
-    Takes no request body — the endpoint finds the pending members itself.
-    That matters for the signature: the payload signed is the empty string,
-    because the raw body is empty. Sending `{}` instead would sign `"{}"` and
-    be refused.
-
-    Safe to repeat: existing unrevoked invites for the same addresses are
-    revoked and reissued rather than duplicated. Tokens expire after 7 days,
-    and the response says how many were issued — zero, with a message, when
-    nobody is pending.
-    """
-    return _request("POST", f"/api/v1/external/workspaces/{workspace_id}/bulk-invite") or {}

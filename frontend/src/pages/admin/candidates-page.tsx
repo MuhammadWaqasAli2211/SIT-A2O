@@ -1,5 +1,4 @@
 import {
-  CalendarClock,
   ChevronRight,
   Download,
   MoreHorizontal,
@@ -25,7 +24,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -35,30 +40,23 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { EmptyState, PageHeader, StageBadge } from '@/components/shared/portal-ui'
-import { applicationApi, bootcampApi } from '@/features/admin/api'
+import { applicationApi } from '@/features/admin/api'
 import {
   AsyncSection,
   BootcampSwitcher,
   ConfirmDialog,
-  NoBootcampSelected,
+  BootcampGate,
   Pagination,
   useConfirm,
 } from '@/features/admin/components'
-import { FunnelWidget } from '@/features/admin/funnel-widget'
 import { CandidateSheet } from '@/pages/admin/candidate-sheet'
-import { PhysicalInterviewInviteDialog } from '@/pages/admin/physical-interview-invite-dialog'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
-import {
-  ApplicationStage,
-  STAGE_LABEL,
-  STAGE_ORDER,
-  type ApplicantRow,
-} from '@/lib/types'
+import { ApplicationStage, STAGE_LABEL, STAGE_ORDER, type ApplicantRow } from '@/lib/types'
 
 const PAGE_SIZE = 25
 /** Sentinel for the filter's "no filter" option — Select needs a real value. */
@@ -88,7 +86,7 @@ function exportCsv(rows: ApplicantRow[], filename: string) {
 }
 
 export default function AdminCandidatesPage() {
-  const { selected, selectedId } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading } = useBootcamp()
 
   // Seeded from `?search=`, which is how the header's jump-to-search hands a
   // term over. Read once as the initial value rather than watched: after
@@ -99,7 +97,6 @@ export default function AdminCandidatesPage() {
   const [stage, setStage] = useState<string>(ALL)
   const [offset, setOffset] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
-  const [inviteOpen, setInviteOpen] = useState(false)
 
   // Debounced so typing a name does not fire a request per keystroke.
   const debouncedSearch = useDebounced(search, 300)
@@ -124,14 +121,6 @@ export default function AdminCandidatesPage() {
 
   const rows = useMemo(() => data?.items ?? [], [data])
   const remove = useConfirm<ApplicantRow>()
-
-  // Own fetch, not shared with the table's live-resource query: the funnel
-  // needs bootcamp-wide totals regardless of the current search/stage
-  // filter, which listForBootcamp does not return.
-  const { data: stats } = useAsync(
-    () => (selectedId ? bootcampApi.stats(selectedId) : Promise.resolve(undefined)),
-    [selectedId],
-  )
 
   const deleteMutation = useMutation(async (row: ApplicantRow) => {
     await applicationApi.remove(row.id)
@@ -159,9 +148,11 @@ export default function AdminCandidatesPage() {
       <PageHeader
         title="Candidates"
         description={
-          selected
-            ? `Applicants to ${selected.name}.`
-            : 'Pick an intake to see its applicants.'
+          bootcampLoading
+            ? undefined
+            : selected
+              ? `Applicants to ${selected.name}.`
+              : 'Pick an intake to see its applicants.'
         }
         actions={
           <>
@@ -176,161 +167,132 @@ export default function AdminCandidatesPage() {
               <Download className="size-4" />
               Export CSV
             </Button>
-            {selectedId && (
-              <Button onClick={() => setInviteOpen(true)}>
-                <CalendarClock className="size-4" />
-                Invite to Physical Interview
-              </Button>
-            )}
           </>
         }
       />
 
-      {!selectedId ? (
-        <NoBootcampSelected icon={Users} />
-      ) : (
-        <div className="flex flex-col gap-4">
-          <LiveIndicator lastUpdated={lastUpdated} live={live} />
+      <BootcampGate icon={Users}>
+        {(_selectedId) => (
+          <div className="flex flex-col gap-4">
+            <LiveIndicator lastUpdated={lastUpdated} live={live} />
 
-          {stats && (
-            <FunnelWidget
-              bootcampId={stats.bootcamp_id}
-              physicalInterviewFunnel={stats.physical_interview_funnel}
-              compact
-            />
-          )}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => changeFilter(() => setSearch(event.target.value))}
+                  placeholder="Search by name, email, or candidate code"
+                  className="pl-9"
+                />
+              </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => changeFilter(() => setSearch(event.target.value))}
-                placeholder="Search by name, email, or candidate code"
-                className="pl-9"
-              />
+              <Select
+                value={stage}
+                onValueChange={(value) => value && changeFilter(() => setStage(value))}
+              >
+                <SelectTrigger className="w-full sm:w-56">
+                  <SelectValue placeholder="All stages" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All stages</SelectItem>
+                  {STAGE_ORDER.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {STAGE_LABEL[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <Select
-              value={stage}
-              onValueChange={(value) => value && changeFilter(() => setStage(value))}
-            >
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue placeholder="All stages" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All stages</SelectItem>
-                {STAGE_ORDER.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {STAGE_LABEL[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
-            {rows.length === 0 ? (
-              <EmptyState
-                icon={Users}
-                title={debouncedSearch || stage !== ALL ? 'No matches' : 'No applicants yet'}
-                description={
-                  debouncedSearch || stage !== ALL
-                    ? 'Try a different search or stage filter.'
-                    : 'Applicants appear here as soon as registration opens and people apply.'
-                }
-              />
-            ) : (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Code</TableHead>
-                          <TableHead>Candidate</TableHead>
-                          <TableHead className="hidden md:table-cell">Program</TableHead>
-                          <TableHead>Stage</TableHead>
-                          <TableHead className="hidden lg:table-cell">Applied</TableHead>
-                          <TableHead className="w-10" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((row) => (
-                          <TableRow
-                            key={row.id}
-                            className="cursor-pointer"
-                            onClick={() => setOpenId(row.id)}
-                          >
-                            <TableCell className="font-mono text-xs whitespace-nowrap">
-                              {row.candidate_code}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{row.full_name ?? '—'}</span>
-                                <span className="text-xs text-muted-foreground">{row.email}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                              {row.program_title}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <StageBadge stage={row.stage} />
-                                {row.status !== 'ACTIVE' && (
-                                  <Badge variant="outline" className="text-[0.7rem] font-normal">
-                                    {row.status}
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
-                              {formatDate(row.applied_at)}
-                            </TableCell>
-                            <TableCell onClick={(event) => event.stopPropagation()}>
-                              <RowActions
-                                row={row}
-                                onOpen={() => setOpenId(row.id)}
-                                onDelete={() => remove.ask(row)}
-                              />
-                            </TableCell>
+            <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
+              {rows.length === 0 ? (
+                <EmptyState
+                  icon={Users}
+                  title={debouncedSearch || stage !== ALL ? 'No matches' : 'No applicants yet'}
+                  description={
+                    debouncedSearch || stage !== ALL
+                      ? 'Try a different search or stage filter.'
+                      : 'Applicants appear here as soon as registration opens and people apply.'
+                  }
+                />
+              ) : (
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Code</TableHead>
+                            <TableHead>Candidate</TableHead>
+                            <TableHead className="hidden md:table-cell">Program</TableHead>
+                            <TableHead>Stage</TableHead>
+                            <TableHead className="hidden lg:table-cell">Applied</TableHead>
+                            <TableHead className="w-10" />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                        </TableHeader>
+                        <TableBody>
+                          {rows.map((row) => (
+                            <TableRow
+                              key={row.id}
+                              className="cursor-pointer"
+                              onClick={() => setOpenId(row.id)}
+                            >
+                              <TableCell className="font-mono text-xs whitespace-nowrap">
+                                {row.candidate_code}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{row.full_name ?? '—'}</span>
+                                  <span className="text-xs text-muted-foreground">{row.email}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                {row.program_title}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <StageBadge stage={row.stage} />
+                                  {row.status !== 'ACTIVE' && (
+                                    <Badge variant="outline" className="text-[0.7rem] font-normal">
+                                      {row.status}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
+                                {formatDate(row.applied_at)}
+                              </TableCell>
+                              <TableCell onClick={(event) => event.stopPropagation()}>
+                                <RowActions
+                                  row={row}
+                                  onOpen={() => setOpenId(row.id)}
+                                  onDelete={() => remove.ask(row)}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-            {data && (
-              <Pagination
-                total={data.total}
-                limit={data.limit}
-                offset={data.offset}
-                onChange={setOffset}
-              />
-            )}
-          </AsyncSection>
-        </div>
-      )}
+              {data && (
+                <Pagination
+                  total={data.total}
+                  limit={data.limit}
+                  offset={data.offset}
+                  onChange={setOffset}
+                />
+              )}
+            </AsyncSection>
+          </div>
+        )}
+      </BootcampGate>
 
-      <CandidateSheet
-        applicationId={openId}
-        onClose={() => setOpenId(null)}
-        onChanged={refresh}
-      />
-
-      {selectedId && (
-        <PhysicalInterviewInviteDialog
-          open={inviteOpen}
-          onOpenChange={(open) => {
-            setInviteOpen(open)
-            if (!open) refresh()
-          }}
-          bootcampId={selectedId}
-        />
-      )}
+      <CandidateSheet applicationId={openId} onClose={() => setOpenId(null)} onChanged={refresh} />
 
       <ConfirmDialog
         open={remove.open}

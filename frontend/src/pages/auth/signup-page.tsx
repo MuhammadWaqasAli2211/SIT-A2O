@@ -1,5 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Lock, Mail, Phone, User } from 'lucide-react'
+import {
+  Lock,
+  Mail,
+  Phone,
+  User,
+} from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -159,7 +164,6 @@ export default function SignupPage() {
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="size-4 animate-spin" />
               Creating account...
             </>
           ) : (

@@ -66,6 +66,13 @@ class Application(Base, TimestampMixin):
     # lets somebody leave the second one.
     is_selected: Mapped[bool | None] = mapped_column(Boolean)
 
+    # Agilytics membership — the system this pipeline hands over to.
+    #
+    # One timestamp, not two. Their `onboard` call makes a student an
+    # APPROVED workspace member outright, so there is no invited-but-not-yet-
+    # joined state left to track: the moment this is set, they are in.
+    agilytics_onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     statement: Mapped[str | None] = mapped_column(Text)
 
     # Registration answers specific to this intake. Person-level answers live
