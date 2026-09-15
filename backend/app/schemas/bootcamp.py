@@ -56,6 +56,9 @@ class ProgramCreate(BaseModel):
     level: str | None = Field(default=None, max_length=60)
     is_active: bool = True
     sort_order: int = Field(default=0, ge=0, le=999)
+    # Their track name for this program. Null sends no track when onboarding,
+    # which leaves the student ungrouped in Agilytics rather than erroring.
+    agilytics_track_name: str | None = Field(default=None, max_length=150)
 
 
 class ProgramUpdate(BaseModel):
@@ -69,6 +72,7 @@ class ProgramUpdate(BaseModel):
     mode: str | None = Field(default=None, max_length=60)
     level: str | None = Field(default=None, max_length=60)
     is_active: bool | None = None
+    agilytics_track_name: str | None = Field(default=None, max_length=150)
     sort_order: int | None = Field(default=None, ge=0, le=999)
 
 
@@ -77,6 +81,10 @@ class ProgramAdminOut(ProgramOut):
 
     is_active: bool
     sort_order: int
+    # Admin-only, and deliberately not on `ProgramOut`: this is the name of a
+    # track inside a partner's workspace, which is an operational detail of
+    # the handover and nothing a site visitor should be shown.
+    agilytics_track_name: str | None = None
     bootcamp_count: int = 0
     application_count: int = 0
 
