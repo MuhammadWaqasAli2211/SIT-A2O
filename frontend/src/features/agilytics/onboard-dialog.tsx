@@ -1,22 +1,25 @@
 /**
- * Inviting an intake's cleared candidates into Agilytics.
+ * Onboarding an intake's cleared candidates into Agilytics.
  *
- * Two things about their API shape this screen has to be honest about, because
- * hiding either produces a UI that quietly lies:
+ * This is not an invitation and the wording throughout is careful not to call
+ * it one. Their onboard endpoint makes each selected student an APPROVED
+ * member of the workspace in the call itself — no token, no acceptance step,
+ * nothing for the candidate to agree to. By the time this dialog closes they
+ * are in, and the only thing they have not yet done is log in.
  *
- * 1. `bulk-invite` takes no member list. It covers every pending member of the
- *    workspace and reports one aggregate count. The selection here therefore
- *    chooses whose membership we *confirm and record* afterwards, not who
- *    Agilytics invites — so the confirm step says so rather than implying a
- *    precision the call does not have.
- * 2. There is no add-member endpoint. Anyone who reached onboarding after the
- *    workspace was provisioned is not in it, comes back from the per-member
- *    lookup as absent, and is reported afterwards instead of being silently
- *    counted as invited.
+ * Two consequences the screen has to be honest about:
+ *
+ * 1. **It cannot be undone from here.** There is no remove-member endpoint,
+ *    so the confirm step is a real one rather than a formality.
+ * 2. **An unmapped track fails silently.** Their API resolves a track name it
+ *    does not recognise to no track at all and still reports the student as
+ *    onboarded, so a program with no mapping is warned about *before* the
+ *    call rather than discovered afterwards as a workspace full of ungrouped
+ *    students.
  *
  * Eligibility is having cleared the Physical Interview. Deliberately nothing
  * to do with form or document progress — that is a separate track, and gating
- * the invite on it would hold back candidates Agilytics is ready for.
+ * on it would hold back candidates Agilytics is ready for.
  */
 
 import { AlertTriangle, CheckCircle2, Send, Users } from 'lucide-react'
@@ -35,18 +38,18 @@ import { useAsync, useMutation } from '@/hooks/use-async'
 import type { AgilyticsCandidateRow } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-export function AgilyticsInviteDialog({
+export function AgilyticsOnboardDialog({
   open,
   onOpenChange,
   bootcampId,
   bootcampName,
-  onInvited,
+  onOnboarded,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   bootcampId: string
   bootcampName?: string
-  onInvited: () => void
+  onOnboarded: () => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,7 +62,7 @@ export function AgilyticsInviteDialog({
             bootcampId={bootcampId}
             bootcampName={bootcampName}
             onDone={() => {
-              onInvited()
+              onOnboarded()
               onOpenChange(false)
             }}
             onCancel={() => onOpenChange(false)}
@@ -89,7 +92,7 @@ function Body({
   const chosen = rows.filter((r) => !excluded.has(r.application_id))
 
   const send = useMutation(() =>
-    agilyticsApi.invite(bootcampId, {
+    agilyticsApi.onboard(bootcampId, {
       application_ids: chosen.map((r) => r.application_id),
     }),
   )
@@ -98,18 +101,22 @@ function Body({
     const out = await send.run()
     if (!out) return
 
-    // Reported rather than summarised away: "12 invited" would be a lie when
-    // four of them are not in the workspace at all.
+    // Reported rather than summarised away: "12 onboarded" would be a lie
+    // when four of them have no account on their side, and the ungrouped
+    // count is the only visible trace of a track mapping that matched
+    // nothing.
+    const done = out.onboarded.length + out.skipped_already_member.length
     const parts = [
-      out.confirmed.length > 0 ? `${out.confirmed.length} confirmed` : null,
-      out.not_in_workspace.length > 0
-        ? `${out.not_in_workspace.length} not in the workspace`
+      done > 0 ? `${done} onboarded` : null,
+      out.skipped_not_found.length > 0
+        ? `${out.skipped_not_found.length} have no Agilytics account yet`
         : null,
-      out.check_failed.length > 0 ? `${out.check_failed.length} could not be checked` : null,
+      out.ungrouped > 0 ? `${out.ungrouped} placed in no track` : null,
+      out.email_failed > 0 ? `${out.email_failed} email(s) failed` : null,
     ].filter(Boolean)
 
-    if (out.confirmed.length > 0) toast.success(`Agilytics: ${parts.join(' · ')}`)
-    else toast.warning(`Agilytics: ${parts.join(' · ') || 'nothing was confirmed'}`)
+    if (done > 0) toast.success(`Agilytics: ${parts.join(' · ')}`)
+    else toast.warning(`Agilytics: ${parts.join(' · ') || 'nobody was onboarded'}`)
     onDone()
   }
 
@@ -123,7 +130,7 @@ function Body({
   return (
     <>
       <div className="flex flex-col gap-1 border-b border-border bg-muted/30 px-6 py-4">
-        <DialogTitle>Invitation to Agilytics</DialogTitle>
+        <DialogTitle>Onboard to Agilytics</DialogTitle>
         <DialogDescription>
           {bootcampName
             ? `Candidates in ${bootcampName} who have cleared the Physical Interview.`
@@ -146,23 +153,39 @@ function Body({
             <AlertTriangle className="size-4" />
             <AlertDescription>
               This intake has not been provisioned in Agilytics yet. Provision it from the
-              HR assessment screen first — invites are staged against its workspace.
+              HR assessment screen first — students need an account there before they can
+              be made members.
             </AlertDescription>
           </Alert>
         ) : rows.length === 0 ? (
-          <EmptyState alreadyInvited={list.data.already_invited.length} />
+          <EmptyState alreadyOnboarded={list.data.already_onboarded.length} />
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">
-                {chosen.length} new candidate{chosen.length === 1 ? '' : 's'} to invite
+                {chosen.length} candidate{chosen.length === 1 ? '' : 's'} to onboard
               </span>
-              {list.data.already_invited.length > 0 && (
+              {list.data.already_onboarded.length > 0 && (
                 <Badge variant="outline" className="font-normal">
-                  {list.data.already_invited.length} already invited
+                  {list.data.already_onboarded.length} already onboarded
                 </Badge>
               )}
             </div>
+
+            {/* Before the call, not after: their API treats an unrecognised
+                track name as no track and still reports success, so this is
+                the last point at which the gap is visible. */}
+            {list.data.unmapped_programs.length > 0 && (
+              <Alert>
+                <AlertTriangle className="size-4" />
+                <AlertDescription>
+                  No Agilytics track is mapped for{' '}
+                  <strong>{list.data.unmapped_programs.join(', ')}</strong>. Those candidates
+                  will still be onboarded, but placed in no track. Set the mapping on the
+                  Programs screen first if that matters.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <ul className="flex flex-col gap-1.5">
               {rows.map((row) => (
@@ -191,9 +214,10 @@ function Body({
             <Alert>
               <AlertTriangle className="size-4" />
               <AlertDescription>
-                Invite {chosen.length} candidate{chosen.length === 1 ? '' : 's'} to Agilytics?
-                This stages invitations for every pending member of the workspace — their
-                endpoint cannot be narrowed to a selection — and cannot be undone from here.
+                Onboard {chosen.length} candidate{chosen.length === 1 ? '' : 's'} to Agilytics?
+                They become full members immediately — there is no invitation to accept —
+                and each is emailed instructions for their first login. This cannot be
+                undone from here.
               </AlertDescription>
             </Alert>
             <div className="flex justify-end gap-2">
@@ -203,8 +227,8 @@ function Body({
               <Button onClick={confirm} disabled={send.pending}>
                 <CheckCircle2 className="size-4" />
                 <PendingLabel
-                  idle={`Yes, invite ${chosen.length}`}
-                  pending="Inviting…"
+                  idle={`Yes, onboard ${chosen.length}`}
+                  pending="Onboarding…"
                   isPending={send.pending}
                 />
               </Button>
@@ -217,7 +241,7 @@ function Body({
             </Button>
             <Button onClick={() => setConfirming(true)} disabled={chosen.length === 0}>
               <Send className="size-4" />
-              Invite {chosen.length > 0 ? chosen.length : ''} to Agilytics
+              Onboard {chosen.length > 0 ? chosen.length : ''} to Agilytics
             </Button>
           </div>
         )}
@@ -252,7 +276,22 @@ function CandidateItem({
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {row.full_name ?? '—'}
         </span>
-        <span className="hidden truncate text-xs text-muted-foreground sm:block">
+        {/* The track they will actually land in, per row — the aggregate
+            warning above says which programs are unmapped, this says which
+            candidate that means. */}
+        {row.track_name ? (
+          <Badge variant="outline" className="hidden font-normal sm:inline-flex">
+            {row.track_name}
+          </Badge>
+        ) : (
+          <Badge
+            variant="outline"
+            className="hidden font-normal text-muted-foreground sm:inline-flex"
+          >
+            No track
+          </Badge>
+        )}
+        <span className="hidden truncate text-xs text-muted-foreground md:block">
           {row.email}
         </span>
       </label>
@@ -260,17 +299,17 @@ function CandidateItem({
   )
 }
 
-function EmptyState({ alreadyInvited }: { alreadyInvited: number }) {
+function EmptyState({ alreadyOnboarded }: { alreadyOnboarded: number }) {
   return (
     <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-border py-14 text-center">
       <span className="grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
         <Users className="size-6" />
       </span>
       <div className="flex flex-col gap-1.5">
-        <p className="font-medium">No new candidates to invite right now</p>
+        <p className="font-medium">Nobody left to onboard right now</p>
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-          {alreadyInvited > 0
-            ? `All ${alreadyInvited} candidate${alreadyInvited === 1 ? '' : 's'} who have cleared the Physical Interview have already been invited.`
+          {alreadyOnboarded > 0
+            ? `All ${alreadyOnboarded} candidate${alreadyOnboarded === 1 ? '' : 's'} who have cleared the Physical Interview are already in the workspace.`
             : 'Candidates appear here once they clear the Physical Interview.'}
         </p>
       </div>
