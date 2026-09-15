@@ -3,20 +3,18 @@ import {
   Folder,
   FolderCheck,
   GraduationCap,
-  RefreshCw,
   Search,
   Send,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { agilyticsApi, onboardingApi } from '@/features/admin/api'
-import { AgilyticsInviteDialog } from '@/features/agilytics/invite-dialog'
+import { AgilyticsOnboardDialog } from '@/features/agilytics/onboard-dialog'
 import { AgilyticsStatusBadge, agilyticsStateOf } from '@/features/agilytics/status-badge'
 import {
   AsyncSection,
@@ -24,7 +22,7 @@ import {
   BootcampGate,
   Pagination,
 } from '@/features/admin/components'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { useAsync } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
 import type { AgilyticsCandidateRow, OnboardingCandidateSummary } from '@/lib/types'
@@ -41,8 +39,8 @@ export default function AdminOnboardingCandidatesPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const debouncedSearch = useDebounced(search, 300)
 
-  // One request for the whole page, not one per card. Reads our own two
-  // timestamps — no Agilytics call — which is what makes a per-card badge
+  // One request for the whole page, not one per card. Reads our own
+  // timestamp — no Agilytics call — which is what makes a per-card badge
   // affordable at all.
   const membership = useAsync(
     () => (selectedId ? agilyticsApi.eligible(selectedId) : Promise.resolve(undefined)),
@@ -53,18 +51,12 @@ export default function AdminOnboardingCandidatesPage() {
     const map = new Map<string, AgilyticsCandidateRow>()
     for (const row of [
       ...(membership.data?.new ?? []),
-      ...(membership.data?.already_invited ?? []),
+      ...(membership.data?.already_onboarded ?? []),
     ]) {
       map.set(row.application_id, row)
     }
     return map
   }, [membership.data])
-
-  // Their API has no add-member endpoint and no per-candidate invite, so a
-  // resend is the same bulk call scoped to one person's confirmation.
-  const resend = useMutation((applicationId: string) =>
-    agilyticsApi.invite(selectedId!, { application_ids: [applicationId] }),
-  )
 
   const { data, error, initialLoading, refetch } = useAsync(
     () =>
@@ -97,7 +89,7 @@ export default function AdminOnboardingCandidatesPage() {
             {selectedId && (
               <Button onClick={() => setInviteOpen(true)}>
                 <Send className="size-4" />
-                Invitation to Agilytics
+                Onboard to Agilytics
               </Button>
             )}
           </>
@@ -143,17 +135,6 @@ export default function AdminOnboardingCandidatesPage() {
                       row={row}
                       index={index}
                       membership={byApplication.get(row.application_id)}
-                      resending={resend.pending}
-                      onResend={async () => {
-                        const out = await resend.run(row.application_id)
-                        if (!out) return
-                        if (out.confirmed.length > 0)
-                          toast.success(`Resent to ${row.candidate_code}`)
-                        else if (out.not_in_workspace.length > 0)
-                          toast.warning(`${row.candidate_code} is not in the Agilytics workspace`)
-                        else toast.warning(`Could not confirm ${row.candidate_code}`)
-                        membership.refetch()
-                      }}
                       onOpen={() => navigate(`/admin/onboarding/${row.application_id}`)}
                     />
                   ))}
@@ -174,13 +155,15 @@ export default function AdminOnboardingCandidatesPage() {
       </BootcampGate>
 
       {selectedId && (
-        <AgilyticsInviteDialog
+        <AgilyticsOnboardDialog
           open={inviteOpen}
           onOpenChange={setInviteOpen}
           bootcampId={selectedId}
           bootcampName={selected?.name}
-          onInvited={() => {
+          onOnboarded={() => {
             membership.refetch()
+            // Onboarding advances candidates to ONBOARDED, so the list's own
+            // rows change too, not just their badges.
             refetch()
           }}
         />
@@ -228,16 +211,12 @@ function CandidateFolder({
   row,
   index,
   membership,
-  resending,
-  onResend,
   onOpen,
 }: {
   row: OnboardingCandidateSummary
   index: number
   /** Undefined while the membership lookup is still in flight. */
   membership?: AgilyticsCandidateRow
-  resending: boolean
-  onResend: () => void
   onOpen: () => void
 }) {
   const formsDone = row.forms_submitted >= row.forms_total
@@ -283,34 +262,15 @@ function CandidateFolder({
         <DocsSummary row={row} />
       </div>
 
+      {/* No per-card resend any more. Onboarding is a single irreversible
+          event rather than an invitation that might need chasing, so the only
+          action left is the bulk one in the header — and re-running it for
+          somebody already in the workspace is refused, not repeated. */}
       {membership && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
           <AgilyticsStatusBadge state={agilyticsStateOf(membership)} />
-          {/* Only once they have actually been invited — a resend before a
-              first send is just a send, and that is the bulk action above. */}
-          {membership.invited_at && !membership.joined_at && (
-            <span
-              role="button"
-              tabIndex={0}
-              aria-disabled={resending}
-              onClick={(event) => {
-                // The whole card is a button that opens the folder; this
-                // action lives inside it, so it must not also do that.
-                event.stopPropagation()
-                if (!resending) onResend()
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  if (!resending) onResend()
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.68rem] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <RefreshCw className={cn('size-3', resending && 'animate-spin')} />
-              Resend
-            </span>
+          {membership.track_name && (
+            <span className="text-[0.68rem] text-muted-foreground">{membership.track_name}</span>
           )}
         </div>
       )}
