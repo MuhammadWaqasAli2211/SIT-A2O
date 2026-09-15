@@ -1,19 +1,41 @@
 """Provisioning an intake into Agilytics, and reading back what happened.
 
 Agilytics picks up where our pipeline stops: a candidate who has finished
-onboarding becomes a member of a workspace there. Three operations, all
-admin-initiated from the HR Assessment screen — nothing here runs on a
-timer or as a side effect of a stage change. That was a deliberate choice
-(2026-09-05): provisioning is not idempotent on their side, so it should
-happen because somebody decided it should, not because a candidate crossed
-a threshold while nobody was watching.
+onboarding becomes a member of a workspace there. Every operation is
+admin-initiated — nothing here runs on a timer or as a side effect of a
+stage change. That was a deliberate choice (2026-09-05) and it survives the
+API change: provisioning still creates things that cannot be deleted, so it
+should happen because somebody decided it should, not because a candidate
+crossed a threshold while nobody was watching.
+
+## Two steps, not one
+
+Their API separates having an account from being a member, and so does this
+module:
+
+1. **Provision** (`POST /workspaces`) creates the workspace, makes the
+   intake's admins leads, and creates Auth accounts for its students. It
+   does *not* make students members and does *not* create tracks.
+2. **Onboard** (`POST /workspaces/{id}/onboard`) makes chosen students
+   APPROVED members, immediately, with a per-student track name.
+
+The consequence worth knowing: a candidate who reaches onboarding *after*
+provisioning has no account on their side, and `onboard` reports them as
+"User not found in system" rather than adding them. Provisioning would
+create the account — but whether re-running it against an existing intake
+returns the same workspace or makes a second one is undocumented, so that
+path is deliberately not automated here. It is reported to the admin
+instead.
 
 ## What gets sent
 
 * **Students** — everyone in the intake at FORM or ONBOARDED, the same
   population the HR Assessment screen lists, so "provision this intake"
-  provisions what the admin is looking at. Their `trackName` is our program
-  title, which is also what we send as the workspace's track list.
+  provisions what the admin is looking at.
+* **Track names** — `programs.agilytics_track_name`, set per program by an
+  admin. Not the program title: their API resolves an unmatched track name
+  to no track at all, silently and without erroring, so a guessed mapping
+  fails invisibly. Null sends no track.
 * **Leads** — the intake's own bootcamp admins. Worth being explicit that
   this creates accounts for our staff in a third-party system; it is what
   makes them able to approve students on the Agilytics side without an
@@ -35,7 +57,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
-    AppError,
     ConflictError,
     NotFoundError,
     ServiceNotConfiguredError,
@@ -46,14 +67,16 @@ from app.models.bootcamp import Bootcamp, BootcampAdmin, Program
 from app.models.enums import ApplicationStage
 from app.models.user import Profile
 from app.schemas.agilytics import (
+    AgilyticsActivationHealth,
     AgilyticsCandidateRow,
     AgilyticsEligibleList,
-    AgilyticsInviteOutcome,
-    AgilyticsJoinSyncResult,
     AgilyticsMemberStatus,
+    AgilyticsOnboardOutcome,
     AgilyticsProvisionResult,
     AgilyticsTrackCount,
+    AgilyticsTrackProgress,
     AgilyticsWorkspaceState,
+    AgilyticsWorkspaceStats,
 )
 from app.services import (
     application_service,
@@ -78,21 +101,25 @@ def _bootcamp(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> Bootcamp:
     return bootcamp
 
 
-def _members(db: Session, bootcamp_id: uuid.UUID) -> tuple[list[dict], list[str]]:
-    """The students to provision, and the track names they belong to.
+def _members(db: Session, bootcamp_id: uuid.UUID) -> list[dict]:
+    """The students to provision, in their schema's shape.
 
-    Their schema wants camelCase (`fullName`, `trackName`); the rows are
-    built in their shape here rather than converted downstream, where an open
-    schema would silently drop a misspelled key instead of refusing it.
+    Accounts only — this feeds `provision_workspace`, which creates Auth
+    users and nothing else. No `trackName` here: their provisioning call has
+    no concept of one, and membership (where the track actually applies) is
+    `onboard`'s job.
+
+    Their schema wants camelCase (`fullName`); the rows are built in their
+    shape here rather than converted downstream, where an open schema would
+    silently drop a misspelled key instead of refusing it.
 
     A candidate with no name on file is sent with their candidate code as the
     name — an empty `fullName` is refused by their validator, and the code is
     the one identifier we can always produce.
     """
     rows = db.execute(
-        select(Application.candidate_code, Profile.email, Profile.full_name, Program.title)
+        select(Application.candidate_code, Profile.email, Profile.full_name)
         .join(Profile, Profile.id == Application.profile_id)
-        .outerjoin(Program, Program.id == Application.program_id)
         .where(
             Application.bootcamp_id == bootcamp_id,
             Application.stage.in_(_STUDENT_STAGES),
@@ -100,16 +127,7 @@ def _members(db: Session, bootcamp_id: uuid.UUID) -> tuple[list[dict], list[str]
         .order_by(Application.candidate_code)
     ).all()
 
-    students = []
-    tracks: list[str] = []
-    for code, email, full_name, track in rows:
-        student = {"email": email, "fullName": full_name or code}
-        if track:
-            student["trackName"] = track
-            tracks.append(track)
-        students.append(student)
-
-    return students, list(dict.fromkeys(tracks))
+    return [{"email": email, "fullName": full_name or code} for code, email, full_name in rows]
 
 
 def _leads(db: Session, bootcamp_id: uuid.UUID) -> list[dict]:
@@ -135,13 +153,12 @@ def preview(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsPro
     delete endpoint — so the admin sees the counts first and confirms.
     """
     bootcamp = _bootcamp(db, actor, bootcamp_id)
-    students, tracks = _members(db, bootcamp_id)
+    students = _members(db, bootcamp_id)
     leads = _leads(db, bootcamp_id)
 
     return AgilyticsProvisionResult(
         workspace_id=bootcamp.agilytics_workspace_id,
         already_provisioned=bootcamp.agilytics_workspace_id is not None,
-        tracks=tracks,
         students=len(students),
         leads=len(leads),
         lead_emails=[lead["email"] for lead in leads],
@@ -166,7 +183,7 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
             f"(workspace {bootcamp.agilytics_workspace_id})."
         )
 
-    students, tracks = _members(db, bootcamp_id)
+    students = _members(db, bootcamp_id)
     if not students:
         raise ConflictError("Nobody in this intake has reached onboarding yet.")
     leads = _leads(db, bootcamp_id)
@@ -174,7 +191,6 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
     data = agilytics.provision_workspace(
         name=bootcamp.name,
         description=bootcamp.description or "",
-        tracks=tracks,
         leads=leads,
         students=students,
     )
@@ -190,7 +206,17 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
         )
 
     bootcamp.agilytics_workspace_id = str(workspace_id)
+    # `summary.students` is an object of its own in the current API, where it
+    # used to be a flat count. Read defensively: a missing key here should
+    # leave a figure at zero rather than have us report our own request back
+    # as though it were their answer.
     summary = data.get("summary") or {}
+    student_summary = summary.get("students") or {}
+    created = student_summary.get("newlyCreated", 0)
+    existed = student_summary.get("alreadyExisted", 0)
+    total = student_summary.get("total", len(students))
+    leads_provisioned = summary.get("leadsProvisioned", len(leads))
+
     audit_service.record(
         db,
         actor=actor,
@@ -200,9 +226,10 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
         summary=f"Provisioned {bootcamp.name} into Agilytics",
         metadata={
             "workspace_id": str(workspace_id),
-            "tracks": data.get("tracksCreated") or tracks,
-            "leads_provisioned": summary.get("leadsProvisioned", len(leads)),
-            "students_provisioned": summary.get("studentsProvisioned", len(students)),
+            "leads_provisioned": leads_provisioned,
+            "students_total": total,
+            "students_created": created,
+            "students_already_existed": existed,
         },
     )
     db.commit()
@@ -210,9 +237,10 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
     return AgilyticsProvisionResult(
         workspace_id=str(workspace_id),
         already_provisioned=True,
-        tracks=data.get("tracksCreated") or tracks,
-        students=summary.get("studentsProvisioned", len(students)),
-        leads=summary.get("leadsProvisioned", len(leads)),
+        students=total,
+        students_created=created,
+        students_already_existed=existed,
+        leads=leads_provisioned,
         lead_emails=[lead["email"] for lead in leads],
     )
 
@@ -304,109 +332,100 @@ def member_status(
     )
 
 
-def send_invites(
-    db: Session,
-    actor: Profile,
-    bootcamp_id: uuid.UUID,
-    *,
-    application_ids: list[uuid.UUID] | None = None,
-    subject: str | None = None,
-    body_html: str | None = None,
-) -> dict:
-    """Issue Agilytics invites, and optionally email the chosen candidates.
+def workspace_stats(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsWorkspaceStats:
+    """This intake's workspace health, from their `/stats` endpoint.
 
-    Two halves, because their API and ours can each only do one of them.
+    Kept apart from `workspace_state` above rather than replacing it: the two
+    read different endpoints that return genuinely different things.
+    `onboarding-status` carries the `leads` roster and answers `?email=` for
+    one member, which this cannot; this carries per-track onboarded/pending
+    and activation health, which that has never had.
 
-    **Their half** — `bulk-invite` stages a token for every PENDING member of
-    the workspace. It takes no member list, so a selection cannot narrow it:
-    asking to invite three people invites everyone who is pending. Verified
-    2026-09-05 against the live API, along with the other half of the problem
-    — the response carries `invitesIssued` and `expiresAt` and *no tokens*, so
-    we cannot build an accept URL and could not send their invitation
-    ourselves even if we wanted to.
-
-    **Our half** — a covering email to the applications named in
-    `application_ids`. This is the part a selection actually controls, and it
-    exists for the same reason the interview invite's covering mail does: the
-    third party's own message is not ours to write, and everything specific to
-    this intake has to come from us.
-
-    Safe to repeat: their endpoint revokes and reissues rather than
-    duplicating, so unlike provisioning this is not gated behind an
-    already-done check. Zero pending members is a normal answer, not a failure.
+    Everything is passed through as reported. Where their two endpoints
+    disagree — `trackBreakdown` is `memberCount` there and a
+    total/onboarded/pending split here — the disagreement is preserved in two
+    models rather than flattened into one that would have to invent the
+    missing halves.
     """
     bootcamp = _bootcamp(db, actor, bootcamp_id)
     if not bootcamp.agilytics_workspace_id:
-        raise ConflictError("Provision this intake in Agilytics before sending invites.")
+        return AgilyticsWorkspaceStats(provisioned=False)
 
-    data = agilytics.bulk_invite(bootcamp.agilytics_workspace_id)
-    issued = data.get("invitesIssued", 0)
+    data = agilytics.stats(bootcamp.agilytics_workspace_id)
+    roles = data.get("roleBreakdown") or {}
+    status = data.get("statusBreakdown") or {}
+    activation = data.get("activationHealth") or {}
 
-    audit_service.record(
-        db,
-        actor=actor,
-        action="agilytics.bulk_invite",
-        entity_type="bootcamp",
-        entity_id=bootcamp.id,
-        summary=f"Staged {issued} Agilytics invite(s) for {bootcamp.name}",
-        metadata={
-            "workspace_id": bootcamp.agilytics_workspace_id,
-            "invites_issued": issued,
-            "expires_at": data.get("expiresAt"),
-        },
+    return AgilyticsWorkspaceStats(
+        provisioned=True,
+        workspace_id=bootcamp.agilytics_workspace_id,
+        workspace_name=data.get("workspaceName"),
+        total_members=data.get("totalMembers"),
+        leads_count=roles.get("leads"),
+        sub_leads_count=roles.get("subLeads"),
+        students_count=roles.get("students"),
+        approved=status.get("approved"),
+        pending=status.get("pending"),
+        left=status.get("left"),
+        rejected=status.get("rejected"),
+        revoked=status.get("revoked"),
+        tracks=[
+            AgilyticsTrackProgress(
+                track_id=t.get("trackId"),
+                track_name=t.get("trackName"),
+                total_students=t.get("totalStudents") or 0,
+                onboarded=t.get("onboarded") or 0,
+                pending=t.get("pending") or 0,
+            )
+            for t in (data.get("trackBreakdown") or [])
+        ],
+        activation=(
+            AgilyticsActivationHealth(
+                total_students=activation.get("totalStudents") or 0,
+                verified=activation.get("verified") or 0,
+                unverified=activation.get("unverified") or 0,
+            )
+            if activation
+            else None
+        ),
     )
 
-    emailed = failed = 0
-    if application_ids and body_html:
-        # Ordinary send: scope-checked, per-recipient merge-field rendered and
-        # logged to email_logs by the same path every other admin email takes.
-        result = email_service.send_to_applications(
-            db,
-            bootcamp_id,
-            application_ids=application_ids,
-            subject=subject or f"Your {bootcamp.name} workspace access",
-            body_html=body_html,
-            template="agilytics_invite",
-            actor=actor,
-        )
-        emailed, failed = result.sent, result.failed
 
-    db.commit()
-
-    return {
-        "invites_issued": issued,
-        "expires_at": data.get("expiresAt"),
-        "emailed": emailed,
-        "email_failed": failed,
-    }
-
-
-# ------------------------------------------------ per-candidate membership --
-# Everything below tracks Agilytics membership one candidate at a time, which
-# their API does not do for us. `bulk-invite` takes no member list and answers
-# with a single count; the only per-person signal available anywhere is the
-# per-member `onboarding-status` lookup, one HTTP request each. So an invite
-# is *confirmed* rather than assumed, and a join is *checked* rather than
-# pushed to us.
+# ------------------------------------------------------------ onboarding --
+# Their `onboard` endpoint makes a student an APPROVED workspace member in the
+# call itself: no token, no acceptance step, no waiting. Everything below
+# follows from that being one event rather than two.
+#
+# The endpoint this replaced (`bulk-invite`) took no member list and answered
+# with a single aggregate count, which forced a follow-up lookup per candidate
+# just to learn who it had covered. This one takes the list and answers per
+# email, so all of that reconciliation machinery — the per-candidate
+# confirmation loop, the join poller, the invited-versus-joined distinction —
+# is gone rather than ported.
 
 
 def _eligible_rows(db: Session, bootcamp_id: uuid.UUID) -> list:
-    """Everyone who has cleared the Physical Interview, invited or not.
+    """Everyone who has cleared the Physical Interview, onboarded or not.
 
     Deliberately independent of form and document progress: reaching FORM is
     what makes somebody part of the cohort, and their paperwork is a separate
     track Agilytics does not care about. Same `_STUDENT_STAGES` the
     provisioning call and the onboarding list are built from.
+
+    Carries both the program title (what an admin recognises) and its
+    Agilytics track name (what we actually send), because the modal has to
+    show the difference — a program with no mapping is a student who will be
+    onboarded ungrouped.
     """
     return db.execute(
         select(
             Application.id,
             Application.candidate_code,
-            Application.agilytics_invited_at,
-            Application.agilytics_joined_at,
+            Application.agilytics_onboarded_at,
             Profile.email,
             Profile.full_name,
             Program.title,
+            Program.agilytics_track_name,
         )
         .join(Profile, Profile.id == Application.profile_id)
         .outerjoin(Program, Program.id == Application.program_id)
@@ -419,246 +438,243 @@ def _eligible_rows(db: Session, bootcamp_id: uuid.UUID) -> list:
 
 
 def _to_row(record) -> AgilyticsCandidateRow:
-    app_id, code, invited_at, joined_at, email, full_name, track = record
+    app_id, code, onboarded_at, email, full_name, title, track_name = record
     return AgilyticsCandidateRow(
         application_id=app_id,
         candidate_code=code,
         full_name=full_name,
         email=email,
-        program_title=track,
-        invited_at=invited_at,
-        joined_at=joined_at,
+        program_title=title,
+        track_name=track_name,
+        onboarded_at=onboarded_at,
     )
 
 
 def eligible(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsEligibleList:
-    """Who the invite modal should offer, split by whether they were invited.
+    """Who the onboard modal should offer, split by whether they are already in.
 
-    Not-yet-invited is `agilytics_invited_at IS NULL` — the same
+    Not-yet-onboarded is `agilytics_onboarded_at IS NULL` — the same
     timestamp-not-flag shape the interview and physical-interview invites use,
     so re-running the flow cannot pick the same candidate up twice.
     """
     bootcamp = _bootcamp(db, actor, bootcamp_id)
     rows = [_to_row(r) for r in _eligible_rows(db, bootcamp_id)]
+    new = [r for r in rows if r.onboarded_at is None]
+
+    # Only the programs actually about to be sent: a missing mapping on a
+    # program nobody in this intake is studying is not this screen's problem.
+    unmapped = sorted({r.program_title for r in new if not r.track_name and r.program_title})
 
     return AgilyticsEligibleList(
         provisioned=bootcamp.agilytics_workspace_id is not None,
         workspace_id=bootcamp.agilytics_workspace_id,
-        new=[r for r in rows if r.invited_at is None],
-        already_invited=[r for r in rows if r.invited_at is not None],
+        new=new,
+        already_onboarded=[r for r in rows if r.onboarded_at is not None],
+        unmapped_programs=unmapped,
     )
 
 
-def _confirm_membership(workspace_id: str, email: str) -> str | None:
-    """Their status for one address, or None if the workspace has never heard
-    of it.
-
-    A 404 here is the ordinary answer for somebody who reached onboarding
-    after the workspace was provisioned: their API has no add-member call, so
-    those candidates genuinely are not members. Treated as "not a member",
-    never as an error, because it is not one.
-    """
-    try:
-        data = agilytics.onboarding_status(workspace_id, email=email)
-    except NotFoundError:
-        return None
-    return str(data.get("status") or "").upper() or None
+# How their `results[]` entries map onto our outcome buckets. Their two
+# documented reasons are matched case-insensitively on a distinctive fragment
+# rather than on the whole string: the reason is prose, and prose gets
+# reworded without anyone telling us.
+_SKIP_NOT_FOUND = "not found"
+_SKIP_ALREADY_MEMBER = "already a workspace member"
 
 
-def invite(
+def onboard(
     db: Session,
     actor: Profile,
     bootcamp_id: uuid.UUID,
     *,
     application_ids: list[uuid.UUID],
-    subject: str | None = None,
-    body_html: str | None = None,
-) -> AgilyticsInviteOutcome:
-    """Stage Agilytics invites, then confirm and stamp them one at a time.
+) -> AgilyticsOnboardOutcome:
+    """Make the chosen candidates workspace members, and tell them so.
 
-    Two things are true at once and the shape follows from both: their
-    `bulk-invite` covers every pending member of the workspace and cannot be
-    narrowed, and it reports only a total. So the call is made once for the
-    workspace, and `agilytics_invited_at` is then written per candidate only
-    where that candidate's own per-member lookup confirms they are really
-    there.
+    One call to their API, then three consequences on our side for everyone it
+    confirmed: the timestamp, the stage move to ONBOARDED, and the email.
 
-    The confirmation is what makes the stamp mean something. Writing it from
-    `invitesIssued` alone would mark candidates invited who were never added —
-    exactly the state of anyone who reached onboarding after provisioning,
-    since their API offers no way to add them.
+    **Already a member** counts as onboarded here. Their side says the
+    membership exists and ours says we never recorded it; of those two theirs
+    is the authority, so the row is stamped. It is emailed too, on the
+    reasoning that our stamp is the record of having *told* them — a candidate
+    who is a member but has never been sent login instructions has not been
+    onboarded in any sense they can act on.
+
+    **Not found in system** is the one that needs an operator. It means the
+    student has no account on their side, because provisioning has not run
+    since that candidate arrived. Nothing about them is stamped, so they stay
+    eligible for a retry once that is fixed.
+
+    The stage move goes through `application_service.advance_stage` rather
+    than writing a column, so it produces the same transition row, audit entry
+    and candidate notification as every other stage change. Attributed to the
+    admin, because unlike the join-polling this replaces, a person decided it.
     """
     bootcamp = _bootcamp(db, actor, bootcamp_id)
     workspace_id = bootcamp.agilytics_workspace_id
     if not workspace_id:
-        raise ConflictError("Provision this intake in Agilytics before sending invites.")
+        raise ConflictError("Provision this intake in Agilytics before onboarding anyone.")
     if not application_ids:
-        raise ConflictError("Select at least one candidate to invite.")
+        raise ConflictError("Select at least one candidate to onboard.")
 
     wanted = set(application_ids)
     chosen = [r for r in _eligible_rows(db, bootcamp_id) if r[0] in wanted and r[2] is None]
     if not chosen:
-        raise ConflictError("Those candidates have all been invited already.")
+        raise ConflictError("Those candidates have all been onboarded already.")
 
-    data = agilytics.bulk_invite(workspace_id)
-    issued = data.get("invitesIssued", 0)
+    by_email = {r[3].lower(): r for r in chosen if r[3]}
+    payload: list[dict[str, str]] = []
+    for _id, _code, _onboarded, email, _name, _title, track_name in chosen:
+        student: dict[str, str] = {"email": email}
+        # Omitted rather than sent empty when a program has no mapping: their
+        # validator reads an absent trackName as "no track", whereas an empty
+        # string is a name that matches nothing. Same outcome, but one of them
+        # is us saying what we mean.
+        if track_name:
+            student["trackName"] = track_name
+        payload.append(student)
+
+    data = agilytics.onboard(workspace_id, payload)
+
+    onboarded: list[str] = []
+    already_member: list[str] = []
+    not_found: list[str] = []
+    other: list[str] = []
+    confirmed_ids: list[uuid.UUID] = []
+
+    for entry in data.get("results") or []:
+        record = by_email.get(str(entry.get("email") or "").lower())
+        if record is None:
+            continue
+        code = record[1]
+
+        if entry.get("status") == "onboarded":
+            onboarded.append(code)
+            confirmed_ids.append(record[0])
+            continue
+
+        reason = str(entry.get("reason") or "").lower()
+        if _SKIP_ALREADY_MEMBER in reason:
+            already_member.append(code)
+            confirmed_ids.append(record[0])
+        elif _SKIP_NOT_FOUND in reason:
+            not_found.append(code)
+        else:
+            other.append(code)
 
     now = datetime.now(UTC)
-    confirmed: list[str] = []
-    confirmed_ids: list[uuid.UUID] = []
-    not_in_workspace: list[str] = []
-    check_failed: list[str] = []
-
-    for application_id, code, _invited, _joined, email, _name, _track in chosen:
-        try:
-            status = _confirm_membership(workspace_id, email)
-        except AppError:
-            # Their side answered the bulk call and not this one. Leaving the
-            # candidate unstamped keeps them retryable, which is the safe
-            # direction: a missing stamp costs a second invite, a wrong one
-            # costs a candidate who is never invited again.
-            check_failed.append(code)
+    stamped: list[tuple[uuid.UUID, str, str, str | None]] = []
+    for record in chosen:
+        if record[0] not in confirmed_ids:
             continue
-
-        if status is None:
-            not_in_workspace.append(code)
+        application = db.get(Application, record[0])
+        if application is None:
             continue
+        application.agilytics_onboarded_at = now
+        stamped.append((record[0], record[1], record[3], record[4]))
 
-        application = db.get(Application, application_id)
-        if application is not None:
-            application.agilytics_invited_at = now
-            confirmed.append(code)
-            confirmed_ids.append(application_id)
+    # Their numbers, not ours: `trackDistribution` counts the students they
+    # actually resolved to a track, so the shortfall against the onboarded
+    # count is everyone who landed ungrouped — whether because we sent no
+    # track or because the one we sent matched nothing. Their response does
+    # not distinguish those two and treats neither as an error, which is
+    # exactly why the total is worth surfacing.
+    distribution = data.get("trackDistribution")
+    distribution = distribution if isinstance(distribution, dict) else {}
+    ungrouped = max(0, len(onboarded) - sum(distribution.values()))
 
     audit_service.record(
         db,
         actor=actor,
-        action="agilytics.invite",
+        action="agilytics.onboard",
         entity_type="bootcamp",
         entity_id=bootcamp.id,
-        summary=(
-            f"Agilytics: staged {issued} invite(s), confirmed "
-            f"{len(confirmed)} candidate(s) for {bootcamp.name}"
-        ),
+        summary=f"Agilytics: onboarded {len(onboarded)} candidate(s) into {bootcamp.name}",
         metadata={
             "workspace_id": workspace_id,
-            "invites_issued": issued,
-            "confirmed": confirmed,
-            "not_in_workspace": not_in_workspace,
-            "check_failed": check_failed,
+            "onboarded": onboarded,
+            "already_member": already_member,
+            "not_found": not_found,
+            "other_skips": other,
+            "ungrouped": ungrouped,
+            "track_distribution": distribution,
         },
     )
 
-    emailed = failed = 0
-    if body_html and confirmed_ids:
-        result = email_service.send_to_applications(
-            db,
-            bootcamp_id,
-            application_ids=confirmed_ids,
-            subject=subject or f"Your {bootcamp.name} workspace access",
-            body_html=body_html,
-            template="agilytics_invite",
-            actor=actor,
-        )
-        emailed, failed = result.sent, result.failed
-
+    # Committed before the stage moves and the emails: each of those tolerates
+    # individual failure, and neither should be able to roll back a membership
+    # that already exists on their side.
     db.commit()
 
-    return AgilyticsInviteOutcome(
-        invites_issued=issued,
-        expires_at=data.get("expiresAt"),
-        confirmed=confirmed,
-        not_in_workspace=not_in_workspace,
-        check_failed=check_failed,
+    advanced = _advance_onboarded(db, stamped, actor)
+    emailed, email_failed = _email_onboarded(db, bootcamp, stamped)
+
+    return AgilyticsOnboardOutcome(
+        onboarded=onboarded,
+        skipped_already_member=already_member,
+        skipped_not_found=not_found,
+        skipped_other=other,
+        ungrouped=ungrouped,
+        track_distribution=distribution,
         emailed=emailed,
-        email_failed=failed,
+        email_failed=email_failed,
+        advanced=advanced,
     )
 
 
-def sync_joins(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsJoinSyncResult:
-    """Check who has joined, and advance them to ONBOARDED.
+def _advance_onboarded(
+    db: Session, stamped: list[tuple[uuid.UUID, str, str, str | None]], actor: Profile
+) -> list[str]:
+    """Move each newly-onboarded candidate to ONBOARDED.
 
-    Read-time reconciliation, the shape this codebase uses in place of the
-    scheduler it does not have — `_mark_interviewed` on a candidate poll, the
-    announced-verdict catch-up on an admin list, phase expiry derived rather
-    than swept. Nothing here runs on a timer.
-
-    Deliberately *not* wired into a page load. Each un-joined candidate costs
-    one request to their API, because students are reported as counts in the
-    workspace-wide response and can only be resolved one address at a time. A
-    screen doing this on every render would issue a request per candidate per
-    refresh, so it sits behind an explicit action instead.
-
-    Only candidates already stamped as invited are checked, and one who has
-    joined is stamped so they are never checked again.
+    A candidate already at that stage raises `ConflictError` from
+    `advance_stage` — the ordinary case for anyone their side reported as an
+    existing member. Swallowed, because the membership is still real and a
+    no-op should not surface to the caller as a failure.
     """
-    bootcamp = _bootcamp(db, actor, bootcamp_id)
-    workspace_id = bootcamp.agilytics_workspace_id
-    if not workspace_id:
-        raise ConflictError("This intake has not been provisioned in Agilytics yet.")
-
-    pending = [r for r in _eligible_rows(db, bootcamp_id) if r[2] is not None and r[3] is None]
-
-    joined: list[str] = []
     advanced: list[str] = []
-    unreachable = 0
-
-    for application_id, code, _invited, _joined, email, _name, _track in pending:
-        try:
-            status = _confirm_membership(workspace_id, email)
-        except AppError:
-            unreachable += 1
-            continue
-
-        # APPROVED is their word for "this member is in". Everything else —
-        # PENDING, REJECTED, REVOKED, LEFT, or absent — is not a join, and
-        # only a join advances a stage.
-        if status != "APPROVED":
-            continue
-
-        application = db.get(Application, application_id)
-        if application is None:
-            continue
-
-        application.agilytics_joined_at = datetime.now(UTC)
-        joined.append(code)
-
-        # The real transition, through the same path every other stage move
-        # takes, so this writes a stage_transitions row, an audit row and the
-        # candidate's notification rather than quietly setting a column.
-        # Attributed to nobody: Agilytics reported it, no admin decided it.
+    for application_id, code, _email, _name in stamped:
         try:
             application_service.advance_stage(
                 db,
                 application_id,
                 to_stage=ApplicationStage.ONBOARDED,
-                actor=None,
-                reason="Joined the Agilytics workspace",
+                actor=actor,
+                reason="Onboarded into the Agilytics workspace",
             )
             advanced.append(code)
         except (ConflictError, NotFoundError):
-            # Already ONBOARDED, or no longer active. The join stamp stands:
-            # it records what Agilytics says, independently of whether our
-            # own stage needed moving.
             continue
+    if advanced:
+        db.commit()
+    return advanced
 
-    if joined:
-        audit_service.record(
-            db,
-            actor=actor,
-            action="agilytics.sync_joins",
-            entity_type="bootcamp",
-            entity_id=bootcamp.id,
-            summary=f"Agilytics: {len(advanced)} candidate(s) advanced to Onboarded",
-            metadata={"workspace_id": workspace_id, "joined": joined, "advanced": advanced},
-        )
 
-    db.commit()
+def _email_onboarded(
+    db: Session,
+    bootcamp: Bootcamp,
+    stamped: list[tuple[uuid.UUID, str, str, str | None]],
+) -> tuple[int, int]:
+    """Tell each onboarded candidate they are in, and how to get in.
 
-    return AgilyticsJoinSyncResult(
-        checked=len(pending),
-        joined=joined,
-        advanced=advanced,
-        still_pending=len(pending) - len(joined) - unreachable,
-        unreachable=unreachable,
-    )
+    Sent one at a time rather than through `email_service.send_to_applications`
+    because this is a fixed transactional message with no admin-authored body
+    and no merge fields to render — the same shape as the physical interview
+    outcome mails, and held to the same never-raise contract. A mail server
+    outage must not make a membership that already exists look like a failure.
+    """
+    sent = failed = 0
+    for _application_id, code, email, full_name in stamped:
+        if not email:
+            continue
+        if email_service.send_agilytics_onboarded(
+            to=email,
+            full_name=full_name,
+            candidate_code=code,
+            bootcamp_name=bootcamp.name,
+        ):
+            sent += 1
+        else:
+            failed += 1
+    return sent, failed
