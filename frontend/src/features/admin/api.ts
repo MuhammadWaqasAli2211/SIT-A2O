@@ -11,9 +11,8 @@ import type {
   AdminApplicationDetail,
   AdminGrants,
   AgilyticsEligibleList,
-  AgilyticsInviteOutcome,
-  AgilyticsInviteResult,
-  AgilyticsJoinSyncResult,
+  AgilyticsOnboardOutcome,
+  AgilyticsWorkspaceStats,
   AgilyticsMemberStatus,
   AgilyticsProvisionResult,
   AgilyticsWorkspaceState,
@@ -608,22 +607,6 @@ export const agilyticsApi = {
     return data
   },
 
-  /** Issues Agilytics invites, and optionally emails the selected candidates.
-   *
-   *  `application_ids` does NOT narrow the Agilytics half — their endpoint
-   *  takes no member list and always covers every pending member. It selects
-   *  who receives our own covering email. Safe to repeat. */
-  async sendInvites(
-    bootcampId: string,
-    payload: { application_ids?: string[]; subject?: string; body_html?: string } = {},
-  ) {
-    const { data } = await api.post<AgilyticsInviteResult>(
-      `/bootcamps/${bootcampId}/agilytics/invites`,
-      { application_ids: payload.application_ids ?? [], ...payload },
-    )
-    return data
-  },
-
   /** One member's status, fetched on demand for a single row — never for the
    *  whole table, which would be one request per candidate. */
   memberStatus: (bootcampId: string, email: string) =>
@@ -631,32 +614,25 @@ export const agilyticsApi = {
       `/bootcamps/${bootcampId}/agilytics/members/${encodeURIComponent(email)}`,
     ),
 
-  /** Who could be invited, split by whether they already have been. Reads our
-   *  own database only — no Agilytics call, so it is cheap enough to drive the
-   *  folder badges as well as the modal. */
+  /** Workspace health from their `/stats` endpoint: per-track progress and
+   *  account activation, neither of which `state()` above can report. */
+  stats: (bootcampId: string) =>
+    get<AgilyticsWorkspaceStats>(`/bootcamps/${bootcampId}/agilytics/stats`),
+
+  /** Who could be onboarded, split by whether they already have been. Reads
+   *  our own database only — no Agilytics call, so it is cheap enough to
+   *  drive the folder badges as well as the modal. */
   eligible: (bootcampId: string) =>
     get<AgilyticsEligibleList>(`/bootcamps/${bootcampId}/agilytics/eligible`),
 
-  /** Stages invites, then confirms each candidate's membership before stamping
-   *  them. `application_ids` chooses whose membership is verified — it cannot
-   *  narrow the bulk-invite itself, which always covers every pending member. */
-  async invite(
-    bootcampId: string,
-    payload: { application_ids: string[]; subject?: string; body_html?: string },
-  ) {
-    const { data } = await api.post<AgilyticsInviteOutcome>(
-      `/bootcamps/${bootcampId}/agilytics/invite`,
+  /** Makes the selected candidates APPROVED workspace members, immediately —
+   *  no invitation, no acceptance step. Each is then advanced to Onboarded
+   *  and emailed their first-login instructions. The selection is real: their
+   *  endpoint takes the member list. */
+  async onboard(bootcampId: string, payload: { application_ids: string[] }) {
+    const { data } = await api.post<AgilyticsOnboardOutcome>(
+      `/bootcamps/${bootcampId}/agilytics/onboard`,
       payload,
-    )
-    return data
-  },
-
-  /** Checks invited candidates for a join and advances those who have to
-   *  Onboarded. One request to Agilytics per un-joined candidate, which is why
-   *  it is an explicit action rather than something a page load triggers. */
-  async syncJoins(bootcampId: string) {
-    const { data } = await api.post<AgilyticsJoinSyncResult>(
-      `/bootcamps/${bootcampId}/agilytics/sync-joins`,
     )
     return data
   },
