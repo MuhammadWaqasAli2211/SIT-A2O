@@ -29,11 +29,9 @@ import {
   Gauge,
   RefreshCw,
   Search,
-  Send,
   UserCheck,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Counter } from '@/components/motion/counter'
 import { AppLoader } from '@/components/shared/app-loader'
@@ -43,7 +41,6 @@ import { EmptyState } from '@/components/shared/portal-ui'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -56,12 +53,11 @@ import { EvidenceDialog } from '@/features/ai-interview/report-view'
 import { AgilyticsCell } from '@/features/hr-assessment/agilytics-cell'
 import { AgilyticsStrip } from '@/features/hr-assessment/agilytics-strip'
 import { OnboardingFormDialog } from '@/features/hr-assessment/onboarding-form-dialog'
-import { SendInvitesDialog } from '@/features/hr-assessment/send-invites-dialog'
 import {
   RecordResultDialog,
   type RecordResultTarget,
 } from '@/features/physical-interview/record-result-dialog'
-import { useAsync, useMutation } from '@/hooks/use-async'
+import { useAsync } from '@/hooks/use-async'
 import { useDebounced } from '@/hooks/use-debounced'
 import { downloadCsv } from '@/lib/csv-export'
 import {
@@ -120,19 +116,11 @@ export function HrAssessmentPanel({
   /** The awaiting-decision row whose select/reject dialog is open. */
   const [deciding, setDeciding] = useState<RecordResultTarget | null>(null)
 
-  // Selection drives our covering email only — the Agilytics invite itself
-  // always covers every pending member, because their endpoint takes no
-  // member list. The send dialog says so plainly.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [sending, setSending] = useState(false)
-
-  const toggleRow = (id: string) =>
-    setSelectedIds((current) => {
-      const next = new Set(current)
-      if (!next.delete(id)) next.add(id)
-      return next
-    })
-
+  // No candidate selection on this screen any more. It existed to choose who
+  // received the covering email alongside an Agilytics invite, and that whole
+  // flow is gone: onboarding is a single immediate action, it lives on the
+  // Onboarding screen next to the folder cards it affects, and it sends its
+  // own email to exactly the people it onboarded.
   // Memoized so its identity is stable across renders where `data` has not
   // changed — a fresh `?? []` literal every render is what trips the
   // exhaustive-deps warning on the useMemo calls below.
@@ -184,34 +172,6 @@ export function HrAssessmentPanel({
 
   // Only the rows still on screen: a selection hidden by a filter must not be
   // silently emailed, and the count in the toolbar has to mean what it says.
-  const selectedRows = useMemo(
-    () => filtered.filter((row) => selectedIds.has(row.application_id)),
-    [filtered, selectedIds],
-  )
-  const allVisibleSelected = filtered.length > 0 && selectedRows.length === filtered.length
-
-  const send = useMutation(async (message: { subject: string; body_html: string } | null) => {
-    if (!bootcampId) return
-    const result = await agilyticsApi.sendInvites(bootcampId, {
-      application_ids: selectedRows.map((row) => row.application_id),
-      ...(message ?? {}),
-    })
-    toast.success(
-      [
-        result.invites_issued === 0
-          ? 'No pending members to invite'
-          : `${result.invites_issued} Agilytics invite(s) issued`,
-        result.emailed > 0 ? `${result.emailed} candidate(s) emailed` : null,
-        result.email_failed > 0 ? `${result.email_failed} email(s) failed` : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    )
-    setSending(false)
-    setSelectedIds(new Set())
-    agilytics.refetch()
-  })
-
   const exportRows = () => {
     const header = [
       'Code',
@@ -255,12 +215,7 @@ export function HrAssessmentPanel({
       <StatCards stats={data?.stats} loading={false} />
 
       {bootcampId && (
-        <AgilyticsStrip
-          bootcampId={bootcampId}
-          bootcampName={bootcampName}
-          state={agilytics}
-          onSendInvites={() => setSending(true)}
-        />
+        <AgilyticsStrip bootcampId={bootcampId} bootcampName={bootcampName} state={agilytics} />
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -316,33 +271,6 @@ export function HrAssessmentPanel({
         </Button>
       </div>
 
-      {bootcampId && selectedRows.length > 0 && (
-        <Reveal direction="none" duration={0.25}>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-            <span className="text-sm font-medium">
-              {selectedRows.length} candidate{selectedRows.length === 1 ? '' : 's'} selected
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setSending(true)}
-                disabled={!agilytics.data?.provisioned}
-                title={
-                  agilytics.data?.provisioned
-                    ? undefined
-                    : 'Provision this intake in Agilytics first'
-                }
-              >
-                <Send className="size-4" />
-                Send Agilytics invite
-              </Button>
-            </div>
-          </div>
-        </Reveal>
-      )}
 
       {/* The decision queue, above the roster it feeds. A reviewer opens this
           screen to act on the people still waiting; the cleared roster below
@@ -380,21 +308,6 @@ export function HrAssessmentPanel({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {bootcampId && (
-                        <TableHead className="w-10">
-                          <Checkbox
-                            aria-label="Select all candidates in view"
-                            checked={allVisibleSelected}
-                            onCheckedChange={(next) =>
-                              setSelectedIds(
-                                next === true
-                                  ? new Set(filtered.map((row) => row.application_id))
-                                  : new Set(),
-                              )
-                            }
-                          />
-                        </TableHead>
-                      )}
                       <TableHead>Code</TableHead>
                       <TableHead>Candidate</TableHead>
                       {platform && (
@@ -417,15 +330,6 @@ export function HrAssessmentPanel({
                   <MotionTableBody key={`${debouncedSearch}|${track}|${bootcamp}`}>
                     {filtered.map((row) => (
                       <MotionTableRow key={row.application_id}>
-                        {bootcampId && (
-                          <TableCell>
-                            <Checkbox
-                              aria-label={`Select ${row.full_name ?? row.candidate_code}`}
-                              checked={selectedIds.has(row.application_id)}
-                              onCheckedChange={() => toggleRow(row.application_id)}
-                            />
-                          </TableCell>
-                        )}
                         <TableCell className="font-mono text-xs whitespace-nowrap">
                           {row.candidate_code}
                         </TableCell>
@@ -512,16 +416,6 @@ export function HrAssessmentPanel({
         }}
       />
       <OnboardingFormDialog row={openForms} onClose={() => setOpenForms(null)} />
-
-      <SendInvitesDialog
-        open={sending}
-        onOpenChange={(next) => !next && setSending(false)}
-        selected={selectedRows}
-        workspace={agilytics.data}
-        pending={send.pending}
-        error={send.error}
-        onSend={(message) => void send.run(message)}
-      />
     </div>
   )
 }
