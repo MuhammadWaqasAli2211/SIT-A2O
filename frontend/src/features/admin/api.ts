@@ -13,6 +13,9 @@ import type {
   AgilyticsEligibleList,
   AgilyticsOnboardOutcome,
   AgilyticsWorkspaceStats,
+  DocumentExportEligibleList,
+  IdCardIssueState,
+  DocumentExportQueued,
   AgilyticsMemberStatus,
   AgilyticsProvisionResult,
   AgilyticsWorkspaceState,
@@ -653,6 +656,48 @@ export const permissionApi = {
 
   async revoke(profileId: string, scope: AiScope) {
     const { data } = await api.delete<AiScope[]>(`/users/${profileId}/permissions/${scope}`)
+    return data
+  },
+}
+
+export const idCardApi = {
+  /** Whether cards are issued for this intake, and how many candidates that
+   *  reaches. Read before the switch renders so it never shows a wrong state. */
+  state: (bootcampId: string) => get<IdCardIssueState>(`/admin/bootcamps/${bootcampId}/id-cards`),
+
+  /** Issue or withdraw. Returns the new state, so the switch reflects what the
+   *  server actually recorded rather than what we optimistically assumed. */
+  async setIssued(
+    bootcampId: string,
+    issued: boolean,
+    validity?: { valid_from: string; valid_to: string },
+  ) {
+    const { data } = await api.put<IdCardIssueState>(`/admin/bootcamps/${bootcampId}/id-cards`, {
+      issued,
+      ...(validity ?? {}),
+    })
+    return data
+  },
+}
+
+export const documentExportApi = {
+  /** Candidates whose documents are all approved, with when each was last
+   *  sent. One list for both modal tabs — "not yet sent" is this filtered on
+   *  `exported_at`, not a second query that could disagree. */
+  eligible: (bootcampId: string) =>
+    get<DocumentExportEligibleList>(`/bootcamps/${bootcampId}/document-export/eligible`),
+
+  /** Queues the export and returns immediately (202). The archive is built,
+   *  uploaded and emailed on the server's background task — at realistic
+   *  sizes that is minutes, which is not something to hold a modal open for. */
+  async send(
+    bootcampId: string,
+    payload: { application_ids: string[]; recipient_email: string; sender_name: string },
+  ) {
+    const { data } = await api.post<DocumentExportQueued>(
+      `/bootcamps/${bootcampId}/document-export`,
+      payload,
+    )
     return data
   },
 }

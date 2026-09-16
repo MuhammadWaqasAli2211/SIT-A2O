@@ -101,6 +101,13 @@ class OnboardingProgress(BaseModel):
     forms_total: int
     hub_unlocked: bool
 
+    # Whether to offer this candidate their ID card. Two conditions, both
+    # resolved server-side: the admin has issued cards for the intake, and
+    # this candidate was selected at the physical interview. Defaulted so the
+    # admin-facing caller, which has no candidate to answer for, need not
+    # pass it.
+    id_card_available: bool = False
+
 
 class OnboardingCandidateSummary(BaseModel):
     """One row of the admin's bootcamp-level candidate-folder list."""
@@ -111,7 +118,14 @@ class OnboardingCandidateSummary(BaseModel):
     forms_submitted: int
     forms_total: int
     documents_required: int
+    """Required document tabs for this candidate's age — the denominator."""
+    documents_slots_filled: int
+    """How many of those tabs hold at least one file. Never exceeds
+    `documents_required`, which is what makes it safe to show as a ratio."""
     documents_uploaded: int
+    """Total files across every tab, required or not. Can legitimately exceed
+    `documents_required` — multi-file tabs and the optional experience-letter
+    tab both add to it — so it is shown as a count, never as a fraction."""
     documents_approved: int
     documents_rejected: int
     documents_pending: int

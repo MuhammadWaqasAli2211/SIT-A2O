@@ -155,6 +155,42 @@ export interface Page<T> {
   offset: number
 }
 
+/** Mirrors MAX_FILES_PER_TYPE in onboarding_document_service.py. The server
+ *  is the authority; this exists so the "+ Add" control can stop a candidate
+ *  before an upload that would only be refused. */
+/** Per-intake ID card switch. `issued` is the admin's flag; a candidate also
+ *  has to be selected at the physical interview to be offered a card. */
+export interface IdCardIssueState {
+  issued: boolean
+  issued_at: string | null
+  issued_by: string | null
+  /** Printed on the back of every card generated while this is on. Set with
+   *  the switch and cleared with it, so a re-issue asks again. */
+  valid_from: string | null
+  valid_to: string | null
+  /** Candidates selected at the physical interview — who the switch reaches. */
+  eligible_count: number
+}
+
+/** Values already on file, offered as defaults on the onboarding forms. */
+export interface OnboardingPrefill {
+  full_name: string | null
+  father_name: string | null
+  father_cnic: string | null
+  cnic: string | null
+  date_of_birth: string | null
+  gender: string | null
+  phone: string | null
+  father_phone: string | null
+  address: string | null
+  email: string | null
+  candidate_code: string | null
+  program_title: string | null
+  picture_url: string | null
+}
+
+export const MAX_FILES_PER_TYPE = 10
+
 export interface Program {
   id: string
   slug: string
@@ -183,6 +219,13 @@ export interface Phase {
   opens_at: string | null
   deadline_at: string | null
   is_open: boolean
+  /** When somebody last closed this phase by hand; cleared on reopen.
+   *
+   * Needed alongside `is_open` because FORM and ONBOARDING are opt-out —
+   * accepting until closed — and every phase row is created with
+   * `is_open: false`, so the flag alone cannot tell "untouched" from
+   * "closed by an admin". See phaseState() in phases-page.tsx. */
+  closed_at: string | null
   /** Only the INTERVIEW phase uses this: when its AI interview results were
    * announced to candidates. Null means not announced. */
   results_announced_at: string | null
@@ -768,6 +811,9 @@ export interface OnboardingProgress {
   forms_submitted: number
   forms_total: number
   hub_unlocked: boolean
+  /** Both halves resolved server-side: cards issued for the intake AND this
+   *  candidate selected at the physical interview. */
+  id_card_available: boolean
 }
 
 export const OnboardingDocumentType = {
@@ -819,6 +865,9 @@ export interface OnboardingCandidateSummary {
   forms_submitted: number
   forms_total: number
   documents_required: number
+  /** Required tabs holding at least one file. Safe as a numerator. */
+  documents_slots_filled: number
+  /** Total files across all tabs; may exceed documents_required. */
   documents_uploaded: number
   documents_approved: number
   documents_rejected: number
@@ -853,6 +902,9 @@ export interface HrAssessmentRow {
   forms_submitted: number
   forms_total: number
   documents_required: number
+  /** Required tabs holding at least one file. Safe as a numerator. */
+  documents_slots_filled: number
+  /** Total files across all tabs; may exceed documents_required. */
   documents_uploaded: number
   documents_approved: number
   documents_rejected: number
@@ -1079,4 +1131,30 @@ export interface AgilyticsOnboardOutcome {
   email_failed: number
   /** Moved to ONBOARDED — a real stage transition, audited and notified. */
   advanced: string[]
+}
+
+/* ------------------------------------------------- bulk document export -- */
+/* A ZIP of candidates' approved documents and their onboarding forms, sent to
+ * an HOD as a 24-hour signed link rather than an attachment. */
+
+export interface DocumentExportCandidate {
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  documents_approved: number
+  /** Null means never exported — what the modal's "Not yet sent" tab filters
+   *  on. Overwritten per send; no history is kept behind it. */
+  exported_at: string | null
+}
+
+export interface DocumentExportEligibleList {
+  /** Everyone whose paperwork is finished, sent or not. The modal's two tabs
+   *  are this one list filtered, so they cannot disagree about who exists. */
+  candidates: DocumentExportCandidate[]
+}
+
+export interface DocumentExportQueued {
+  queued: number
+  recipient_email: string
+  message: string
 }
