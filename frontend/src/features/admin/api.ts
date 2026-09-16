@@ -636,6 +636,14 @@ export const agilyticsApi = {
     )
     return data
   },
+
+  /** Forgets this intake's workspace id. Never calls Agilytics — for when a
+   *  workspace was deleted on their side directly, which nothing here can
+   *  detect on its own; see the backend for why. */
+  async unlink(bootcampId: string) {
+    const { data } = await api.delete<AgilyticsWorkspaceState>(`/bootcamps/${bootcampId}/agilytics`)
+    return data
+  },
 }
 
 export const permissionApi = {
