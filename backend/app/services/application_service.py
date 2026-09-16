@@ -99,7 +99,8 @@ def submit(db: Session, applicant: Profile, payload: ApplicationCreate) -> Appli
         is_university_student=payload.is_university_student,
         university_name=payload.university_name,
         university_semester=payload.university_semester,
-        university_timing=payload.university_timing,
+        university_timing_from=payload.university_timing_from,
+        university_timing_to=payload.university_timing_to,
         # Stamped server-side. A client-supplied timestamp is a claim, not a
         # record.
         terms_accepted_at=datetime.now(timezone.utc),

@@ -77,7 +77,8 @@ const EMPTY: Record<string, unknown> = {
   is_university_student: '',
   university_semester: '',
   university_name: '',
-  university_timing: '',
+  university_timing_from: '',
+  university_timing_to: '',
   picture: undefined,
   ...Object.fromEntries(
     [...DECLARATIONS.map((d) => d.id), POLICY_CONSENT.id].map((id) => [id, false]),
@@ -163,7 +164,8 @@ export function RegistrationForm() {
         // nullable, and an empty string would read as "answered, blankly".
         university_semester: (v.university_semester as string) || null,
         university_name: (v.university_name as string) || null,
-        university_timing: (v.university_timing as string) || null,
+        university_timing_from: (v.university_timing_from as string) || null,
+        university_timing_to: (v.university_timing_to as string) || null,
         terms_version: TERMS_VERSION,
       })
       setResult(created)
