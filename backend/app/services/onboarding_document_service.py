@@ -55,6 +55,14 @@ MULTI_FILE_TYPES = frozenset(
     {OnboardingDocumentType.EDUCATIONAL_CERT, OnboardingDocumentType.EXPERIENCE_LETTER}
 )
 
+# How many files one multi-file type may hold. There was no cap at all until
+# now — neither here nor in the "+ Add" control — so a single candidate could
+# put an unbounded number of 5 MB files behind one tab. That is a reviewer's
+# problem before it is a storage one, and it puts no ceiling on the size of a
+# bulk export: ten is more certificates than anyone legitimately has, and
+# still bounds a candidate's folder to a knowable maximum.
+MAX_FILES_PER_TYPE = 10
+
 _RequiredRow = tuple[OnboardingDocumentType, str, bool, bool]
 
 
@@ -129,9 +137,17 @@ def checklist(db: Session, application: Application) -> list[RequiredOnboardingD
     dob = application_service.get_date_of_birth(db, application)
     required = required_documents(is_adult_candidate=is_adult(dob))
 
+    # Ordered by upload time, which is the order a candidate added them and
+    # the order both this screen and the export archive show them in. Without
+    # an explicit order the database returns them however it likes, so the
+    # same candidate's certificates could appear in a different order on two
+    # consecutive page loads — and gaps in a numbered set would read as
+    # shuffled rather than simply missing.
     uploaded: dict[OnboardingDocumentType, list[OnboardingDocument]] = {}
     for doc in db.scalars(
-        select(OnboardingDocument).where(OnboardingDocument.application_id == application.id)
+        select(OnboardingDocument)
+        .where(OnboardingDocument.application_id == application.id)
+        .order_by(OnboardingDocument.created_at, OnboardingDocument.id)
     ):
         uploaded.setdefault(doc.doc_type, []).append(doc)
 
@@ -173,6 +189,24 @@ def upload(
     if len(content) > settings.DOCUMENT_MAX_BYTES:
         limit_mb = settings.DOCUMENT_MAX_BYTES // (1024 * 1024)
         raise ConflictError(f"Files must be {limit_mb} MB or smaller.")
+
+    if doc_type in MULTI_FILE_TYPES:
+        existing_count = (
+            db.scalar(
+                select(func.count())
+                .select_from(OnboardingDocument)
+                .where(
+                    OnboardingDocument.application_id == application.id,
+                    OnboardingDocument.doc_type == doc_type,
+                )
+            )
+            or 0
+        )
+        if existing_count >= MAX_FILES_PER_TYPE:
+            raise ConflictError(
+                f"You can upload at most {MAX_FILES_PER_TYPE} files here. "
+                "Remove one before adding another."
+            )
 
     superseded: str | None = None
     if doc_type not in MULTI_FILE_TYPES:
@@ -305,7 +339,7 @@ def summary_for(db: Session, application: Application, profile: Profile) -> Onbo
     # A checklist assumes an age on file, and the hub is not reachable before
     # it is — asking for one here would just be extra query cost on a row the
     # admin cannot act on yet anyway.
-    required_count = uploaded = approved = rejected = pending = 0
+    required_count = slots_filled = uploaded = approved = rejected = pending = 0
     if unlocked:
         dob = application_service.get_date_of_birth(db, application)
         required = required_documents(is_adult_candidate=is_adult(dob))
@@ -321,6 +355,19 @@ def summary_for(db: Session, application: Application, profile: Profile) -> Onbo
         rejected = sum(1 for d in docs if d.status == DocumentStatus.REJECTED)
         pending = sum(1 for d in docs if d.status == DocumentStatus.PENDING)
 
+        # How many of the required tabs have something in them, which is a
+        # different question from how many files exist. A multi-file tab can
+        # hold ten certificates and the optional experience-letter tab counts
+        # for nothing here, so `uploaded` can exceed `required_count` — it is
+        # a file count, not a progress fraction, and pairing the two as a
+        # ratio produced the nonsense "7/6".
+        present = {doc.doc_type for doc in docs}
+        slots_filled = sum(
+            1
+            for doc_type, _label, is_required, _multi in required
+            if is_required and doc_type in present
+        )
+
     return OnboardingCandidateSummary(
         application_id=application.id,
         candidate_code=application.candidate_code,
@@ -328,6 +375,7 @@ def summary_for(db: Session, application: Application, profile: Profile) -> Onbo
         forms_submitted=forms_submitted,
         forms_total=len(onboarding_form_service.FORM_ORDER),
         documents_required=required_count,
+        documents_slots_filled=slots_filled,
         documents_uploaded=uploaded,
         documents_approved=approved,
         documents_rejected=rejected,

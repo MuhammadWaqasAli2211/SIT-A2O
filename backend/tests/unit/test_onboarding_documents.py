@@ -37,17 +37,26 @@ def form_phase(**kwargs) -> BootcampPhase:
 
 
 class FakeSession:
-    def __init__(self, existing=None, phase=None):
+    def __init__(self, existing=None, phase=None, count=None):
         self._existing = existing
+        self._count = count
         self._phase = phase if phase is not None else form_phase()
         self.added = []
         self.deleted = []
 
     def scalar(self, stmt):
-        # `get_phase` and upload()'s own supersede lookup both land here, so
-        # tell them apart by what the statement selects rather than by order.
-        if stmt.column_descriptions[0]["entity"] is BootcampPhase:
+        # `get_phase`, the multi-file count, and upload()'s own supersede
+        # lookup all land here, so tell them apart by what the statement
+        # selects rather than by order.
+        entity = stmt.column_descriptions[0]["entity"]
+        if entity is BootcampPhase:
             return self._phase
+        # A count selects a function, not an entity, so it has none. One
+        # stored document stands for one file of that type.
+        if entity is None:
+            if self._count is not None:
+                return self._count
+            return 1 if self._existing is not None else 0
         return self._existing
 
     def scalars(self, _stmt):
@@ -149,6 +158,52 @@ def test_a_second_educational_certificate_does_not_replace_the_first(monkeypatch
     upload(session, doc_type=DT.EDUCATIONAL_CERT)
 
     assert session.deleted == []
+
+
+def test_an_eleventh_file_of_one_type_is_refused(monkeypatch):
+    """The cap is the server's, not the "+ Add" button's.
+
+    A candidate who never sees the frontend — or who keeps a stale tab open
+    after deleting nothing — still cannot put an unbounded number of files
+    behind one tab, which is what bounds the size of a bulk export.
+    """
+    monkeypatch.setattr(svc.onboarding_form_service, "hub_unlocked", lambda rows: True)
+    reached_storage = []
+    monkeypatch.setattr(svc.supabase_storage, "upload", lambda *a, **k: reached_storage.append(a))
+
+    session = FakeSession(count=svc.MAX_FILES_PER_TYPE)
+    with pytest.raises(ConflictError, match=f"at most {svc.MAX_FILES_PER_TYPE} files"):
+        upload(session, doc_type=DT.EDUCATIONAL_CERT)
+
+    # Refused before the bytes go anywhere, so a rejected upload costs no
+    # storage and leaves nothing to clean up.
+    assert reached_storage == []
+    assert [o for o in session.added if isinstance(o, OnboardingDocument)] == []
+
+
+def test_the_cap_leaves_the_last_slot_usable(monkeypatch):
+    """One below the cap must still work, or the check is off by one."""
+    monkeypatch.setattr(svc.onboarding_form_service, "hub_unlocked", lambda rows: True)
+    monkeypatch.setattr(svc.supabase_storage, "upload", lambda *a, **k: None)
+
+    session = FakeSession(count=svc.MAX_FILES_PER_TYPE - 1)
+    upload(session, doc_type=DT.EDUCATIONAL_CERT)
+
+    stored = [o for o in session.added if isinstance(o, OnboardingDocument)]
+    assert len(stored) == 1
+
+
+def test_single_file_types_are_not_subject_to_the_cap(monkeypatch):
+    """The count query only runs for multi-file types; a single-slot type is
+    governed by supersede-on-reupload instead."""
+    monkeypatch.setattr(svc.onboarding_form_service, "hub_unlocked", lambda rows: True)
+    monkeypatch.setattr(svc.supabase_storage, "upload", lambda *a, **k: None)
+
+    session = FakeSession(count=svc.MAX_FILES_PER_TYPE)
+    upload(session, doc_type=DT.CV)
+
+    stored = [o for o in session.added if isinstance(o, OnboardingDocument)]
+    assert len(stored) == 1
 
 
 def test_a_second_cv_upload_supersedes_the_first(monkeypatch):
