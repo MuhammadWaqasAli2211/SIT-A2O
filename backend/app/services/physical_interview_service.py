@@ -29,6 +29,12 @@ from app.schemas.physical_interview import (
 from app.services import application_service, audit_service, bootcamp_service, email_service
 
 
+# Long enough to be a reason rather than a keystroke. Matches MIN_NOTE in the
+# frontend's RecordResultDialog — the dialog stops a typo reaching the server,
+# this stops anything that is not the dialog.
+MIN_REJECTION_NOTE = 4
+
+
 def row_status(invite: PhysicalInterviewInvite) -> str:
     """Derived at read time, never stored — see PhysicalInterviewBatch.is_expired."""
     if invite.result == PhysicalInterviewResult.SELECTED:
@@ -177,6 +183,19 @@ def record_result(
         raise ConflictError(
             f"A result ({invite.result.value.lower()}) is already recorded for this candidate."
         )
+
+    # Checked here, before anything is written, because rejecting somebody is
+    # the one decision on this screen nobody can review afterwards without a
+    # reason attached — and until this existed the requirement lived only in
+    # the dialog's own state, so any caller that was not that dialog could
+    # reject a candidate with nothing recorded at all.
+    if payload.result == PhysicalInterviewResult.REJECTED:
+        note = (payload.rejection_note or "").strip()
+        if len(note) < MIN_REJECTION_NOTE:
+            raise ConflictError(
+                f"A reason of at least {MIN_REJECTION_NOTE} characters is required to "
+                "record a rejection."
+            )
 
     application = application_service.get_detail(db, invite.application_id)
 
