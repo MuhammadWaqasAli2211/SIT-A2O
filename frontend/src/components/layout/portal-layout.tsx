@@ -241,34 +241,70 @@ function PortalShell() {
                 </span>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-72 p-0">
                 {/* Base UI requires GroupLabel to sit inside a Group — rendering
                     one loose throws MenuGroupContext is missing and takes the
                     whole portal down, since this menu is in every portal page. */}
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">
-                        {profile.full_name ?? 'Account'}
-                      </span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {profile.email}
+                  <DropdownMenuLabel className="p-0">
+                    {/* An identity panel rather than a caption: the avatar is
+                        the same one in the trigger, at a size worth looking
+                        at, on a tinted ground that separates who you are from
+                        what you can do. Tokens throughout, so both themes
+                        follow without a second palette. */}
+                    <span className="flex items-center gap-3 rounded-t-md border-b border-border bg-muted/50 px-3.5 py-3.5">
+                      <UserAvatar pictureUrl={pictureUrl} size="default" />
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                          {profile.full_name ?? 'Account'}
+                        </span>
+                        {/* `break-all`: an email has no spaces to wrap at, and
+                            a long one would otherwise widen the whole menu. */}
+                        <span className="truncate text-xs font-normal break-all text-muted-foreground">
+                          {profile.email}
+                        </span>
                       </span>
                     </span>
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                {/* /account, not /dashboard/profile — the latter is behind the
-                    candidate role gate and bounced staff straight back out. */}
-                <DropdownMenuItem render={<Link to="/account" />}>
-                  <UserCircle className="size-4" />
-                  Profile & settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => void logout()} variant="destructive">
-                  <LogOut className="size-4" />
-                  Sign out
-                </DropdownMenuItem>
+
+                {/* Two groups, separated: somewhere to go, and the one action
+                    that ends the session. Signing out by mis-click is the only
+                    real hazard in this menu, so it does not sit flush against
+                    the thing above it. */}
+                <DropdownMenuGroup className="p-1.5">
+                  {/* /account, not /dashboard/profile — the latter is behind the
+                      candidate role gate and bounced staff straight back out. */}
+                  <DropdownMenuItem
+                    render={<Link to="/account" />}
+                    className="gap-2.5 rounded-md px-2.5 py-2"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                      <UserCircle className="size-4" />
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="text-sm font-medium">Profile &amp; settings</span>
+                      <span className="text-xs text-muted-foreground">
+                        Your details and account
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+
+                <DropdownMenuSeparator className="my-0" />
+
+                <DropdownMenuGroup className="p-1.5">
+                  <DropdownMenuItem
+                    onClick={() => void logout()}
+                    variant="destructive"
+                    className="gap-2.5 rounded-md px-2.5 py-2"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
+                      <LogOut className="size-4" />
+                    </span>
+                    <span className="text-sm font-medium">Sign out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
             </ErrorBoundary>

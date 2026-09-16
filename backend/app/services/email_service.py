@@ -822,3 +822,102 @@ def send_agilytics_onboarded(
         what="Agilytics onboarding email",
         code=candidate_code,
     )
+
+
+# ------------------------------------------- bulk document export to an HOD --
+# Sent from `document_export_service.run_export`, once the archive is uploaded
+# and its link signed. Same never-raise contract as the outcome emails above,
+# and the caller treats a False return as "do not stamp anybody as exported",
+# so a failure here leaves the whole batch re-sendable rather than lost.
+#
+# `sender_name` is the admin who pressed the button. It appears in the body
+# only — the From header stays the configured Gmail mailbox, which is not
+# something this can or should change.
+
+
+def send_document_export(
+    *,
+    to: str,
+    sender_name: str,
+    bootcamp_name: str,
+    candidate_count: int,
+    download_url: str,
+    zip_name: str,
+) -> bool:
+    """Hand an HOD the link to a candidate-records archive.
+
+    The link is the whole message, so it appears twice — as the button and as
+    text beneath it — because a button that does not survive an email client's
+    rendering leaves the reader with nothing to click.
+
+    The expiry is stated plainly rather than left to be discovered: the link
+    lasts 24 hours, and an HOD who opens the mail on day three needs to know
+    to ask rather than assume the export failed.
+    """
+    people = f"{candidate_count} candidate{'' if candidate_count == 1 else 's'}"
+    subject = f"{bootcamp_name} — onboarding records for {people}"
+
+    text_body = (
+        "Hello,\n\n"
+        f"{sender_name} has sent you the onboarding records for {people} "
+        f"from {bootcamp_name}.\n\n"
+        "The archive contains one folder per candidate, named by their "
+        "candidate code, holding their approved documents and their completed "
+        "onboarding forms.\n\n"
+        f"Download ({zip_name}):\n"
+        f"{download_url}\n\n"
+        "This link is valid for 24 hours. If it has expired by the time you "
+        "open this, reply and we will send a fresh one.\n\n"
+        f"Regards,\n{sender_name}\n"
+        "Saylani Mass IT Training"
+    )
+
+    html_body = _shell(f"""\
+  <p style="font-size:16px">Hello,</p>
+
+  <p>
+    <strong>{sender_name}</strong> has sent you the onboarding records for
+    <strong>{people}</strong> from <strong>{bootcamp_name}</strong>.
+  </p>
+
+  <p style="color:#374151">
+    The archive contains one folder per candidate, named by their candidate
+    code, holding their approved documents and their completed onboarding
+    forms.
+  </p>
+
+  <p style="margin:28px 0">
+    <a href="{download_url}"
+       style="display:inline-block;padding:13px 24px;background:#1800AD;color:#ffffff;
+              text-decoration:none;border-radius:6px;font-weight:600">
+      Download Documents as .zip
+    </a>
+  </p>
+
+  <p style="margin:0 0 6px;font-size:13px;color:#6b7280">
+    If the button does not work, copy this link:
+  </p>
+  <p style="margin:0 0 24px;padding:10px 14px;background:#f9fafb;border-radius:6px;
+            font-size:12px;word-break:break-all">
+    <a href="{download_url}" style="color:#1800AD">{download_url}</a>
+  </p>
+
+  <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
+            border-radius:6px;font-size:14px;color:#374151">
+    This link is valid for <strong>24 hours</strong>. If it has expired by the
+    time you open this, reply and we will send a fresh one.
+  </p>
+
+  <p style="margin-top:24px">
+    Regards,<br />
+    <strong>{sender_name}</strong>
+  </p>""")
+
+    return _deliver(
+        to=to,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        what="Document export email",
+        code=zip_name,
+    )

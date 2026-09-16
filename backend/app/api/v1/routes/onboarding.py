@@ -13,6 +13,7 @@ from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
 from app.api.deps import AdminUser, CandidateUser, DbSession
 from app.models.enums import OnboardingDocumentType, OnboardingFormType
+from app.schemas.onboarding_prefill import OnboardingPrefill
 from app.schemas.onboarding import (
     OnboardingCandidateSummary,
     OnboardingDocumentLink,
@@ -27,6 +28,7 @@ from app.schemas.onboarding import (
 )
 from app.schemas.ops import Page
 from app.services import (
+    id_card_service,
     application_service,
     bootcamp_service,
     onboarding_document_service,
@@ -60,7 +62,30 @@ def my_onboarding_progress(
     application_id: uuid.UUID, user: CandidateUser, db: DbSession
 ) -> OnboardingProgress:
     application = application_service.get_own(db, user, application_id)
-    return onboarding_form_service.progress(db, application)
+    progress = onboarding_form_service.progress(db, application)
+    # Resolved here rather than inside the form service: whether a card is
+    # offered has nothing to do with form progress, and the admin-facing
+    # caller of `progress` has no candidate to answer the question for.
+    return progress.model_copy(
+        update={"id_card_available": id_card_service.availability(db, application)}
+    )
+
+
+@router.get(
+    "/applications/{application_id}/onboarding/prefill",
+    response_model=OnboardingPrefill,
+    tags=["candidate"],
+)
+def my_onboarding_prefill(
+    application_id: uuid.UUID, user: CandidateUser, db: DbSession
+) -> OnboardingPrefill:
+    """Values already on file, so the forms do not ask for them again.
+
+    Defaults only — the candidate can change any of them. Fetched separately
+    from the form itself so a form still opens if this call fails.
+    """
+    application = application_service.get_own(db, user, application_id)
+    return onboarding_form_service.prefill(db, application)
 
 
 @router.post(

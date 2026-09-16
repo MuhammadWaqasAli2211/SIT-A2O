@@ -17,7 +17,7 @@
  * acceptance timestamp, so a record says which text was agreed to rather than
  * merely when. Bump this whenever a declaration changes.
  */
-export const TERMS_VERSION = '2026-08-22b'
+export const TERMS_VERSION = '2026-09-16a'
 
 export interface Declaration {
   /** Field name in the form schema, and the column suffix when persisted. */
@@ -37,7 +37,7 @@ export const DECLARATIONS: readonly Declaration[] = [
     id: 'commitment',
     title: 'Conduct and commitment',
     body:
-      'I agree to follow all SMIT rules, attend every scheduled stage on time, and complete the projects assigned to me during the bootcamp.',
+      'I am bound to complete the full three-month bootcamp under all circumstances, and I understand that withdrawing after selection will permanently bar me from every Saylani course, activity and future bootcamp.',
   },
   {
     id: 'dress_code',

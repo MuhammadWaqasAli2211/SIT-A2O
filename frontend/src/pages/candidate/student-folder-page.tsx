@@ -14,6 +14,7 @@ import { useApplication } from '@/features/applications/application-context'
 import { candidateApi } from '@/features/candidate/api'
 import { FolderCard, type FolderTone } from '@/features/onboarding/folder-card'
 import { useAsync } from '@/hooks/use-async'
+import { IdCardDownload } from '@/features/onboarding/id-card-download'
 import {
   ONBOARDING_FORM_ORDER,
   ONBOARDING_FORM_SLUG,
@@ -82,6 +83,15 @@ function Folder({ applicationId }: { applicationId: string }) {
             />
           </StaggerItem>
         </Stagger>
+      )}
+
+      {/* Shown only once an admin has issued cards for the intake AND this
+          candidate was selected at the physical interview — both decided
+          server-side, so the button cannot be revealed by a stale page. */}
+      {progress.data?.id_card_available && (
+        <div className="mt-5">
+          <IdCardDownload applicationId={applicationId} />
+        </div>
       )}
     </AsyncSection>
   )

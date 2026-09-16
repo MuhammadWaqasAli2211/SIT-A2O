@@ -29,7 +29,6 @@ import {
   REFERRAL_SOURCES,
   SEMESTERS,
   UNIVERSITY_ANSWERS,
-  UNIVERSITY_TIMINGS,
 } from '@/features/registration/constants'
 import { DECLARATIONS, POLICY_CONSENT } from '@/features/registration/terms'
 
@@ -167,7 +166,10 @@ export const educationSchema = z.object({
   // gate is given the same rule so the two agree.
   university_semester: z.enum(SEMESTERS).optional().or(z.literal('')),
   university_name: z.string().trim().max(150, 'University name is too long').optional().or(z.literal('')),
-  university_timing: z.enum(UNIVERSITY_TIMINGS).optional().or(z.literal('')),
+  // A range, not a half of the day: real timetables are 9-2, 2-7, 9-5.
+  // Kept as "HH:MM" strings because that is what <input type="time"> emits.
+  university_timing_from: z.string().regex(/^\d{2}:\d{2}$/, 'Enter a valid time').optional().or(z.literal('')),
+  university_timing_to: z.string().regex(/^\d{2}:\d{2}$/, 'Enter a valid time').optional().or(z.literal('')),
 
   // A File rather than a data URL: nothing is uploaded yet, and holding a
   // megabyte of base64 in form state would be paid for on every keystroke.
@@ -234,11 +236,24 @@ export const registrationSchema = locationSchema
       for (const [field, message] of [
         ['university_semester', 'Select your current semester'],
         ['university_name', 'Enter your university name'],
-        ['university_timing', 'Select when your classes run'],
+        ['university_timing_from', 'Enter when your classes start'],
+        ['university_timing_to', 'Enter when your classes end'],
       ] as const) {
         if (!v[field]) {
           ctx.addIssue({ code: 'custom', path: [field], message })
         }
+      }
+
+      // Same rule the backend enforces, checked here so a typo is caught
+      // while the field is still in front of the applicant.
+      const from = v.university_timing_from
+      const to = v.university_timing_to
+      if (from && to && to <= from) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['university_timing_to'],
+          message: 'End time must be later than the start time',
+        })
       }
     }
   })
@@ -257,7 +272,7 @@ export const SECTION_FIELDS = {
   education: [
     'computer_proficiency', 'last_qualification', 'referral_source',
     'has_laptop', 'is_university_student', 'university_semester',
-    'university_name', 'university_timing', 'picture',
+    'university_name', 'university_timing_from', 'university_timing_to', 'picture',
   ],
   terms: [...DECLARATIONS.map((d) => d.id), POLICY_CONSENT.id],
 } as const satisfies Record<string, readonly string[]>

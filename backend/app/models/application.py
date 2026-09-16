@@ -1,9 +1,9 @@
 """The pipeline spine: one application per person per intake, plus its history."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, Time, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,6 +73,11 @@ class Application(Base, TimestampMixin):
     # joined state left to track: the moment this is set, they are in.
     agilytics_onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # When this candidate's documents were last sent to an HOD in a bulk
+    # export. Overwritten per send — the screen asks "sent yet?", not "how
+    # many times" — and left null by a failed export so they stay offered.
+    documents_exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     statement: Mapped[str | None] = mapped_column(Text)
 
     # Registration answers specific to this intake. Person-level answers live
@@ -91,7 +96,10 @@ class Application(Base, TimestampMixin):
     is_university_student: Mapped[bool | None] = mapped_column(Boolean)
     university_name: Mapped[str | None] = mapped_column(String(150))
     university_semester: Mapped[str | None] = mapped_column(String(20))
-    university_timing: Mapped[str | None] = mapped_column(String(20))
+    # A real range rather than half-a-day: timetables are 9-2, 2-7, 9-5, and
+    # the question exists to avoid clashing with them.
+    university_timing_from: Mapped[time | None] = mapped_column(Time)
+    university_timing_to: Mapped[time | None] = mapped_column(Time)
 
     # Paired by a CHECK constraint: a timestamp without the version cannot say
     # which wording was accepted.

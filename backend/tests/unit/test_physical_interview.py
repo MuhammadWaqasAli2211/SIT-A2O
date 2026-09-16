@@ -7,7 +7,7 @@ every branch here rather than only the happy path.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -17,6 +17,7 @@ from app.models.bootcamp import Bootcamp
 from app.models.enums import PhysicalInterviewResult
 from app.models.physical_interview import PhysicalInterviewBatch, PhysicalInterviewInvite
 from app.models.user import Profile
+from app.schemas.physical_interview import RecordResultRequest
 from app.services import physical_interview_service as svc
 from app.services.physical_interview_service import row_status
 
@@ -207,3 +208,123 @@ def test_a_candidate_with_no_email_is_skipped_rather_than_erroring(monkeypatch):
         lambda **kw: pytest.fail("should not have tried to send"),
     )
     svc._email_outcome(_fake_db(email=""), _application(), PhysicalInterviewResult.SELECTED)
+
+
+# ------------------------------------------- the rejection reason is required --
+# Until this was enforced here, the requirement lived only in the admin
+# dialog's own `MIN_NOTE`: a direct service or API call could reject a
+# candidate with nothing recorded at all, and the CHECK constraint that was
+# supposed to back it only stopped a note appearing on a *non*-rejected row.
+# Verified against the live database 2026-09-15, which accepted it.
+#
+# Checked before anything is written, so a refusal leaves no stage move and no
+# invite row behind — hence these exercise `record_result` itself rather than
+# the constraint, which is the second line of defence, not the first.
+
+
+class _RecordDb:
+    """Enough Session for record_result up to the point it validates."""
+
+    def __init__(self, invite):
+        self._invite = invite
+        self.flushed = False
+
+    def get(self, _model, _pk, options=None):
+        return self._invite
+
+    def add(self, _obj):
+        pass
+
+    def flush(self):
+        self.flushed = True
+
+
+def _actor() -> Profile:
+    return Profile(id=uuid.uuid4(), email="admin@example.com")
+
+
+def _pending_invite():
+    batch = PhysicalInterviewBatch(
+        id=uuid.uuid4(),
+        bootcamp_id=uuid.uuid4(),
+        venue="Zaitoon Ashraf IT Park",
+        interview_date=date(2026, 9, 20),
+        deadline_at=datetime(2099, 1, 1, tzinfo=UTC),
+    )
+    invite = PhysicalInterviewInvite(
+        id=uuid.uuid4(), batch_id=batch.id, application_id=uuid.uuid4(), result=None
+    )
+    invite.batch = batch
+    return invite
+
+
+@pytest.fixture
+def _allow(monkeypatch):
+    monkeypatch.setattr(svc.bootcamp_service, "assert_can_manage", lambda *a, **k: None)
+    monkeypatch.setattr(
+        svc.application_service,
+        "get_detail",
+        lambda db, aid: pytest.fail("must refuse before touching the application"),
+    )
+
+
+@pytest.mark.parametrize(
+    "note",
+    [
+        pytest.param(None, id="no-note-at-all"),
+        pytest.param("", id="empty-string"),
+        pytest.param("   ", id="blank-space-only"),
+        pytest.param("ab", id="too-short"),
+    ],
+)
+def test_a_rejection_without_a_real_reason_is_refused(_allow, note):
+    invite = _pending_invite()
+    with pytest.raises(ConflictError, match="reason"):
+        svc.record_result(
+            _RecordDb(invite),
+            invite.id,
+            RecordResultRequest(result=PhysicalInterviewResult.REJECTED, rejection_note=note),
+            Profile(id=uuid.uuid4(), email='admin@example.com'),
+        )
+
+
+def test_the_refusal_happens_before_any_stage_move(_allow):
+    """The `get_detail` stub above fails the test if it is reached. A rejection
+    that is going to be refused must not first advance anybody's stage."""
+    invite = _pending_invite()
+    db = _RecordDb(invite)
+    with pytest.raises(ConflictError):
+        svc.record_result(
+            db,
+            invite.id,
+            RecordResultRequest(result=PhysicalInterviewResult.REJECTED, rejection_note=None),
+            Profile(id=uuid.uuid4(), email='admin@example.com'),
+        )
+    assert db.flushed is False
+    assert invite.result is None
+
+
+def test_a_selection_needs_no_reason(monkeypatch):
+    """The requirement is specific to rejections — a selection carrying no note
+    is the ordinary case and must not be caught by the same check."""
+
+    class _ReachedApplicationLookup(Exception):
+        """Raised by the stub below to stop the call once it is past validation."""
+
+    monkeypatch.setattr(svc.bootcamp_service, "assert_can_manage", lambda *a, **k: None)
+
+    def _stop(db, aid):
+        raise _ReachedApplicationLookup
+
+    monkeypatch.setattr(svc.application_service, "get_detail", _stop)
+
+    invite = _pending_invite()
+    # Getting as far as the application lookup is the proof: the reason check
+    # did not fire on a selection.
+    with pytest.raises(_ReachedApplicationLookup):
+        svc.record_result(
+            _RecordDb(invite),
+            invite.id,
+            RecordResultRequest(result=PhysicalInterviewResult.SELECTED, rejection_note=None),
+            Profile(id=uuid.uuid4(), email="admin@example.com"),
+        )

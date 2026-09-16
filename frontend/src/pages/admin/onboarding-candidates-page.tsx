@@ -3,6 +3,7 @@ import {
   Folder,
   FolderCheck,
   GraduationCap,
+  Mail,
   Search,
   Send,
 } from 'lucide-react'
@@ -15,6 +16,8 @@ import { Input } from '@/components/ui/input'
 import { EmptyState, PageHeader } from '@/components/shared/portal-ui'
 import { agilyticsApi, onboardingApi } from '@/features/admin/api'
 import { AgilyticsOnboardDialog } from '@/features/agilytics/onboard-dialog'
+import { DocumentExportDialog } from '@/features/onboarding/document-export-dialog'
+import { IdCardSwitch } from '@/features/onboarding/id-card-switch'
 import { AgilyticsStatusBadge, agilyticsStateOf } from '@/features/agilytics/status-badge'
 import {
   AsyncSection,
@@ -37,6 +40,7 @@ export default function AdminOnboardingCandidatesPage() {
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const debouncedSearch = useDebounced(search, 300)
 
   // One request for the whole page, not one per card. Reads our own
@@ -87,10 +91,20 @@ export default function AdminOnboardingCandidatesPage() {
           <>
             <BootcampSwitcher />
             {selectedId && (
-              <Button onClick={() => setInviteOpen(true)}>
-                <Send className="size-4" />
-                Onboard to Agilytics
-              </Button>
+              <>
+                <IdCardSwitch bootcampId={selectedId} />
+                {/* Outline, next to the primary Agilytics action: sending an
+                    HOD a copy is a routine hand-off, not the step that moves
+                    a candidate on. */}
+                <Button variant="outline" onClick={() => setExportOpen(true)}>
+                  <Mail className="size-4" />
+                  Export documents
+                </Button>
+                <Button onClick={() => setInviteOpen(true)}>
+                  <Send className="size-4" />
+                  Onboard to Agilytics
+                </Button>
+              </>
             )}
           </>
         }
@@ -155,6 +169,21 @@ export default function AdminOnboardingCandidatesPage() {
       </BootcampGate>
 
       {selectedId && (
+        <DocumentExportDialog
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          bootcampId={selectedId}
+          bootcampName={selected?.name}
+          onSent={() => {
+            // The export stamps documents_exported_at in the background, so
+            // this only refreshes what is already on screen; the modal's own
+            // list refetches when it is next opened.
+            refetch()
+          }}
+        />
+      )}
+
+      {selectedId && (
         <AgilyticsOnboardDialog
           open={inviteOpen}
           onOpenChange={setInviteOpen}
@@ -179,7 +208,13 @@ function DocsSummary({ row }: { row: OnboardingCandidateSummary }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">
-        {row.documents_uploaded}/{row.documents_required} uploaded
+        {typeof row.documents_slots_filled === 'number'
+          ? `${row.documents_slots_filled}/${row.documents_required} documents`
+          : /* An API older than this field would otherwise render "/6". */
+            `${row.documents_required} required`}
+      </span>
+      <span className="text-muted-foreground">
+        &middot; {row.documents_uploaded} file{row.documents_uploaded === 1 ? '' : 's'}
       </span>
       {row.documents_approved > 0 && (
         <Badge variant="outline" className="border-success/40 text-success">

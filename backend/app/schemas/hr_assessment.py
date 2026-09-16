@@ -48,6 +48,7 @@ class HrAssessmentRow(BaseModel):
     forms_submitted: int
     forms_total: int
     documents_required: int
+    documents_slots_filled: int
     documents_uploaded: int
     documents_approved: int
     documents_rejected: int

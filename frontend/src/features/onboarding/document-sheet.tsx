@@ -24,6 +24,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { candidateApi } from '@/features/candidate/api'
 import { UploadDropzone } from '@/features/onboarding/dropzone'
 import { useMutation } from '@/hooks/use-async'
+import { MAX_FILES_PER_TYPE } from '@/lib/types'
 import type {
   DocumentStatus,
   OnboardingDocumentRecord,
@@ -63,7 +64,12 @@ export function DocumentSheet({
   if (!row) return null
 
   const accepted = !row.multi && row.documents[0]?.status === 'ACCEPTED'
-  const canAddMore = !accepted && (row.multi || row.documents.length === 0)
+  // Mirrors MAX_FILES_PER_TYPE in onboarding_document_service. Enforced on
+  // the server regardless — this only spares the candidate an upload that
+  // was always going to be refused, and explains the limit while they can
+  // still act on it.
+  const atLimit = row.multi && row.documents.length >= MAX_FILES_PER_TYPE
+  const canAddMore = !accepted && !atLimit && (row.multi || row.documents.length === 0)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -72,7 +78,7 @@ export function DocumentSheet({
           <SheetTitle>{row.label}</SheetTitle>
           <SheetDescription>
             {row.required ? 'Required' : 'Optional'}
-            {row.multi && ' · add as many as you need'}
+            {row.multi && ` · up to ${MAX_FILES_PER_TYPE} files`}
           </SheetDescription>
         </SheetHeader>
 
@@ -104,6 +110,14 @@ export function DocumentSheet({
           {accepted && (
             <Badge variant="outline" className="w-fit font-normal">
               Accepted — this can no longer be changed.
+            </Badge>
+          )}
+
+          {/* Without this the dropzone would simply vanish at the tenth file,
+              which reads as a bug rather than a limit. */}
+          {atLimit && (
+            <Badge variant="outline" className="w-fit font-normal">
+              {MAX_FILES_PER_TYPE} files is the maximum — remove one to add another.
             </Badge>
           )}
         </div>

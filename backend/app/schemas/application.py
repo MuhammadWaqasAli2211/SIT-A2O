@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
@@ -16,7 +16,6 @@ Gender = Literal["Male", "Female"]
 CourseStatus = Literal["Completed", "In Progress"]
 Proficiency = Literal["Beginner", "Intermediate", "Advanced"]
 Semester = Literal["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "Other"]
-ClassTiming = Literal["Morning", "Evening", "Weekend"]
 
 CNIC_PATTERN = r"^\d{5}-?\d{7}-?\d$"
 PK_PHONE_PATTERN = r"^(\+92|0)?3\d{2}[\s-]?\d{7}$"
@@ -67,12 +66,26 @@ class ApplicationCreate(BaseModel):
     is_university_student: bool
     university_semester: Semester | None = None
     university_name: str | None = Field(default=None, max_length=150)
-    university_timing: ClassTiming | None = None
+    university_timing_from: time | None = None
+    university_timing_to: time | None = None
 
     # Which wording was accepted. Sent by the client and re-checked against
     # the server's current version, so a stale tab cannot record consent to
     # text it never showed.
     terms_version: str = Field(max_length=20)
+
+    @model_validator(mode="after")
+    def _class_times_make_sense(self) -> "ApplicationCreate":
+        """A range that ends before it starts is a typo, not a night class.
+
+        Equal times are refused too: "9:00 to 9:00" answers nothing about
+        which part of the day is taken, which is the only reason the field
+        exists.
+        """
+        start, end = self.university_timing_from, self.university_timing_to
+        if start is not None and end is not None and end <= start:
+            raise ValueError("Class end time must be later than the start time")
+        return self
 
     @model_validator(mode="after")
     def _university_details_complete(self) -> "ApplicationCreate":
@@ -87,7 +100,8 @@ class ApplicationCreate(BaseModel):
             # should not have to clear them by hand.
             self.university_semester = None
             self.university_name = None
-            self.university_timing = None
+            self.university_timing_from = None
+            self.university_timing_to = None
             return self
 
         missing = [
@@ -95,7 +109,8 @@ class ApplicationCreate(BaseModel):
             for name, value in (
                 ("university_semester", self.university_semester),
                 ("university_name", self.university_name),
-                ("university_timing", self.university_timing),
+                ("university_timing_from", self.university_timing_from),
+                ("university_timing_to", self.university_timing_to),
             )
             if not value
         ]

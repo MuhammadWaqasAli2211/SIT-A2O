@@ -38,9 +38,17 @@ class PhysicalInterviewInviteRequest(BaseModel):
 
 class RecordResultRequest(BaseModel):
     result: PhysicalInterviewResult
-    # Admin's own record only, never shown to the candidate. Meaningful only
-    # alongside REJECTED — the DB CHECK backs this, this is the 422 that
-    # names the problem before it gets there.
+    # Admin's own record only, never shown to the candidate.
+    #
+    # Optional *here* because it is only required on a rejection, which this
+    # model cannot express on its own — `physical_interview_service.
+    # record_result` enforces that pairing, and a CHECK constraint enforces
+    # it again in the database.
+    #
+    # The comment this replaces claimed the old CHECK required a note on a
+    # rejection. It did not: it only stopped a note existing on a row that was
+    # *not* rejected, so a reason-less rejection was accepted by everything
+    # except the dialog. Verified against the live constraint, 2026-09-15.
     rejection_note: str | None = Field(default=None, max_length=1000)
 
 

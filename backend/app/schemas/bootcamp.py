@@ -27,6 +27,16 @@ class PhaseOut(BaseModel):
     opens_at: datetime | None = None
     deadline_at: datetime | None = None
     is_open: bool
+    # When somebody last closed this phase by hand, cleared again on reopen.
+    #
+    # Exposed because `is_open` alone cannot answer the question the FORM and
+    # ONBOARDING phases are gated on. Those two are opt-out — accepting until
+    # somebody decides otherwise — and every phase row is created with
+    # `is_open = false`, so the flag cannot distinguish "nobody has touched
+    # this" from "an admin shut it". `phase_closure` reads both; the Phases
+    # screen has to as well, or it reports a phase closed while the server is
+    # still accepting submissions through it.
+    closed_at: datetime | None = None
     # Only the INTERVIEW phase uses this today — when its AI interview
     # results were announced to candidates. Null means not announced.
     results_announced_at: datetime | None = None

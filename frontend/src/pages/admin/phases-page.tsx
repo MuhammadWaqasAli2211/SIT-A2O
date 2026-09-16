@@ -57,25 +57,68 @@ function nowLocalInput(): string {
   return toLocalInput(new Date().toISOString())
 }
 
-/** A phase is genuinely open only if the flag is set and the clock agrees. */
-function effectivelyOpen(phase: Phase, now = Date.now()): boolean {
-  if (!phase.is_open) return false
-  if (phase.opens_at && now < new Date(phase.opens_at).getTime()) return false
-  if (phase.deadline_at && now > new Date(phase.deadline_at).getTime()) return false
-  return true
+/**
+ * The four phases are gated by two different rules on the server, and this
+ * screen has to tell them apart or it reports the wrong state.
+ *
+ * REGISTRATION and INTERVIEW are **opt-in**: `assert_phase_open` requires the
+ * flag to be set *and* the clock to agree, so an untouched phase is shut.
+ *
+ * FORM and ONBOARDING are **opt-out**: `assert_phase_accepts` asks only
+ * whether somebody has *decided* to shut it — an explicit close that has not
+ * been undone, or a deadline that has passed. Every phase row is created with
+ * `is_open = false`, so an untouched FORM phase is accepting submissions
+ * despite its flag, and this screen used to call that "Manually closed" while
+ * candidates were submitting through it.
+ *
+ * Mirrors bootcamp_service.is_phase_open / phase_closure. Those are the
+ * authority; if they change, this changes with them.
+ */
+const OPT_OUT_PHASES: ReadonlySet<PhaseType> = new Set<PhaseType>(['FORM', 'ONBOARDING'])
+
+type PhaseReason =
+  | 'not-yet-open' // opt-in only: flag on, window has not started
+  | 'window-passed' // deadline is in the past, whatever the flag says
+  | 'never-opened' // opt-in only: nobody has opened it
+  | 'manually-closed' // opt-out only: somebody closed it and has not reopened
+  | null
+
+interface PhaseState {
+  /** Is the server accepting candidate activity for this phase right now? */
+  open: boolean
+  reason: PhaseReason
+}
+
+function phaseState(phase: Phase, now = Date.now()): PhaseState {
+  const started = !phase.opens_at || now >= new Date(phase.opens_at).getTime()
+  const expired = Boolean(phase.deadline_at && now > new Date(phase.deadline_at).getTime())
+
+  if (OPT_OUT_PHASES.has(phase.phase)) {
+    // `closed_at` set and not since reopened is the only "somebody decided"
+    // signal; `opens_at` is deliberately not consulted, because the server
+    // does not consult it either for these two.
+    if (phase.closed_at && !phase.is_open) return { open: false, reason: 'manually-closed' }
+    if (expired) return { open: false, reason: 'window-passed' }
+    return { open: true, reason: null }
+  }
+
+  if (!phase.is_open) return { open: false, reason: 'never-opened' }
+  if (!started) return { open: false, reason: 'not-yet-open' }
+  if (expired) return { open: false, reason: 'window-passed' }
+  return { open: true, reason: null }
 }
 
 /**
- * Why a flagged-open phase is nonetheless closed right now — distinct from
- * `effectivelyOpen`'s plain boolean because "hasn't started yet" and "its
- * deadline passed" are different situations an admin needs to tell apart,
- * not one generic "expired" state.
+ * Where the switch sits — the admin's *intent*, which is not always the
+ * effective state (a passed deadline shuts a phase whose flag is still on).
+ *
+ * For an opt-out phase the intent is "has anybody closed this?", not the raw
+ * flag: an untouched FORM phase is open by intent as much as by behaviour,
+ * and showing that switch off would misreport both.
  */
-function closedReason(phase: Phase, now = Date.now()): 'not-yet-open' | 'window-passed' | null {
-  if (!phase.is_open) return null
-  if (phase.opens_at && now < new Date(phase.opens_at).getTime()) return 'not-yet-open'
-  if (phase.deadline_at && now > new Date(phase.deadline_at).getTime()) return 'window-passed'
-  return null
+function switchIntent(phase: Phase): boolean {
+  if (OPT_OUT_PHASES.has(phase.phase)) return !(phase.closed_at && !phase.is_open)
+  return phase.is_open
 }
 
 function formatMoment(iso: string): string {
@@ -189,8 +232,9 @@ function PhaseCard({
     opensAt !== toLocalInput(phase.opens_at) || deadlineAt !== toLocalInput(phase.deadline_at)
   const edited = dirty && !showingSuggestion
 
-  const open = effectivelyOpen(phase)
-  const reason = closedReason(phase)
+  const { open, reason } = phaseState(phase)
+  const intent = switchIntent(phase)
+  const optOut = OPT_OUT_PHASES.has(phase.phase)
 
   const save = useMutation(async () => {
     // Only the changed keys are sent, so editing the open date cannot clear
@@ -222,8 +266,8 @@ function PhaseCard({
 
   // Turning on flips the flag straight away; turning off still goes through
   // the confirm dialog below — `checked` stays true until that's confirmed,
-  // since it reads `phase.is_open` directly rather than local optimistic
-  // state, so a cancelled confirm leaves the switch exactly where it was.
+  // since it reads server state directly rather than local optimistic state,
+  // so a cancelled confirm leaves the switch exactly where it was.
   function onSwitchChange(next: boolean) {
     if (next) {
       void onToggle(true)
@@ -269,8 +313,20 @@ function PhaseCard({
           <Alert>
             <AlertTriangle className="size-4" />
             <AlertDescription>
-              The flag is on, but the window has passed — this phase is closed to candidates. Extend
-              the deadline to reopen it.
+              The deadline has passed — this phase is closed to candidates. Extend the deadline to
+              reopen it.
+            </AlertDescription>
+          </Alert>
+        )}
+        {/* An opt-out phase ignores `opens_at` on the server, so a future one
+            here would otherwise read as "not started yet" when candidates can
+            already submit. Said plainly rather than left to be discovered. */}
+        {optOut && open && phase.opens_at && Date.now() < new Date(phase.opens_at).getTime() && (
+          <Alert>
+            <AlertTriangle className="size-4" />
+            <AlertDescription>
+              This phase is already accepting submissions. Its opening date is a note for your own
+              planning — only the deadline and closing it by hand actually gate this stage.
             </AlertDescription>
           </Alert>
         )}
@@ -319,16 +375,23 @@ function PhaseCard({
 
           {/* The switch is the admin's *intent*, the badge above is the
               effective state, and the two legitimately differ once a deadline
-              has passed. Labelling this one "Open"/"Closed" too made the same
-              card read "Closed" in the header and "Open" here, which looked
-              like the toggle had failed to take. It says what it controls
-              instead. */}
+              has passed — hence two different words rather than "Open"/
+              "Closed" in both places, which read as a toggle that had failed
+              to take.
+
+              The wording splits by gate, because the same switch position
+              means different things either side of it. Off on an opt-in phase
+              is "nobody opened it", which is why it is shut; off on an opt-out
+              phase is "somebody shut it", since not shutting it would have
+              left it running. Saying "Manually closed" for both was the bug:
+              it claimed an admin had closed a FORM phase nobody had touched,
+              while candidates were submitting through it. */}
           <div className="flex items-center gap-2">
             <Switch
-              checked={phase.is_open}
+              checked={intent}
               onCheckedChange={onSwitchChange}
               disabled={toggle.pending}
-              aria-label={phase.is_open ? 'Close phase' : 'Open phase'}
+              aria-label={intent ? 'Close phase' : 'Open phase'}
             />
             {/* The label carries the in-flight state itself. `reserve` holds
                 the width of every string this can show — both resting labels
@@ -337,9 +400,17 @@ function PhaseCard({
             <span className="text-sm text-muted-foreground">
               <PendingLabel
                 isPending={toggle.pending}
-                idle={phase.is_open ? 'Manually opened' : 'Manually closed'}
-                pending={phase.is_open ? 'Closing…' : 'Opening…'}
-                reserve={['Manually opened', 'Manually closed']}
+                idle={
+                  optOut
+                    ? intent
+                      ? 'Open to candidates'
+                      : 'Closed by an admin'
+                    : intent
+                      ? 'Opened'
+                      : 'Not opened'
+                }
+                pending={intent ? 'Closing…' : 'Opening…'}
+                reserve={['Open to candidates', 'Closed by an admin', 'Opened', 'Not opened']}
               />
             </span>
           </div>

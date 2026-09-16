@@ -60,6 +60,19 @@ class Settings(BaseSettings):
     # Seconds a download link stays valid. Short by intent: these are CNICs.
     DOCUMENT_SIGNED_URL_TTL: int = 120
 
+    # --- Bulk document export (HOD hand-off) ---
+    # A separate, much longer life than the single-document link above, and
+    # deliberately its own setting rather than a reuse of it: that one covers
+    # an admin clicking a file they are already looking at, where 2 minutes is
+    # generous. This one covers an HOD opening a mailbox some time later and
+    # then pulling several hundred MB over whatever connection they have —
+    # 2 minutes would expire mid-download, if not before they clicked.
+    EXPORT_SIGNED_URL_TTL: int = 86_400  # 24 hours
+    # Its own bucket, not a prefix inside the documents one: exports are
+    # derived, disposable copies with a different retention story, and a
+    # cleanup job pointed at this must never be able to reach the originals.
+    EXPORTS_BUCKET: str = "document-exports"
+
     # --- InterviewerAI (Phase 2 AI screening invites) ---
     # A third-party service, not ours: it conducts the self-service AI
     # interview itself once a candidate is invited. Empty by default so the

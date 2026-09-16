@@ -24,10 +24,10 @@ import { TOTAL_STEPS } from '@/lib/stages'
 const STORIES = TESTIMONIALS.slice(0, 3)
 
 export function EmptyDashboard({
-  firstName,
+  displayName,
   openBootcamps,
 }: {
-  firstName: string
+  displayName: string
   openBootcamps: readonly OpenBootcamp[]
 }) {
   const hasOpen = openBootcamps.length > 0
@@ -53,7 +53,7 @@ export function EmptyDashboard({
               </Badge>
 
               <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                Welcome, {firstName}.
+                Welcome, {displayName}.
               </h2>
 
               <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">

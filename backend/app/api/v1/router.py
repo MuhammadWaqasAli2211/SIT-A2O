@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import (
     agilytics,
+    document_export,
+    id_cards,
     ai_interviews,
     applications,
     audit,
@@ -40,3 +42,5 @@ api_router.include_router(permissions.router)
 api_router.include_router(physical_interviews.router)
 api_router.include_router(hr_assessment.router)
 api_router.include_router(agilytics.router)
+api_router.include_router(document_export.router)
+api_router.include_router(id_cards.router)

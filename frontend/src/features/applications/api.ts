@@ -89,7 +89,8 @@ export interface RegistrationPayload {
   is_university_student: boolean
   university_semester?: string | null
   university_name?: string | null
-  university_timing?: string | null
+  university_timing_from?: string | null
+  university_timing_to?: string | null
   terms_version: string
 }
 

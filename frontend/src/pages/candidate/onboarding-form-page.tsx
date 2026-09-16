@@ -27,6 +27,12 @@ import {
 import { HalfNamaForm, type HalfNamaDraft } from '@/features/onboarding/half-nama-form'
 import { OnboardingStepIndicator } from '@/features/onboarding/step-indicator'
 import { candidateApi } from '@/features/candidate/api'
+import {
+  backgroundVerificationDefaults,
+  bankPaymentDefaults,
+  employmentApplicationDefaults,
+  halfNamaDefaults,
+} from '@/features/onboarding/prefill'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
 import { isAdult } from '@/lib/age'
@@ -37,6 +43,7 @@ import {
   ONBOARDING_FORM_SLUG,
   OnboardingFormType,
 } from '@/lib/types'
+import type { OnboardingPrefill } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export default function OnboardingFormPage() {
@@ -81,6 +88,9 @@ function FormBody({
 }) {
   const navigate = useNavigate()
   const rows = useAsync(() => candidateApi.onboardingForms(applicationId), [applicationId])
+  // Separate from the form itself: a failure here costs the candidate some
+  // typing, not the form, so it must not block rendering.
+  const prefill = useAsync(() => candidateApi.onboardingPrefill(applicationId), [applicationId])
   const submit = useMutation((data: unknown) =>
     candidateApi.submitOnboardingForm(applicationId, formType, data),
   )
@@ -115,7 +125,15 @@ function FormBody({
         }
 
         const readOnly = row.submission?.status === 'SUBMITTED'
-        const initialData = row.submission?.submitted_data
+        // Defaults underneath, anything already submitted on top. A locally
+        // saved draft is restored after mount and outranks both, so nothing
+        // the candidate typed is replaced by a default.
+        const defaults =
+          readOnly || !prefill.data ? undefined : defaultsFor(formType, prefill.data)
+        const initialData = {
+          ...(defaults ?? {}),
+          ...(row.submission?.submitted_data ?? {}),
+        }
         const reopened = row.submission?.status === 'REOPENED'
 
         const handleSubmit = async (draft: unknown) => {
@@ -243,5 +261,24 @@ function RenderForm({
           onSubmit={onSubmit}
         />
       )
+  }
+}
+
+/** Which prefill mapping belongs to which form. */
+function defaultsFor(
+  formType: OnboardingFormType,
+  prefill: OnboardingPrefill,
+): Record<string, unknown> {
+  switch (formType) {
+    case OnboardingFormType.BACKGROUND_VERIFICATION:
+      return backgroundVerificationDefaults(prefill)
+    case OnboardingFormType.EMPLOYMENT_APPLICATION:
+      return employmentApplicationDefaults(prefill)
+    case OnboardingFormType.HALF_NAMA:
+      return halfNamaDefaults(prefill)
+    case OnboardingFormType.BANK_PAYMENT_DETAILS:
+      return bankPaymentDefaults(prefill)
+    default:
+      return {}
   }
 }

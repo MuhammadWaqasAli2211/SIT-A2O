@@ -74,6 +74,20 @@ class Bootcamp(Base, TimestampMixin):
     # against creating a second workspace for the same intake.
     agilytics_workspace_id: Mapped[str | None] = mapped_column(Text)
 
+    # ID cards for this intake: null means off. Purely a visibility switch -
+    # unlike the AI interview announcement it mirrors, turning it off is a
+    # real undo, because nothing irreversible happens when it goes on.
+    id_cards_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    id_cards_issued_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("profiles.id")
+    )
+
+    # Printed on the back of every card generated while the switch is on.
+    # Set with the switch and cleared with it, so turning cards off and on
+    # again asks for the period afresh rather than reusing last term's.
+    id_cards_valid_from: Mapped[date | None] = mapped_column(Date)
+    id_cards_valid_to: Mapped[date | None] = mapped_column(Date)
+
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )

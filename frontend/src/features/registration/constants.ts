@@ -88,15 +88,13 @@ export const SEMESTERS = [
   '1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', 'Other',
 ] as const
 
-/**
- * A fixed set rather than free text.
- *
- * The reason this is asked at all is to avoid timetabling a bootcamp session
- * against a candidate's classes, which is a question about which half of the
- * day is taken. Free text ("9-2", "9 AM - 2 PM", "morning shift") answers the
- * same question in a dozen unqueryable spellings.
+/*
+ * Class timing used to be a three-way choice here (Morning/Evening/Weekend).
+ * It is now a real time range on the form — see `university_timing_from` and
+ * `university_timing_to` — because a timetable of 9-2 or 2-7 has no honest
+ * answer among three options. Times stay queryable, which was the original
+ * objection to free text.
  */
-export const UNIVERSITY_TIMINGS = ['Morning', 'Evening', 'Weekend'] as const
 
 /* ------------------------------------------------------------- picture -- */
 

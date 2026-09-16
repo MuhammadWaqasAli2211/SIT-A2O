@@ -19,7 +19,6 @@ import {
   REFERRAL_SOURCES,
   SEMESTERS,
   UNIVERSITY_ANSWERS,
-  UNIVERSITY_TIMINGS,
 } from '@/features/registration/constants'
 import {
   GatedField,
@@ -56,12 +55,14 @@ export function EducationSection() {
     ? {
         university_semester: required,
         university_name: required,
-        university_timing: required,
+        university_timing_from: required,
+        university_timing_to: required,
       }
     : {
         university_semester: optional,
         university_name: optional,
-        university_timing: optional,
+        university_timing_from: optional,
+        university_timing_to: optional,
       }
 
   const open = unlockedCount('education', values, universityGate)
@@ -132,14 +133,25 @@ export function EducationSection() {
               options={SEMESTERS}
               placeholder="Select semester"
             />
-            <SelectField
-              name="university_timing"
-              label="Class timing"
-              locked={open < 7}
-              options={UNIVERSITY_TIMINGS}
-              placeholder="Select timing"
-              hint="Which half of the day your classes run."
-            />
+            {/* A range, because a timetable of 9-2 or 2-7 has no honest
+                answer among "Morning"/"Evening". Two native time inputs,
+                the same control the interview dialogs already use. */}
+            <div className="grid grid-cols-2 gap-3 sm:col-span-2">
+              <TextField
+                name="university_timing_from"
+                label="Classes from"
+                locked={open < 7}
+                type="time"
+                hint="When your classes start."
+              />
+              <TextField
+                name="university_timing_to"
+                label="Classes to"
+                locked={open < 7}
+                type="time"
+                hint="When they finish."
+              />
+            </div>
             <TextField
               name="university_name"
               label="University name"
