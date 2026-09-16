@@ -327,8 +327,16 @@ def stats(workspace_id: str) -> dict:
     spec also says accounts are created auto-verified, which is hard to
     reconcile with a non-zero unverified count, but that is their number to
     explain and not ours to reinterpret.
+
+    Their documented `/stats` path 404s with "Workspace not found." for a
+    workspace `/onboarding-status` confirms exists, on both their preview
+    deployments (checked 2026-09-16) — a bug on their side, not ours. Calling
+    `/onboarding-status` here instead keeps this screen working, at the cost
+    of `activation` always coming back `None` and `tracks` always reporting
+    zero counts, since that shape carries `memberCount` only. Switch this
+    back to `/stats` once Agilytics confirms it is fixed.
     """
-    return _request("GET", f"/api/v1/external/workspaces/{workspace_id}/stats") or {}
+    return _request("GET", f"/api/v1/external/workspaces/{workspace_id}/onboarding-status") or {}
 
 
 def onboarding_status(workspace_id: str, *, email: str | None = None) -> dict:
