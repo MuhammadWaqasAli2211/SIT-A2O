@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Sparkles,
+  Unlink,
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -56,6 +57,7 @@ export function AgilyticsStrip({
   state: ReturnType<typeof useAsync<AgilyticsWorkspaceState | undefined>>
 }) {
   const [confirming, setConfirming] = useState<AgilyticsProvisionResult | null>(null)
+  const [unlinking, setUnlinking] = useState(false)
 
   // The preview is only fetched when the admin asks to provision — there is
   // no reason to compute what would be sent on every page load.
@@ -67,6 +69,13 @@ export function AgilyticsStrip({
     const result = await agilyticsApi.provision(bootcampId)
     toast.success(`Workspace created — ${result.students} student(s) provisioned`)
     setConfirming(null)
+    state.refetch()
+  })
+
+  const unlink = useMutation(async () => {
+    await agilyticsApi.unlink(bootcampId)
+    toast.success('Workspace unlinked — provision a new one when ready')
+    setUnlinking(false)
     state.refetch()
   })
 
@@ -91,12 +100,23 @@ export function AgilyticsStrip({
                   />
                 </Button>
               ) : (
-                /* Provisioned: nothing more to do from here. Making
-                   students members is the Onboard action on the Onboarding
-                   screen, next to the folder cards it changes. */
-                <Badge variant="outline" className="font-normal">
-                  Workspace ready
-                </Badge>
+                /* Provisioned: nothing more to do from here besides unlink.
+                   Making students members is the Onboard action on the
+                   Onboarding screen, next to the folder cards it changes. */
+                <>
+                  <Badge variant="outline" className="font-normal">
+                    Workspace ready
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => setUnlinking(true)}
+                  >
+                    <Unlink className="size-3.5" />
+                    Unlink workspace
+                  </Button>
+                </>
               )}
             </div>
           </CardContent>
@@ -121,6 +141,29 @@ export function AgilyticsStrip({
         error={provision.error}
         onConfirm={() => void provision.run()}
         description={confirming && <ProvisionSummary preview={confirming} />}
+      />
+
+      <ConfirmDialog
+        open={unlinking}
+        onOpenChange={setUnlinking}
+        title={`Unlink ${bootcampName ?? 'this intake'}'s Agilytics workspace?`}
+        confirmLabel="Unlink workspace"
+        destructive
+        pending={unlink.pending}
+        error={unlink.error}
+        onConfirm={() => void unlink.run()}
+        description={
+          <span className="flex flex-col gap-2">
+            <span>
+              Only do this if the workspace was already deleted on Agilytics — this does
+              not delete anything there, it only forgets the link on our side.
+            </span>
+            <span className="text-xs text-muted-foreground">
+              This intake will show as not provisioned again, and can be provisioned into a
+              fresh workspace whenever you are ready.
+            </span>
+          </span>
+        }
       />
     </>
   )
