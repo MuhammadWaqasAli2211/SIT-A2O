@@ -28,8 +28,12 @@ export function PageHeader({
       transition={{ duration: 0.4 }}
       className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
     >
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-lg font-semibold tracking-tight sm:text-xl">{title}</h1>
+      {/* `min-w-0`: a flex item will not shrink below its content's width by
+          default, so a long title — a greeting carrying someone's full name —
+          overflowed the row and was clipped at the viewport edge instead of
+          wrapping. */}
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <h1 className="text-lg font-semibold tracking-tight break-words sm:text-xl">{title}</h1>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       {/* `flex-nowrap`, and the first action allowed to shrink: the bootcamp

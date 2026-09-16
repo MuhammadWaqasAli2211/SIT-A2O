@@ -110,6 +110,7 @@ def list_rows(
                 forms_submitted=progress.forms_submitted,
                 forms_total=progress.forms_total,
                 documents_required=progress.documents_required,
+                documents_slots_filled=progress.documents_slots_filled,
                 documents_uploaded=progress.documents_uploaded,
                 documents_approved=progress.documents_approved,
                 documents_rejected=progress.documents_rejected,

@@ -46,6 +46,7 @@ def row(**overrides) -> HrAssessmentRow:
         forms_submitted=4,
         forms_total=4,
         documents_required=5,
+        documents_slots_filled=5,
         documents_uploaded=5,
         documents_approved=5,
         documents_rejected=0,

@@ -605,7 +605,13 @@ function DocumentsCell({ row }: { row: HrAssessmentRow }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">
       <span className="text-muted-foreground">
-        {row.documents_uploaded}/{row.documents_required} uploaded
+        {typeof row.documents_slots_filled === 'number'
+          ? `${row.documents_slots_filled}/${row.documents_required} documents`
+          : /* An API older than this field would otherwise render "/6". */
+            `${row.documents_required} required`}
+      </span>
+      <span className="text-muted-foreground">
+        &middot; {row.documents_uploaded} file{row.documents_uploaded === 1 ? '' : 's'}
       </span>
       {row.documents_rejected > 0 && (
         <Badge variant="outline" className="border-destructive/40 text-destructive">
