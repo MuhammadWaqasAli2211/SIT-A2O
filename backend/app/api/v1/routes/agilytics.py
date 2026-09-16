@@ -62,6 +62,20 @@ def provision(
     return agilytics_service.provision(db, user, bootcamp_id)
 
 
+@router.delete(
+    "/bootcamps/{bootcamp_id}/agilytics", response_model=AgilyticsWorkspaceState
+)
+def unlink(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> AgilyticsWorkspaceState:
+    """Forget this intake's workspace id, for one deleted directly on Agilytics.
+
+    Never calls Agilytics — see `agilytics_service.unlink` for why an admin's
+    confirmation is the only signal this can act on right now.
+    """
+    return agilytics_service.unlink(db, user, bootcamp_id)
+
+
 @router.get(
     "/bootcamps/{bootcamp_id}/agilytics/stats", response_model=AgilyticsWorkspaceStats
 )
