@@ -37,7 +37,9 @@ export default function CandidateDashboardPage() {
   const { profile } = useAuth()
   const { application, initialLoading, error, openBootcamps, reload } = useApplication()
 
-  const firstName = profile?.full_name?.split(' ')[0] ?? 'there'
+  // The whole name, not the first word of it. A name is how someone is
+  // addressed; truncating it to "Muhammad" greets a different person.
+  const displayName = profile?.full_name?.trim() || 'there'
 
   // Only the first load blanks the page; a refetch leaves it on screen.
   if (initialLoading) return <DashboardSkeleton />
@@ -45,7 +47,7 @@ export default function CandidateDashboardPage() {
   if (error) {
     return (
       <>
-        <PageHeader title={`Welcome, ${firstName}`} />
+        <PageHeader title={`Welcome, ${displayName}`} />
         <Alert variant="destructive">
           <AlertTitle>Could not load your dashboard</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -67,7 +69,7 @@ export default function CandidateDashboardPage() {
           title="Dashboard"
           description="Everything about your bootcamp application lives here."
         />
-        <EmptyDashboard firstName={firstName} openBootcamps={openBootcamps} />
+        <EmptyDashboard displayName={displayName} openBootcamps={openBootcamps} />
       </>
     )
   }
@@ -104,7 +106,7 @@ export default function CandidateDashboardPage() {
                 a script — legible at this size for a name and nothing else, so
                 it never touches a number, a label, or a control. */}
             <span className="font-display text-2xl font-normal text-primary sm:text-3xl">
-              {firstName}
+              {displayName}
             </span>
           </>
         }
