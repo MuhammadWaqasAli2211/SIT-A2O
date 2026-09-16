@@ -85,7 +85,14 @@ export function toErrorCode(error: unknown): string | null {
 export function toErrorMessage(error: unknown, fallback = 'Something went wrong.'): string {
   if (axios.isAxiosError<ApiError>(error)) {
     if (!error.response) return 'Cannot reach the server. Is the API running?'
-    return error.response.data?.message ?? fallback
+    // Our own handled errors carry `message`. Anything FastAPI raises itself
+    // — an unknown route, a validation failure — carries `detail` instead,
+    // and dropping it turned a plain "Not Found" into a blank "Something
+    // went wrong" that gave no way to tell a bug from a stale server.
+    const data = error.response.data as { message?: string; detail?: unknown } | undefined
+    if (data?.message) return data.message
+    if (typeof data?.detail === 'string') return `${data.detail} (${error.response.status})`
+    return `${fallback} (${error.response.status})`
   }
   return fallback
 }
