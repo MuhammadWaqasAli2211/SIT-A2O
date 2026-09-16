@@ -20,6 +20,7 @@ import type {
   OnboardingFormRow,
   OnboardingFormSubmission,
   OnboardingFormType,
+  OnboardingPrefill,
   OnboardingProgress,
   Program,
   PublicBootcamp,
@@ -99,6 +100,11 @@ export const candidateApi = {
 
   onboardingProgress: (applicationId: string) =>
     get<OnboardingProgress>(`/applications/${applicationId}/onboarding/progress`),
+
+  /** Values already on file, used as defaults on the onboarding forms so a
+   *  candidate is not asked their own father's name a fourth time. */
+  onboardingPrefill: (applicationId: string) =>
+    get<OnboardingPrefill>(`/applications/${applicationId}/onboarding/prefill`),
 
   async submitOnboardingForm(applicationId: string, formType: OnboardingFormType, submitted_data: unknown) {
     const { data } = await api.post<OnboardingFormSubmission>(

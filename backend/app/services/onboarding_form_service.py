@@ -6,6 +6,7 @@ manage — resolved from the submission's application, never inferred from the
 request.
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -22,9 +23,14 @@ from app.models.enums import (
     PhaseType,
 )
 from app.models.onboarding import OnboardingFormSubmission
-from app.models.user import Profile
+from app.models.bootcamp import Program
+from app.models.user import CandidateProfile, Profile
+from app.integrations import supabase_storage
 from app.schemas.onboarding import OnboardingFormRow, OnboardingProgress
+from app.schemas.onboarding_prefill import OnboardingPrefill
 from app.services import application_service, audit_service, bootcamp_service
+
+logger = logging.getLogger(__name__)
 
 # The fixed sequence. A candidate must complete each before the next unlocks.
 FORM_ORDER: tuple[OnboardingFormType, ...] = (
@@ -246,3 +252,41 @@ def reopen(
     )
     db.flush()
     return submission
+
+
+def prefill(db: Session, application: Application) -> OnboardingPrefill:
+    """Everything already on file that an onboarding form would otherwise ask
+    the candidate to retype.
+
+    Read-only and defaults-only: this never writes, and every value it returns
+    is editable on the form. The point is to stop asking someone their own
+    father's name for the fourth time, not to lock the answer.
+    """
+    profile = db.get(Profile, application.profile_id)
+    candidate = db.get(CandidateProfile, application.profile_id)
+    program = db.get(Program, application.program_id) if application.program_id else None
+
+    picture_url = None
+    if candidate and candidate.picture_path:
+        try:
+            picture_url = supabase_storage.picture_signed_url(candidate.picture_path)
+        except Exception:
+            # A form that opens without the photo is still worth having.
+            logger.warning("Could not sign the picture for prefill", exc_info=True)
+
+    return OnboardingPrefill(
+        full_name=(candidate.full_name if candidate else None)
+        or (profile.full_name if profile else None),
+        father_name=candidate.father_name if candidate else None,
+        father_cnic=candidate.father_cnic if candidate else None,
+        cnic=candidate.cnic if candidate else None,
+        date_of_birth=candidate.date_of_birth if candidate else None,
+        gender=candidate.gender if candidate else None,
+        phone=(candidate.phone if candidate else None) or (profile.phone if profile else None),
+        father_phone=candidate.father_phone if candidate else None,
+        address=candidate.address if candidate else None,
+        email=profile.email if profile else None,
+        candidate_code=application.candidate_code,
+        program_title=program.title if program else None,
+        picture_url=picture_url,
+    )
