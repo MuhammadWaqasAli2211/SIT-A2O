@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     # configuration precisely so pointing at the eventual production host is
     # an env change rather than a code change.
     AGILYTICS_API_BASE_URL: str = "https://agilytics-preview.vercel.app"
+    # AGILYTICS_API_BASE_URL: str = "https://agilytics-preview-git-hasn-4828d1-fareedanwer381-2351s-projects.vercel.app/"
 
     # Where we send *students*, as distinct from where we send API calls. The
     # two are the same host today, but they are separate settings because
