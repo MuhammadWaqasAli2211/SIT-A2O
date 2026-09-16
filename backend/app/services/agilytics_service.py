@@ -245,6 +245,42 @@ def provision(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsP
     )
 
 
+def unlink(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsWorkspaceState:
+    """Forget this intake's workspace id without touching Agilytics.
+
+    For when a workspace was deleted on Agilytics' side directly — something
+    we cannot detect automatically. Their `onboarding-status` endpoint keeps
+    answering for a workspace after it is gone on their dashboard (confirmed
+    2026-09-16), and their `stats`/`onboard` endpoints 404 on workspaces that
+    are demonstrably still live, so neither can be trusted to tell us a
+    workspace was really deleted. An admin who has checked their dashboard
+    is the only reliable signal available right now.
+
+    This never calls Agilytics — there is nothing to delete over there from
+    here, and nothing sent. It only clears our pointer so the intake reads as
+    unprovisioned again and can be provisioned fresh.
+    """
+    bootcamp = _bootcamp(db, actor, bootcamp_id)
+    if not bootcamp.agilytics_workspace_id:
+        raise ConflictError(f"{bootcamp.name} is not provisioned in Agilytics.")
+
+    previous_workspace_id = bootcamp.agilytics_workspace_id
+    bootcamp.agilytics_workspace_id = None
+
+    audit_service.record(
+        db,
+        actor=actor,
+        action="agilytics.unlink",
+        entity_type="bootcamp",
+        entity_id=bootcamp.id,
+        summary=f"Unlinked {bootcamp.name} from its Agilytics workspace",
+        metadata={"workspace_id": previous_workspace_id},
+    )
+    db.commit()
+
+    return AgilyticsWorkspaceState(provisioned=False)
+
+
 def workspace_state(
     db: Session, actor: Profile, bootcamp_id: uuid.UUID
 ) -> AgilyticsWorkspaceState:
@@ -450,16 +486,61 @@ def _to_row(record) -> AgilyticsCandidateRow:
     )
 
 
+def _revert_removed_members(
+    db: Session, workspace_id: str, marked_onboarded: list[AgilyticsCandidateRow]
+) -> set[uuid.UUID]:
+    """Clear the local onboarded flag for anyone Agilytics no longer counts as
+    a member, so someone removed there becomes onboardable again here.
+
+    One live lookup per candidate — the same per-email call the HR screen's
+    "Check" button makes, just run up front for this list instead of on
+    click, since the onboard modal only ever lists one intake's handful of
+    already-onboarded candidates rather than a whole table.
+    """
+    reverted: set[uuid.UUID] = set()
+    for row in marked_onboarded:
+        try:
+            agilytics.onboarding_status(workspace_id, email=row.email)
+        except NotFoundError:
+            application = db.get(Application, row.application_id)
+            if application is not None:
+                application.agilytics_onboarded_at = None
+                reverted.add(row.application_id)
+    if reverted:
+        db.commit()
+    return reverted
+
+
 def eligible(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsEligibleList:
     """Who the onboard modal should offer, split by whether they are already in.
 
     Not-yet-onboarded is `agilytics_onboarded_at IS NULL` — the same
     timestamp-not-flag shape the interview and physical-interview invites use,
-    so re-running the flow cannot pick the same candidate up twice.
+    so re-running the flow cannot pick the same candidate up twice. But that
+    flag only records what we did, not what is still true on their side, so a
+    candidate marked onboarded is re-checked live against Agilytics here: if
+    they are no longer a member (removed on their end), the flag is cleared
+    and they move back into `new` rather than staying stuck as done.
     """
     bootcamp = _bootcamp(db, actor, bootcamp_id)
     rows = [_to_row(r) for r in _eligible_rows(db, bootcamp_id)]
     new = [r for r in rows if r.onboarded_at is None]
+    marked_onboarded = [r for r in rows if r.onboarded_at is not None]
+
+    still_onboarded = marked_onboarded
+    if bootcamp.agilytics_workspace_id and marked_onboarded:
+        reverted_ids = _revert_removed_members(
+            db, bootcamp.agilytics_workspace_id, marked_onboarded
+        )
+        if reverted_ids:
+            still_onboarded = [
+                r for r in marked_onboarded if r.application_id not in reverted_ids
+            ]
+            new = new + [
+                r.model_copy(update={"onboarded_at": None})
+                for r in marked_onboarded
+                if r.application_id in reverted_ids
+            ]
 
     # Only the programs actually about to be sent: a missing mapping on a
     # program nobody in this intake is studying is not this screen's problem.
@@ -469,7 +550,7 @@ def eligible(db: Session, actor: Profile, bootcamp_id: uuid.UUID) -> AgilyticsEl
         provisioned=bootcamp.agilytics_workspace_id is not None,
         workspace_id=bootcamp.agilytics_workspace_id,
         new=new,
-        already_onboarded=[r for r in rows if r.onboarded_at is not None],
+        already_onboarded=still_onboarded,
         unmapped_programs=unmapped,
     )
 
