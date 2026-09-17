@@ -60,7 +60,7 @@ export default function AdminOnboardedStatsPage() {
         {(selectedId) => (
           <Tabs defaultValue="onboarding">
             <TabsList>
-              <TabsTrigger value="onboarding">Onboarding stats</TabsTrigger>
+              {/* <TabsTrigger value="onboarding">Onboarding stats</TabsTrigger> */}
               <TabsTrigger value="agilytics">Agilytics joins</TabsTrigger>
             </TabsList>
 
