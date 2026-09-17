@@ -604,17 +604,27 @@ def onboard(
     if not chosen:
         raise ConflictError("Those candidates have all been onboarded already.")
 
-    by_email = {r[3].lower(): r for r in chosen if r[3]}
-    payload: list[dict[str, str]] = []
-    for _id, _code, _onboarded, email, _name, _title, track_name in chosen:
-        student: dict[str, str] = {"email": email}
-        # Omitted rather than sent empty when a program has no mapping: their
-        # validator reads an absent trackName as "no track", whereas an empty
-        # string is a name that matches nothing. Same outcome, but one of them
-        # is us saying what we mean.
-        if track_name:
-            student["trackName"] = track_name
-        payload.append(student)
+    # Their `/onboard` endpoint documents trackName as optional but actually
+    # rejects an entry outright with "trackName is required" if it is absent
+    # — and rejects it as one request, so a single unmapped candidate in a
+    # batch used to fail everyone alongside them. Filtering here means a
+    # candidate with no program mapping is reported back as skipped rather
+    # than taking the rest of the batch down with them.
+    trackable = [r for r in chosen if r[6]]
+    no_track = [r for r in chosen if not r[6]]
+
+    if not trackable:
+        raise ConflictError(
+            "None of the selected candidates have a program mapped to an Agilytics "
+            "track, and their API requires one to onboard anyone. Set the mapping "
+            "on the Programs screen first."
+        )
+
+    by_email = {r[3].lower(): r for r in trackable if r[3]}
+    payload: list[dict[str, str]] = [
+        {"email": email, "trackName": track_name}
+        for _id, _code, _onboarded, email, _name, _title, track_name in trackable
+    ]
 
     data = agilytics.onboard(workspace_id, payload)
 
@@ -677,6 +687,7 @@ def onboard(
             "onboarded": onboarded,
             "already_member": already_member,
             "not_found": not_found,
+            "no_track": [r[1] for r in no_track],
             "other_skips": other,
             "ungrouped": ungrouped,
             "track_distribution": distribution,
@@ -695,6 +706,7 @@ def onboard(
         onboarded=onboarded,
         skipped_already_member=already_member,
         skipped_not_found=not_found,
+        skipped_no_track=[r[1] for r in no_track],
         skipped_other=other,
         ungrouped=ungrouped,
         track_distribution=distribution,
