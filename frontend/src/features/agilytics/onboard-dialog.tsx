@@ -111,6 +111,12 @@ function Body({
       out.skipped_not_found.length > 0
         ? `${out.skipped_not_found.length} have no Agilytics account yet`
         : null,
+      // Their API requires a track name per student despite documenting it as
+      // optional, so anyone whose program has no mapping is held back before
+      // the call rather than sent and failed alongside everyone else.
+      out.skipped_no_track.length > 0
+        ? `${out.skipped_no_track.length} need a track mapping first`
+        : null,
       out.ungrouped > 0 ? `${out.ungrouped} placed in no track` : null,
       out.email_failed > 0 ? `${out.email_failed} email(s) failed` : null,
     ].filter(Boolean)
