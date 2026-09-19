@@ -36,11 +36,26 @@ export function PageHeader({
         <h1 className="text-lg font-semibold tracking-tight break-words sm:text-xl">{title}</h1>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
-      {/* `flex-nowrap`, and the first action allowed to shrink: the bootcamp
-          switcher is `w-full` below `sm`, which under `flex-wrap` claimed the
-          whole row and bumped the refresh button onto a line of its own. */}
+      {/* `flex-wrap`, with the first action allowed to shrink instead of
+          claiming the row: the bootcamp switcher is `w-full` below `sm`,
+          which under plain `flex-wrap` bumped every other action onto its
+          own line even when only one small button followed it. Overriding
+          the switcher to `min-w-0 flex-1` fixes that case — it now shares
+          the first line with as much as fits — while `flex-wrap` itself
+          stays on so a header with three or four actions (more than one
+          switcher-sized shrink can make room for) wraps onto a second line
+          instead of overflowing the page.
+
+          Not `shrink-0` any more: that pinned this whole block to its
+          unwrapped, one-line preferred width at `sm` and up, which gave
+          `flex-wrap` nothing to wrap against (the box was already exactly
+          as wide as its widest possible line) and squeezed the title down
+          to its own `min-w-0`, wrapping a short heading letter by letter.
+          Letting this shrink like a normal flex item means a wide action
+          group gives ground first, wrapping its own buttons onto a second
+          line, before the title loses any room. */}
       {actions && (
-        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1 sm:[&>*:first-child]:flex-none">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1 sm:[&>*:first-child]:flex-none">
           {actions}
         </div>
       )}
@@ -257,8 +272,13 @@ export function Timeline({
         className="absolute top-2 bottom-2 left-[0.9375rem] w-px bg-border"
       />
       {items.map((item, index) => (
+        // Keyed by position, not `item.label`: this is a chronological
+        // history, not a filterable/reorderable list, and a candidate who
+        // was reinstated revisits the same stage label twice — React saw
+        // two "Physical interview" children with the same key and warned
+        // that one could be silently dropped.
         <motion.li
-          key={item.label}
+          key={index}
           initial={{ opacity: 0, x: -12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, delay: index * 0.09 }}
