@@ -107,6 +107,46 @@ class PhysicalInterviewFunnel(BaseModel):
         return self.selected + self.rejected
 
 
+class PhysicalInterviewAnnounceRow(BaseModel):
+    """One decided candidate, in either the pending or announced list."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    invite_id: uuid.UUID
+    application_id: uuid.UUID
+    candidate_code: str
+    full_name: str | None = None
+    result: PhysicalInterviewResult
+    decided_at: datetime
+    announced_at: datetime | None = None
+
+
+class PhysicalInterviewAnnounceLists(BaseModel):
+    """The two tabs: decided-but-not-yet-emailed, and already emailed."""
+
+    pending: list[PhysicalInterviewAnnounceRow] = Field(default_factory=list)
+    announced: list[PhysicalInterviewAnnounceRow] = Field(default_factory=list)
+
+
+class PhysicalInterviewAnnounceSummary(BaseModel):
+    """The counts an admin confirms against before announcing."""
+
+    pending_selected: int = 0
+    pending_rejected: int = 0
+
+    @property
+    def total_pending(self) -> int:
+        return self.pending_selected + self.pending_rejected
+
+
+class PhysicalInterviewAnnounceResult(BaseModel):
+    """What actually happened when the bulk announce fired."""
+
+    emailed: int
+    selected: int
+    rejected: int
+
+
 class CandidatePhysicalInterviewStatus(BaseModel):
     """What a candidate is allowed to know about their Physical Interview —
     the same security-boundary reasoning as ai_interview.CandidateScore:

@@ -334,7 +334,7 @@ def send_registration_confirmation(
     subject = f"Your bootcamp application: {candidate_code}"
 
     text_body = (
-        f"Hi {name},\n\n"
+        f"Dear {name},\n\n"
         f"Your application to {bootcamp_name} has been received.\n\n"
         f"YOUR CANDIDATE CODE: {candidate_code}\n\n"
         "Keep this code. It identifies you at every stage from here on: the "
@@ -562,7 +562,7 @@ def send_physical_interview_selected(
         f"{folder_url}\n\n"
         f"Quote your candidate code, {candidate_code}, in any email you send "
         "us.\n\n"
-        "Please complete this promptly — your place is confirmed only once "
+        "Please complete this promptly, your place is confirmed only once "
         "your paperwork has been submitted and approved.\n\n"
         "Saylani Mass IT Training"
     )
@@ -603,7 +603,7 @@ def send_physical_interview_selected(
 
   <p style="margin:18px 0 0;padding:12px 16px;background:#f9fafb;
             border-radius:6px;font-size:14px;color:#374151">
-    Please complete this promptly — your place is confirmed only once your
+    Please complete this promptly, as your place is confirmed only once your
     paperwork has been submitted and approved.
   </p>""")
 
@@ -637,7 +637,7 @@ def send_physical_interview_rejected(
         f"Thank you for attending the Physical Interview for {bootcamp_name}.\n\n"
         "After careful consideration, your application has not been taken "
         "forward on this occasion. We know this is disappointing, and we do "
-        "not say it lightly — places in each intake are limited, and many "
+        "not say it lightly places in each intake are limited, and many "
         "capable candidates are not able to be accommodated.\n\n"
         "You are welcome to apply again when the next intake opens. Nothing "
         "about this decision counts against a future application.\n\n"
@@ -719,7 +719,7 @@ def send_agilytics_onboarded(
 
     The whole job of this email is the first login. They have been added to a
     system they have never heard of, with an account they never created and
-    no password — so the instructions are numbered, the address they must use
+    no password, so the instructions are numbered, the address they must use
     is stated explicitly (it is the one thing they can get wrong), and the
     password step comes first because nothing else works before it.
     """
@@ -732,7 +732,7 @@ def send_agilytics_onboarded(
     text_body = (
         f"Hi {name},\n\n"
         f"You have been onboarded to Agilytics, the platform where the rest of "
-        f"your {bootcamp_name} journey takes place — your track, your progress "
+        f"your {bootcamp_name} journey takes place your track, your progress "
         "and your coursework all live there from here on.\n\n"
         "An account has already been created for you using this email address:\n"
         f"    {to}\n\n"
@@ -742,7 +742,7 @@ def send_agilytics_onboarded(
         "   Enter the email address above and follow the link they send you.\n"
         "2. Sign in with that email address and your new password:\n"
         f"   {login_url}\n\n"
-        "Use the same email address at both steps — your account is tied to "
+        "Use the same email address at both steps, as your account is tied to "
         "it, and a different address will not find it.\n\n"
         f"Your candidate code is {candidate_code}. Quote it in any email you "
         "send us.\n\n"

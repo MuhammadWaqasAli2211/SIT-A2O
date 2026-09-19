@@ -241,12 +241,12 @@ def record_result(
     )
     db.flush()
 
-    # Last, and never able to fail the call. `advance_stage` has already
-    # written the stage move, the transition row and the in-app notification;
-    # an unreachable mail server must not undo a decision an admin has made in
-    # person. Both senders swallow and log their own failures.
-    _email_outcome(db, application, payload.result)
-
+    # No email here. That used to fire the moment a result was saved; it now
+    # waits for an explicit bulk announce — see announce_results — so a
+    # rejection recorded on Tuesday and one recorded on Thursday reach
+    # candidates together rather than as they trickle out of interviews all
+    # week. The stage move above is unaffected: onboarding unlocks the
+    # instant this is saved, same as always.
     return invite
 
 
@@ -255,11 +255,11 @@ def _email_outcome(
 ) -> None:
     """The candidate-facing half of a recorded result.
 
-    Until this existed the only thing a decision produced for the candidate
-    was the in-app notification `advance_stage` writes — which they saw only
-    if they happened to open the portal. The selected email is the one that
-    actually starts onboarding, since it is what tells them the folder is
-    waiting.
+    Called from `announce_results`, in bulk, not from `record_result` at the
+    moment a decision is saved — see the module's own history for why that
+    changed. The in-app notification `advance_stage` writes still lands
+    immediately either way; this is only the email, and only once an admin
+    has explicitly announced.
 
     The rejection note is deliberately not passed: it is the admin's internal
     record, and `record_result` keeps it on the invite row alone.
@@ -282,6 +282,122 @@ def _email_outcome(
         candidate_code=application.candidate_code,
         bootcamp_name=bootcamp_name,
     )
+
+
+# ---------------------------------------------------- bulk announce --
+
+_DECIDED_QUERY_BASE = (
+    select(PhysicalInterviewInvite, Application, Profile)
+    .join(PhysicalInterviewBatch, PhysicalInterviewBatch.id == PhysicalInterviewInvite.batch_id)
+    .join(Application, Application.id == PhysicalInterviewInvite.application_id)
+    .join(Profile, Profile.id == Application.profile_id)
+    .where(PhysicalInterviewInvite.result.is_not(None))
+)
+
+
+def _to_announce_row(invite: PhysicalInterviewInvite, application: Application, profile: Profile):
+    from app.schemas.physical_interview import PhysicalInterviewAnnounceRow
+
+    return PhysicalInterviewAnnounceRow(
+        invite_id=invite.id,
+        application_id=application.id,
+        candidate_code=application.candidate_code,
+        full_name=profile.full_name,
+        result=invite.result,
+        decided_at=invite.decided_at,
+        announced_at=invite.announced_at,
+    )
+
+
+def announce_lists(db: Session, bootcamp_id: uuid.UUID, actor: Profile):
+    """The two tabs an admin sees: decided but not yet emailed, and already
+    emailed — split from one query so the two lists can never disagree
+    about which candidates exist between them."""
+    from app.schemas.physical_interview import PhysicalInterviewAnnounceLists
+
+    bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+    rows = db.execute(
+        _DECIDED_QUERY_BASE.where(PhysicalInterviewBatch.bootcamp_id == bootcamp_id).order_by(
+            PhysicalInterviewInvite.decided_at.desc()
+        )
+    ).all()
+
+    pending = [_to_announce_row(i, a, p) for i, a, p in rows if i.announced_at is None]
+    announced = [_to_announce_row(i, a, p) for i, a, p in rows if i.announced_at is not None]
+    return PhysicalInterviewAnnounceLists(pending=pending, announced=announced)
+
+
+def announce_summary(db: Session, bootcamp_id: uuid.UUID, actor: Profile):
+    """The counts the confirm dialog shows before an admin commits — the
+    same "know what you're about to do" shape as the AI interview's own
+    announce summary."""
+    from app.schemas.physical_interview import PhysicalInterviewAnnounceSummary
+
+    bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+    row = db.execute(
+        select(
+            func.count().filter(PhysicalInterviewInvite.result == PhysicalInterviewResult.SELECTED).label(
+                "selected"
+            ),
+            func.count().filter(PhysicalInterviewInvite.result == PhysicalInterviewResult.REJECTED).label(
+                "rejected"
+            ),
+        )
+        .select_from(PhysicalInterviewInvite)
+        .join(PhysicalInterviewBatch, PhysicalInterviewBatch.id == PhysicalInterviewInvite.batch_id)
+        .where(
+            PhysicalInterviewBatch.bootcamp_id == bootcamp_id,
+            PhysicalInterviewInvite.result.is_not(None),
+            PhysicalInterviewInvite.announced_at.is_(None),
+        )
+    ).one()
+    return PhysicalInterviewAnnounceSummary(pending_selected=row.selected, pending_rejected=row.rejected)
+
+
+def announce_results(db: Session, bootcamp_id: uuid.UUID, actor: Profile):
+    """Email every candidate currently pending announcement, Selected and
+    Rejected alike, in one action — and only then mark them announced.
+
+    Unlike record_result, nothing here can be undone by a later action: once
+    an email is sent, `announced_at` is stamped whether or not the send
+    itself succeeded, mirroring `_email_outcome`'s own rule that a decision
+    already made must never be reported back as a failure because a mail
+    server was unreachable. A failed send is logged there; it does not
+    re-enter the pending list to be tried again automatically, the same way
+    a hidden AI-interview announcement cannot be silently retried either —
+    both wait for a human to notice and act.
+    """
+    from app.schemas.physical_interview import PhysicalInterviewAnnounceResult
+
+    bootcamp_service.assert_can_manage(db, actor, bootcamp_id)
+    rows = db.execute(
+        _DECIDED_QUERY_BASE.where(
+            PhysicalInterviewBatch.bootcamp_id == bootcamp_id,
+            PhysicalInterviewInvite.announced_at.is_(None),
+        )
+    ).all()
+
+    now = datetime.now(UTC)
+    selected = rejected = 0
+    for invite, application, _profile in rows:
+        _email_outcome(db, application, invite.result)
+        invite.announced_at = now
+        if invite.result == PhysicalInterviewResult.SELECTED:
+            selected += 1
+        else:
+            rejected += 1
+
+    if rows:
+        audit_service.record(
+            db,
+            actor=actor,
+            action="physical_interview.announce",
+            entity_type="bootcamp",
+            entity_id=bootcamp_id,
+            summary=f"Announced {len(rows)} Physical Interview result(s): {selected} selected, {rejected} rejected",
+        )
+    db.flush()
+    return PhysicalInterviewAnnounceResult(emailed=len(rows), selected=selected, rejected=rejected)
 
 
 _INVITE_ROW_LOAD = selectinload(PhysicalInterviewBatch.invites).options(

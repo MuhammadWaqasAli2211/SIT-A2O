@@ -99,6 +99,10 @@ class PhysicalInterviewInvite(Base):
         UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="SET NULL")
     )
 
+    # Null until the bulk announce action emails this candidate. The stage
+    # move happens at decision time regardless — this only gates the email.
+    announced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

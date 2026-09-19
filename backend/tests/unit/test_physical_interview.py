@@ -328,3 +328,43 @@ def test_a_selection_needs_no_reason(monkeypatch):
             RecordResultRequest(result=PhysicalInterviewResult.SELECTED, rejection_note=None),
             Profile(id=uuid.uuid4(), email="admin@example.com"),
         )
+
+
+# --------------------------------------------------------- bulk announce --
+# record_result used to email the candidate the moment a decision was saved.
+# It now only advances the stage — the email waits for an explicit bulk
+# announce (see announce_results) — so this pins the negative: no email
+# function is even reached by a call that fully succeeds.
+
+
+def test_recording_a_result_advances_the_stage_but_sends_no_email(monkeypatch):
+    monkeypatch.setattr(svc.bootcamp_service, "assert_can_manage", lambda *a, **k: None)
+
+    application = Application(
+        id=uuid.uuid4(), candidate_code="B08-050", bootcamp_id=uuid.uuid4(), profile_id=uuid.uuid4()
+    )
+    advanced = {}
+    monkeypatch.setattr(svc.application_service, "get_detail", lambda db, aid: application)
+    monkeypatch.setattr(
+        svc.application_service,
+        "advance_stage",
+        lambda db, aid, *, to_stage, actor, reason: advanced.update(to_stage=to_stage),
+    )
+    monkeypatch.setattr(svc.audit_service, "record", lambda *a, **k: None)
+
+    def _fail_if_emailed(*a, **k):
+        pytest.fail("record_result must not email — that is announce_results' job now")
+
+    monkeypatch.setattr(svc, "_email_outcome", _fail_if_emailed)
+
+    invite = _pending_invite()
+    result = svc.record_result(
+        _RecordDb(invite),
+        invite.id,
+        RecordResultRequest(result=PhysicalInterviewResult.SELECTED, rejection_note=None),
+        _actor(),
+    )
+
+    assert result.result == PhysicalInterviewResult.SELECTED
+    assert result.announced_at is None
+    assert advanced["to_stage"].value == "FORM"

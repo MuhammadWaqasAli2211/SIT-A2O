@@ -9,6 +9,9 @@ from app.api.deps import AdminUser, CandidateUser, DbSession
 from app.models.physical_interview import PhysicalInterviewBatch, PhysicalInterviewInvite
 from app.schemas.physical_interview import (
     CandidatePhysicalInterviewStatus,
+    PhysicalInterviewAnnounceLists,
+    PhysicalInterviewAnnounceResult,
+    PhysicalInterviewAnnounceSummary,
     PhysicalInterviewBatchDetail,
     PhysicalInterviewBatchOut,
     PhysicalInterviewInviteRequest,
@@ -103,3 +106,33 @@ def record_physical_interview_result(
 ) -> PhysicalInterviewBatchDetail:
     invite = physical_interview_service.record_result(db, invite_id, payload, user)
     return _to_batch_detail(physical_interview_service.get_detail(db, invite.batch_id, user))
+
+
+@router.get(
+    "/bootcamps/{bootcamp_id}/physical-interview/announce",
+    response_model=PhysicalInterviewAnnounceSummary,
+)
+def physical_interview_announce_summary(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> PhysicalInterviewAnnounceSummary:
+    return physical_interview_service.announce_summary(db, bootcamp_id, user)
+
+
+@router.get(
+    "/bootcamps/{bootcamp_id}/physical-interview/announce/candidates",
+    response_model=PhysicalInterviewAnnounceLists,
+)
+def physical_interview_announce_lists(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> PhysicalInterviewAnnounceLists:
+    return physical_interview_service.announce_lists(db, bootcamp_id, user)
+
+
+@router.post(
+    "/bootcamps/{bootcamp_id}/physical-interview/announce",
+    response_model=PhysicalInterviewAnnounceResult,
+)
+def announce_physical_interview_results(
+    bootcamp_id: uuid.UUID, user: AdminUser, db: DbSession
+) -> PhysicalInterviewAnnounceResult:
+    return physical_interview_service.announce_results(db, bootcamp_id, user)

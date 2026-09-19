@@ -269,6 +269,7 @@ def list_for_bootcamp(
     bootcamp_id: uuid.UUID,
     *,
     stage: ApplicationStage | None = None,
+    program_id: uuid.UUID | None = None,
     search: str | None = None,
     limit: int = 25,
     offset: int = 0,
@@ -276,6 +277,8 @@ def list_for_bootcamp(
     filters = [Application.bootcamp_id == bootcamp_id]
     if stage is not None:
         filters.append(Application.stage == stage)
+    if program_id is not None:
+        filters.append(Application.program_id == program_id)
     if search:
         needle = f"%{search.strip().lower()}%"
         filters.append(

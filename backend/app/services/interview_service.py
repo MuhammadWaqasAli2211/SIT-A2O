@@ -253,6 +253,7 @@ def list_for_bootcamp(
     bootcamp_id: uuid.UUID,
     *,
     status: InterviewStatus | None = None,
+    program_id: uuid.UUID | None = None,
     batch_label: str | None = None,
     upcoming_only: bool = False,
     search: str | None = None,
@@ -263,6 +264,8 @@ def list_for_bootcamp(
 
     if status is not None:
         stmt = stmt.where(Interview.status == status)
+    if program_id is not None:
+        stmt = stmt.where(Application.program_id == program_id)
     if batch_label:
         stmt = stmt.where(Interview.batch_label == batch_label)
     if upcoming_only:
