@@ -153,10 +153,10 @@ def test_the_selection_is_what_gets_sent(monkeypatch, wired):
     ]
 
 
-def test_a_program_without_a_mapping_sends_no_track_at_all(monkeypatch, wired):
-    """Omitted rather than sent empty: their validator reads an absent
-    trackName as 'no track', where an empty string is a name that matches
-    nothing. Same outcome, but one of them is us saying what we mean."""
+def test_a_program_without_a_mapping_is_held_back_and_reported(monkeypatch, wired):
+    """Their validator would reject a student with no track, so a candidate
+    whose program has no mapping is never sent: it is reported back in
+    `skipped_no_track` instead, and the mapped candidate goes through."""
     rows = [row("B07-001", track=None), row("B07-002", track="Web Dev")]
     monkeypatch.setattr(svc, "_eligible_rows", lambda db, bid: rows)
     sent = {}
@@ -167,10 +167,11 @@ def test_a_program_without_a_mapping_sends_no_track_at_all(monkeypatch, wired):
 
     monkeypatch.setattr(svc.agilytics, "onboard", fake_onboard)
 
-    svc.onboard(FakeDb(rows), None, uuid.uuid4(), application_ids=[r[0] for r in rows])
+    outcome = svc.onboard(FakeDb(rows), None, uuid.uuid4(), application_ids=[r[0] for r in rows])
 
-    assert "trackName" not in sent["students"][0]
-    assert sent["students"][1]["trackName"] == "Web Dev"
+    assert len(sent["students"]) == 1
+    assert sent["students"][0]["trackName"] == "Web Dev"
+    assert outcome.skipped_no_track == ["B07-001"]
 
 
 def test_only_the_candidates_they_confirmed_are_stamped(monkeypatch, wired):
