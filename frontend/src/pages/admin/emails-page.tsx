@@ -218,8 +218,7 @@ export default function AdminEmailsPage() {
               ) : (
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
+                    <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Recipient</TableHead>
@@ -281,7 +280,6 @@ export default function AdminEmailsPage() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
                   </CardContent>
                 </Card>
               )}
