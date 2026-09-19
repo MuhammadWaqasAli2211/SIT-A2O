@@ -7,6 +7,7 @@ request.
 """
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -59,6 +60,44 @@ def assert_onboarding_unlocked(application: Application) -> None:
         raise ConflictError("Onboarding is not open yet for this application.")
 
 
+_IBAN_SHAPE = re.compile(r"^PK\d{2}[A-Z]{4}[0-9A-Z]{16}$")
+
+
+def _iban_check_digits_valid(iban: str) -> bool:
+    """ISO 7064 MOD 97-10 — the same arithmetic the frontend uses to build
+    the IBAN in the first place, run here in reverse to confirm it was not
+    hand-edited into something the bank code and account number no longer
+    agree with. A client-side computation is a convenience; this is the
+    actual enforcement, since nothing stops a direct API call from
+    bypassing the form entirely.
+    """
+    rearranged = f"{iban[4:]}{iban[:2]}00"
+    numeric = "".join(str(ord(ch) - 55) if ch.isalpha() else ch for ch in rearranged)
+    remainder = 0
+    for digit in numeric:
+        remainder = (remainder * 10 + int(digit)) % 97
+    return f"{98 - remainder:02d}" == iban[2:4]
+
+
+def _validate_iban(iban: str) -> None:
+    """Structure and checksum only — not that the account exists. Length,
+    the "PK" prefix, and a bank code shape that is at least plausible are
+    checked regardless of which UX produced the value, since this is the
+    enforcement point a direct API call cannot walk around.
+    """
+    cleaned = iban.strip().upper()
+    if not _IBAN_SHAPE.match(cleaned):
+        raise ConflictError(
+            "That IBAN is not a valid Pakistani IBAN — expected PK, 2 check "
+            "digits, a 4-letter bank code, and 16 more characters (24 in all)."
+        )
+    if not _iban_check_digits_valid(cleaned):
+        raise ConflictError(
+            "That IBAN's check digits don't match its own bank code and "
+            "account number — it looks like it was edited by hand."
+        )
+
+
 def validate_bank_payment_data(data: dict, *, is_adult: bool) -> None:
     """Age decides which fields are mandatory — see is_adult in app.core.age.
 
@@ -69,6 +108,8 @@ def validate_bank_payment_data(data: dict, *, is_adult: bool) -> None:
     missing = [field for field in required if not str(data.get(field, "")).strip()]
     if missing:
         raise ConflictError(f"Missing required field(s): {', '.join(missing)}.")
+    if is_adult and data.get("iban"):
+        _validate_iban(str(data["iban"]))
 
 
 def assert_in_order(form_type: OnboardingFormType, rows: dict) -> None:

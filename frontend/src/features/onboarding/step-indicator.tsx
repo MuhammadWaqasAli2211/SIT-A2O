@@ -30,7 +30,7 @@ const SHORT_LABEL: Record<OnboardingFormType, string> = {
   BACKGROUND_VERIFICATION: 'Background',
   EMPLOYMENT_APPLICATION: 'Employment',
   HALF_NAMA: 'Half Nama',
-  BANK_PAYMENT_DETAILS: 'Bank & Payment',
+  BANK_PAYMENT_DETAILS: 'Account Details',
 }
 
 export function OnboardingStepIndicator({

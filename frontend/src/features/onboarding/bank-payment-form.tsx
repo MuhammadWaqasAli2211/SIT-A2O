@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { buildIban, bankCodeIn } from "@/features/onboarding/iban"
+import { PAKISTANI_BANKS } from "@/features/onboarding/pakistan-banks"
 import { useDraftAutosave } from "@/features/onboarding/use-draft-autosave"
 
 /**
@@ -55,6 +58,20 @@ export function BankPaymentForm({
 }) {
   const [draft, setDraft] = React.useState<BankPaymentDraft>(() => ({ ...EMPTY_DRAFT, ...initialData }))
 
+  // The account number is the only thing the candidate actually types for
+  // their IBAN — the bank code and check digits are derived, never entered.
+  // Seeded from a stored IBAN so a draft restore or a reopened submission
+  // shows the number back rather than an empty box next to a filled-in
+  // bank. Only trusted when it actually starts with the selected bank's own
+  // code: an IBAN saved under a different bank is not this field's number.
+  const selectedBank = PAKISTANI_BANKS.find((bank) => bank.name === draft.bank_name)
+  const [accountNumber, setAccountNumber] = React.useState(() => {
+    if (!initialData?.iban || !selectedBank) return ''
+    return bankCodeIn(initialData.iban) === selectedBank.code
+      ? initialData.iban.replace(/\s+/g, '').slice(8).replace(/^0+(?=.)/, '')
+      : ''
+  })
+
   const { savedAt, clearDraft } = useDraftAutosave<BankPaymentDraft>({
     key: DRAFT_KEY,
     value: draft,
@@ -64,6 +81,18 @@ export function BankPaymentForm({
 
   const set = <K extends keyof BankPaymentDraft>(key: K, value: BankPaymentDraft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }))
+
+  function selectBank(bankName: string | null) {
+    set('bank_name', bankName ?? '')
+    const bank = PAKISTANI_BANKS.find((b) => b.name === bankName)
+    set('iban', bank && accountNumber ? buildIban(bank.code, accountNumber) : '')
+  }
+
+  function setAccount(raw: string) {
+    const digits = raw.replace(/\D/g, '').slice(0, 16)
+    setAccountNumber(digits)
+    set('iban', selectedBank && digits ? buildIban(selectedBank.code, digits) : '')
+  }
 
   const missing = isAdultCandidate
     ? (["bank_name", "account_title", "iban"] as const).some((k) => !draft[k].trim())
@@ -90,12 +119,22 @@ export function BankPaymentForm({
           {isAdultCandidate ? (
             <>
               <Field id="bank_name" label="Bank Name" required>
-                <Input
-                  id="bank_name"
-                  value={draft.bank_name}
-                  onChange={(e) => set("bank_name", e.target.value)}
-                  className={INPUT_CLASS}
-                />
+                {readOnly ? (
+                  <Input id="bank_name" value={draft.bank_name} disabled className={INPUT_CLASS} />
+                ) : (
+                  <Select value={draft.bank_name} onValueChange={selectBank}>
+                    <SelectTrigger id="bank_name" className={INPUT_CLASS}>
+                      <SelectValue placeholder="Select your bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAKISTANI_BANKS.map((bank) => (
+                        <SelectItem key={bank.code} value={bank.name}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </Field>
               <Field id="account_title" label="Account Title" required>
                 <Input
@@ -106,15 +145,34 @@ export function BankPaymentForm({
                   className={INPUT_CLASS}
                 />
               </Field>
-              <Field id="iban" label="IBAN" required>
-                <Input
-                  id="iban"
-                  value={draft.iban}
-                  onChange={(e) => set("iban", e.target.value.toUpperCase())}
-                  placeholder="PK00XXXX0000000000000000"
-                  className={INPUT_CLASS}
-                />
-              </Field>
+              {readOnly ? (
+                <Field id="iban" label="IBAN" required>
+                  <Input id="iban" value={draft.iban} disabled className={`${INPUT_CLASS} font-mono`} />
+                </Field>
+              ) : (
+                <Field
+                  id="account_number"
+                  label="Account Number"
+                  required
+                  hint={!selectedBank ? 'Pick a bank first.' : undefined}
+                >
+                  <Input
+                    id="account_number"
+                    inputMode="numeric"
+                    value={accountNumber}
+                    onChange={(e) => setAccount(e.target.value)}
+                    disabled={!selectedBank}
+                    placeholder="Your account number, digits only"
+                    className={INPUT_CLASS}
+                  />
+                  {/* The IBAN itself — bank code and check digits included —
+                      is derived, never typed. Shown so the candidate can see
+                      and copy the real number they are submitting. */}
+                  {draft.iban && (
+                    <p className="mt-1.5 font-mono text-xs text-muted-foreground">{draft.iban}</p>
+                  )}
+                </Field>
+              )}
             </>
           ) : (
             <>
@@ -167,11 +225,13 @@ function Field({
   id,
   label,
   required,
+  hint,
   children,
 }: {
   id: string
   label: string
   required?: boolean
+  hint?: string
   children: React.ReactNode
 }) {
   return (
@@ -181,6 +241,7 @@ function Field({
         {required && <span className="text-destructive"> *</span>}
       </Label>
       {children}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
     </div>
   )
 }

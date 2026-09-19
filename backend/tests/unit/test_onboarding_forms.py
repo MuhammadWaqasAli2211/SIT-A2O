@@ -181,8 +181,10 @@ def test_an_adult_without_an_iban_is_rejected():
 
 
 def test_an_adult_with_all_bank_fields_passes():
+    # A genuinely check-digit-correct IBAN, not a placeholder — see
+    # test_iban_validation.py for the checksum rule this now enforces.
     svc.validate_bank_payment_data(
-        {"bank_name": "HBL", "account_title": "A B", "iban": "PK00HABB0000000000000000"},
+        {"bank_name": "HBL", "account_title": "A B", "iban": "PK23HABB0000000000000000"},
         is_adult=True,
     )
 

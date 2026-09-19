@@ -31,7 +31,6 @@ import {
   backgroundVerificationDefaults,
   bankPaymentDefaults,
   employmentApplicationDefaults,
-  halfNamaDefaults,
 } from '@/features/onboarding/prefill'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useAuth } from '@/hooks/use-auth'
@@ -274,10 +273,11 @@ function defaultsFor(
       return backgroundVerificationDefaults(prefill)
     case OnboardingFormType.EMPLOYMENT_APPLICATION:
       return employmentApplicationDefaults(prefill)
-    case OnboardingFormType.HALF_NAMA:
-      return halfNamaDefaults(prefill)
     case OnboardingFormType.BANK_PAYMENT_DETAILS:
       return bankPaymentDefaults(prefill)
+    // Half Nama is deliberately excluded: it stays fully manual, the
+    // candidate's own Urdu oath, with no default function to fall back to.
+    case OnboardingFormType.HALF_NAMA:
     default:
       return {}
   }
