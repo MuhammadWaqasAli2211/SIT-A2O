@@ -388,6 +388,7 @@ def list_for_bootcamp(
     db: Session,
     bootcamp_id: uuid.UUID,
     *,
+    program_id: uuid.UUID | None = None,
     search: str | None = None,
     limit: int = 25,
     offset: int = 0,
@@ -396,6 +397,8 @@ def list_for_bootcamp(
     onboarding, with a progress summary per row so an admin can scan without
     opening every folder."""
     filters = [Application.bootcamp_id == bootcamp_id, Application.stage.in_(ONBOARDING_LIST_STAGES)]
+    if program_id is not None:
+        filters.append(Application.program_id == program_id)
     if search:
         needle = f"%{search.strip().lower()}%"
         filters.append(

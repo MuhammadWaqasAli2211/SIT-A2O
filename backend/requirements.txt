@@ -26,6 +26,18 @@ reportlab==4.2.5
 # code encodes plain text only - no URL, no lookup endpoint.
 qrcode==8.0
 
+# Arabic-script shaping for the onboarding-form export PDFs (three of the
+# four are bilingual Urdu, and the Half Nama is almost entirely Urdu prose).
+# reportlab has no OpenType shaping engine of its own: it maps one codepoint
+# to one glyph and nothing more, so Urdu text needs its joined letterforms
+# (arabic-reshaper) and its right-to-left reading order (python-bidi)
+# resolved before reportlab ever sees it. Both are pure Python, no native
+# dependencies - the same standard every other choice here is held to. See
+# app/services/urdu_text.py for why the on-screen Nastaliq font could not be
+# reused and what was substituted instead.
+arabic-reshaper==3.0.1
+python-bidi==0.6.6
+
 # --- dev ---
 pytest==8.3.4
 

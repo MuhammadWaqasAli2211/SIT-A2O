@@ -184,13 +184,14 @@ def list_onboarding_candidates(
     bootcamp_id: uuid.UUID,
     user: AdminUser,
     db: DbSession,
+    program_id: uuid.UUID | None = None,
     search: str | None = Query(default=None),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> Page[OnboardingCandidateSummary]:
     bootcamp_service.assert_can_manage(db, user, bootcamp_id)
     items, total = onboarding_document_service.list_for_bootcamp(
-        db, bootcamp_id, search=search, limit=limit, offset=offset
+        db, bootcamp_id, program_id=program_id, search=search, limit=limit, offset=offset
     )
     return Page(items=items, total=total, limit=limit, offset=offset)
 
