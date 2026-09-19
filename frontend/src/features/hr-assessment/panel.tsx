@@ -304,8 +304,7 @@ export function HrAssessmentPanel({
         ) : (
           <Card>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Code</TableHead>
@@ -400,7 +399,6 @@ export function HrAssessmentPanel({
                     ))}
                   </MotionTableBody>
                 </Table>
-              </div>
             </CardContent>
           </Card>
         )}
@@ -475,8 +473,7 @@ function AwaitingDecisionSection({
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Code</TableHead>
@@ -555,7 +552,6 @@ function AwaitingDecisionSection({
                 ))}
               </MotionTableBody>
             </Table>
-          </div>
         </CardContent>
       </Card>
 
