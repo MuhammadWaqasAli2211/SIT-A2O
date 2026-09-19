@@ -460,6 +460,32 @@ export interface PhysicalInterviewFunnel {
 
 export type CandidatePhysicalInterviewStatus = 'not_invited' | 'invited' | 'selected' | 'rejected' | 'missed'
 
+export interface PhysicalInterviewAnnounceRow {
+  invite_id: string
+  application_id: string
+  candidate_code: string
+  full_name: string | null
+  result: 'SELECTED' | 'REJECTED'
+  decided_at: string
+  announced_at: string | null
+}
+
+export interface PhysicalInterviewAnnounceLists {
+  pending: PhysicalInterviewAnnounceRow[]
+  announced: PhysicalInterviewAnnounceRow[]
+}
+
+export interface PhysicalInterviewAnnounceSummary {
+  pending_selected: number
+  pending_rejected: number
+}
+
+export interface PhysicalInterviewAnnounceResult {
+  emailed: number
+  selected: number
+  rejected: number
+}
+
 export interface CandidatePhysicalInterview {
   status: CandidatePhysicalInterviewStatus
   venue: string | null
@@ -774,7 +800,7 @@ export const ONBOARDING_FORM_LABEL: Record<OnboardingFormType, string> = {
   BACKGROUND_VERIFICATION: 'Background Verification Form',
   EMPLOYMENT_APPLICATION: 'Employment Application Form',
   HALF_NAMA: 'Half Nama / Oath Form',
-  BANK_PAYMENT_DETAILS: 'Bank & Payment Details',
+  BANK_PAYMENT_DETAILS: 'Account Details',
 }
 
 /** URL-friendly slug per form, used in the /dashboard/documents/forms/:slug route. */
@@ -941,19 +967,9 @@ export interface HrAssessmentAwaitingRow {
   interview: ExternalRecord | null
 }
 
-export interface HrAssessmentStats {
-  total: number
-  forms_complete: number
-  documents_pending: number
-  average_ai_score: number | null
-  /** Open Physical Interview invites — the top section's headline count. */
-  awaiting_decision: number
-}
-
 export interface HrAssessmentPage {
   items: HrAssessmentRow[]
   awaiting: HrAssessmentAwaitingRow[]
-  stats: HrAssessmentStats
 }
 
 /* ---------------------------------------------------------------- Agilytics --

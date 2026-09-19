@@ -13,10 +13,11 @@ import { ClipboardList } from 'lucide-react'
 import { PageHeader } from '@/components/shared/portal-ui'
 import { BootcampSwitcher, BootcampGate } from '@/features/admin/components'
 import { HrAssessmentPanel } from '@/features/hr-assessment/panel'
+import { PhysicalInterviewAnnounceButton } from '@/features/physical-interview/announce-section'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 
 export default function AdminHrAssessmentPage() {
-  const { selected, loading: bootcampLoading } = useBootcamp()
+  const { selected, selectedId, loading: bootcampLoading } = useBootcamp()
 
   return (
     <>
@@ -29,7 +30,14 @@ export default function AdminHrAssessmentPage() {
               ? `Screening results and onboarding paperwork for ${selected.name}.`
               : 'Pick an intake to review its candidates.'
         }
-        actions={<BootcampSwitcher />}
+        actions={
+          <>
+            {/* Beside the switcher, like the AI interviews page's announce
+                control: a once-per-round action, not page content. */}
+            {selectedId && <PhysicalInterviewAnnounceButton bootcampId={selectedId} />}
+            <BootcampSwitcher />
+          </>
+        }
       />
 
       <BootcampGate icon={ClipboardList}>

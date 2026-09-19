@@ -75,7 +75,7 @@ function Body({
 
   async function select() {
     if (await record.run({ result: 'SELECTED' })) {
-      toast.success(`${target.candidate_code} selected — onboarding email sent`)
+      toast.success(`${target.candidate_code} selected — onboarding unlocked now, email waits for Announce`)
       onRecorded()
     }
   }
@@ -83,7 +83,7 @@ function Body({
   async function reject() {
     if (noteTooShort) return
     if (await record.run({ result: 'REJECTED', rejection_note: note.trim() })) {
-      toast.success(`${target.candidate_code} marked Not Selected`)
+      toast.success(`${target.candidate_code} marked Not Selected — email waits for Announce`)
       onRecorded()
     }
   }
@@ -93,8 +93,8 @@ function Body({
       <DialogTitle>Record result — {target.candidate_code}</DialogTitle>
       <DialogDescription>
         {rejecting
-          ? 'Give a reason for the record. Admins only — the candidate is told the outcome, never the reason.'
-          : 'Selecting moves this candidate to Onboarding and emails them to fill their form.'}
+          ? 'Give a reason for the record. Admins only — the candidate is told the outcome, never the reason, and only once results are announced.'
+          : 'Selecting moves this candidate to Onboarding right away. The email telling them waits until you announce results.'}
       </DialogDescription>
 
       {record.error && (

@@ -52,6 +52,9 @@ import type {
   OnboardingFormSubmission,
   Page,
   PhaseType,
+  PhysicalInterviewAnnounceLists,
+  PhysicalInterviewAnnounceResult,
+  PhysicalInterviewAnnounceSummary,
   PhysicalInterviewBatch,
   PhysicalInterviewBatchDetail,
   PlatformStats,
@@ -144,7 +147,13 @@ export const phaseApi = {
 export const applicationApi = {
   listForBootcamp: (
     bootcampId: string,
-    params?: { stage?: ApplicationStage; search?: string; limit?: number; offset?: number },
+    params?: {
+      stage?: ApplicationStage
+      program_id?: string
+      search?: string
+      limit?: number
+      offset?: number
+    },
   ) => get<Page<ApplicantRow>>(`/bootcamps/${bootcampId}/applications`, params),
 
   detail: (id: string) => get<AdminApplicationDetail>(`/applications/${id}/admin`),
@@ -187,6 +196,7 @@ export const interviewApi = {
     bootcampId: string,
     params?: {
       status?: InterviewStatus
+      program_id?: string
       batch_label?: string
       upcoming_only?: boolean
       search?: string
@@ -401,7 +411,7 @@ export const platformApi = {
 export const onboardingApi = {
   listCandidates: (
     bootcampId: string,
-    params?: { search?: string; limit?: number; offset?: number },
+    params?: { program_id?: string; search?: string; limit?: number; offset?: number },
   ) => get<Page<OnboardingCandidateSummary>>(`/bootcamps/${bootcampId}/onboarding/candidates`, params),
 
   forms: (applicationId: string) =>
@@ -512,6 +522,26 @@ export const physicalInterviewApi = {
     const { data } = await api.post<PhysicalInterviewBatchDetail>(
       `/physical-interviews/invites/${inviteId}/result`,
       payload,
+    )
+    return data
+  },
+
+  /** Counts behind the announce confirm dialog — both outcomes together,
+   *  since one bulk action emails Selected and Rejected candidates alike. */
+  announceSummary: (bootcampId: string) =>
+    get<PhysicalInterviewAnnounceSummary>(`/bootcamps/${bootcampId}/physical-interview/announce`),
+
+  /** The two tabs: decided but not yet emailed, and already emailed. One
+   *  fetch for both, so they cannot disagree about who exists. */
+  announceCandidates: (bootcampId: string) =>
+    get<PhysicalInterviewAnnounceLists>(`/bootcamps/${bootcampId}/physical-interview/announce/candidates`),
+
+  /** Fires the bulk emails for everyone currently pending. Stage moves
+   *  already happened when each decision was recorded — this only sends
+   *  the notification, and only once. */
+  async announceResults(bootcampId: string) {
+    const { data } = await api.post<PhysicalInterviewAnnounceResult>(
+      `/bootcamps/${bootcampId}/physical-interview/announce`,
     )
     return data
   },

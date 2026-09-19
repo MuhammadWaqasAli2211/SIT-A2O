@@ -65,7 +65,6 @@ import {
   type ExternalRecord,
   type HrAssessmentAwaitingRow,
   type HrAssessmentRow,
-  type HrAssessmentStats,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -200,7 +199,7 @@ export function HrAssessmentPanel({
     downloadCsv(header, rows, `hr-assessment-${new Date().toISOString().slice(0, 10)}.csv`)
   }
 
-  // One loader for the screen, not one per block. The stats, the decision
+  // One loader for the screen, not one per block. The decision
   // queue and the roster all come from the *same* request, so three separate
   // loading states meant three sets of rings on one page for one wait — which
   // reads as a broken layout, and is exactly the "several loading systems"
@@ -211,8 +210,6 @@ export function HrAssessmentPanel({
   return (
     <div className="flex flex-col gap-4 pt-4">
       <LiveIndicator lastUpdated={lastUpdated} live={live} />
-
-      <StatCards stats={data?.stats} loading={false} />
 
       {bootcampId && (
         <AgilyticsStrip bootcampId={bootcampId} bootcampName={bootcampName} state={agilytics} />
@@ -620,63 +617,5 @@ function DocumentsCell({ row }: { row: HrAssessmentRow }) {
         </Badge>
       )}
     </div>
-  )
-}
-
-/* --------------------------------------------------------------- stats -- */
-
-function StatCards({ stats, loading }: { stats: HrAssessmentStats | undefined; loading: boolean }) {
-  if (loading) {
-    return (
-      <AppLoader size="sm" />
-    )
-  }
-  if (!stats) return null
-
-  return (
-    // Five now, not four: the decision queue is the first thing a reviewer
-    // needs a number for, and it leads because it is the only one of these
-    // that is a call to act rather than a state of play.
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      <StatCard label="Awaiting decision" value={stats.awaiting_decision} />
-      <StatCard label="In onboarding" value={stats.total} />
-      <StatCard label="Forms complete" value={stats.forms_complete} />
-      <StatCard label="Documents pending" value={stats.documents_pending} />
-      <StatCard
-        label="Average AI score"
-        value={stats.average_ai_score}
-        suffix={stats.average_ai_score === null ? '' : '/100'}
-      />
-    </div>
-  )
-}
-
-function StatCard({
-  label,
-  value,
-  suffix = '',
-}: {
-  label: string
-  value: number | null
-  suffix?: string
-}) {
-  return (
-    <Reveal>
-      <Card>
-        <CardHeader className="pb-2">
-          <CardDescription>{label}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {value === null ? (
-            <p className="text-2xl font-semibold text-muted-foreground">—</p>
-          ) : (
-            <p className="flex items-baseline gap-1 text-2xl font-semibold tabular-nums">
-              <Counter to={value} decimals={Number.isInteger(value) ? 0 : 1} />
-              {suffix && <span className="text-sm font-normal text-muted-foreground">{suffix}</span>}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    </Reveal>
   )
 }

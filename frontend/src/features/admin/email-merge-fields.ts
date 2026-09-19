@@ -41,12 +41,11 @@ export const INVITE_MESSAGE_TEMPLATE =
   '<p>Dear $candidate_name,</p>' +
   '<p>You have been invited to sit the AI screening interview for ' +
   '<strong>$program</strong> ($bootcamp). Your candidate code is $candidate_code.</p>' +
-  '<p>InterviewerAI has emailed you separately with the link and your one-time ' +
-  'login details — check that email to begin.</p>' +
+  '<p>InterviewerAI has emailed you separately with the link and your one time ' +
+  'login details. Kindly check that email to begin.</p>' +
   '<p><strong>Deadline: $interview_deadline.</strong> The interview link stops ' +
   'working after this, and a missed deadline holds your application where it is.</p>' +
-  '<p>Question difficulty for this round: $interview_difficulty.</p>' +
-  '<p>— Saylani Admissions</p>'
+  '<p>Warm Wishes from Saylani Admissions</p>'
 
 /**
  * Filled once per Physical Interview batch — see `send_bulk` in
@@ -85,12 +84,12 @@ export const AGILYTICS_MESSAGE_TEMPLATE =
   'to activate your account. <strong>That link expires 7 days after it is sent</strong>, ' +
   'so please activate as soon as it arrives.</p>' +
   '<p>If it has not arrived within a day, check your spam folder before contacting ' +
-  'us — we can reissue it.</p>' +
-  '<p>— Saylani Admissions</p>'
+  'us, we can reissue it.</p>' +
+  '<p>Warm Wishes from Saylani Admissions</p>'
 
 export const PHYSICAL_INTERVIEW_MESSAGE_TEMPLATE =
   '<p>Dear $candidate_name,</p>' +
-  '<p>Congratulations — you have cleared the AI screening interview for ' +
+  '<p>Congratulations! You have cleared the AI screening interview for ' +
   '<strong>$program</strong> ($bootcamp) and are invited to a Physical Interview.</p>' +
   '<p><strong>Venue:</strong> $venue<br>' +
   '<strong>Date:</strong> $interview_day, $interview_date<br>' +
@@ -99,4 +98,4 @@ export const PHYSICAL_INTERVIEW_MESSAGE_TEMPLATE =
   'candidate code is $candidate_code.</p>' +
   '<p><strong>Deadline: $deadline.</strong> An outcome must be recorded by ' +
   'this date, or your application will show as having missed this stage.</p>' +
-  '<p>— Saylani Admissions</p>'
+  '<p>Warm Wishes from Saylani Admissions</p>'

@@ -54,6 +54,7 @@ import {
 import { BatchScheduleDialog } from '@/pages/admin/batch-schedule-dialog'
 import { InterviewInviteDialog } from '@/pages/admin/interview-invite-dialog'
 import { PhysicalInterviewInviteDialog } from '@/pages/admin/physical-interview-invite-dialog'
+import { ALL_TRACKS, TrackFilter } from '@/features/admin/track-filter'
 import { useAsync, useMutation } from '@/hooks/use-async'
 import { useBootcamp } from '@/hooks/use-bootcamp'
 import { useDebounced } from '@/hooks/use-debounced'
@@ -88,6 +89,7 @@ export default function AdminInterviewsPage() {
   const [batchOpen, setBatchOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [physicalOpen, setPhysicalOpen] = useState(false)
+  const [track, setTrack] = useState<string>(ALL_TRACKS)
   const [scoring, setScoring] = useState<InterviewRow | null>(null)
 
   const debouncedSearch = useDebounced(search, 300)
@@ -97,12 +99,13 @@ export default function AdminInterviewsPage() {
       selectedId
         ? interviewApi.listForBootcamp(selectedId, {
             status: status === ALL ? undefined : (status as InterviewStatus),
+            program_id: track === ALL_TRACKS ? undefined : track,
             search: debouncedSearch || undefined,
             limit: PAGE_SIZE,
             offset,
           })
         : Promise.resolve(undefined),
-    [selectedId, status, debouncedSearch, offset],
+    [selectedId, status, track, debouncedSearch, offset],
   )
 
   const rows = useMemo(() => data?.items ?? [], [data])
@@ -202,6 +205,15 @@ export default function AdminInterviewsPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <TrackFilter
+                value={track}
+                onChange={(value) => {
+                  setTrack(value)
+                  setOffset(0)
+                }}
+                className="w-full sm:w-48"
+              />
             </div>
 
             <AsyncSection initialLoading={initialLoading} error={error} onRetry={refetch}>
