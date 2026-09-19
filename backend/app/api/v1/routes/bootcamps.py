@@ -183,13 +183,14 @@ def list_applicants(
     user: AdminUser,
     db: DbSession,
     stage: ApplicationStage | None = None,
+    program_id: uuid.UUID | None = None,
     search: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> ApplicantPage:
     bootcamp_service.assert_can_manage(db, user, bootcamp_id)
     items, total = application_service.list_for_bootcamp(
-        db, bootcamp_id, stage=stage, search=search, limit=limit, offset=offset
+        db, bootcamp_id, stage=stage, program_id=program_id, search=search, limit=limit, offset=offset
     )
     return ApplicantPage(items=items, total=total, limit=limit, offset=offset)
 

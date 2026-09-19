@@ -58,14 +58,14 @@ const ALL = 'ALL'
 const TEMPLATES = [
   {
     key: 'interview_invite',
-    name: 'Interview invitation',
-    subject: 'Your interview for $bootcamp',
+    name: 'AI Interview invitation',
+    subject: 'Your AI interview for $bootcamp',
     body:
       '<p>Dear $candidate_name,</p>' +
       '<p>Your application ($candidate_code) for <strong>$program</strong> has moved forward. ' +
-      'Please attend your screening interview at the time shared with you.</p>' +
+      'Please attend your AI screening interview at the time shared with you.</p>' +
       '<p>Bring your CNIC and this candidate code.</p>' +
-      '<p>— Saylani Admissions</p>',
+      '<p>Warm Wishes from Saylani Admissions</p>',
   },
   {
     key: 'result_pass',
@@ -73,10 +73,10 @@ const TEMPLATES = [
     subject: 'Good news about your $bootcamp application',
     body:
       '<p>Dear $candidate_name,</p>' +
-      '<p>Congratulations — you have cleared the screening stage for <strong>$program</strong>. ' +
+      '<p>Congratulations! You have cleared the screening stage for <strong>$program</strong>. ' +
       'We will contact you shortly with the next step.</p>' +
       '<p>Your candidate code remains $candidate_code.</p>' +
-      '<p>— Saylani Admissions</p>',
+      '<p>Warm Wishes from Saylani Admissions</p>',
   },
   {
     key: 'result_reject',
@@ -87,7 +87,7 @@ const TEMPLATES = [
       '<p>Thank you for applying for <strong>$program</strong>. ' +
       'On this occasion we are unable to offer you a place. ' +
       'We genuinely encourage you to apply again for the next intake.</p>' +
-      '<p>— Saylani Admissions</p>',
+      '<p>Warm Wishes from Saylani Admissions</p>',
   },
   {
     key: 'reminder',
@@ -97,7 +97,7 @@ const TEMPLATES = [
       '<p>Dear $candidate_name,</p>' +
       '<p>This is a reminder to complete your outstanding step for <strong>$program</strong> ' +
       'before the deadline.</p>' +
-      '<p>— Saylani Admissions</p>',
+      '<p>Warm Wishes from Saylani Admissions</p>',
   },
 ] as const
 

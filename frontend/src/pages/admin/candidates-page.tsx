@@ -50,6 +50,7 @@ import {
   useConfirm,
 } from '@/features/admin/components'
 import { CandidateSheet } from '@/pages/admin/candidate-sheet'
+import { ALL_TRACKS, TrackFilter } from '@/features/admin/track-filter'
 import { LiveIndicator } from '@/features/live/live-indicator'
 import { useLiveResource } from '@/features/live/use-live-resource'
 import { useMutation } from '@/hooks/use-async'
@@ -95,6 +96,7 @@ export default function AdminCandidatesPage() {
   const [searchParams] = useSearchParams()
   const [search, setSearch] = useState(() => searchParams.get('search') ?? '')
   const [stage, setStage] = useState<string>(ALL)
+  const [track, setTrack] = useState<string>(ALL_TRACKS)
   const [offset, setOffset] = useState(0)
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -111,12 +113,13 @@ export default function AdminCandidatesPage() {
       selectedId
         ? applicationApi.listForBootcamp(selectedId, {
             stage: stage === ALL ? undefined : (stage as ApplicationStage),
+            program_id: track === ALL_TRACKS ? undefined : track,
             search: debouncedSearch || undefined,
             limit: PAGE_SIZE,
             offset,
           })
         : Promise.resolve(undefined),
-    [selectedId, stage, debouncedSearch, offset],
+    [selectedId, stage, track, debouncedSearch, offset],
   )
 
   const rows = useMemo(() => data?.items ?? [], [data])
@@ -203,15 +206,21 @@ export default function AdminCandidatesPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <TrackFilter
+                value={track}
+                onChange={(value) => changeFilter(() => setTrack(value))}
+                className="w-full sm:w-56"
+              />
             </div>
 
             <AsyncSection initialLoading={initialLoading} error={error} onRetry={refresh}>
               {rows.length === 0 ? (
                 <EmptyState
                   icon={Users}
-                  title={debouncedSearch || stage !== ALL ? 'No matches' : 'No applicants yet'}
+                  title={debouncedSearch || stage !== ALL || track !== ALL_TRACKS ? 'No matches' : 'No applicants yet'}
                   description={
-                    debouncedSearch || stage !== ALL
+                    debouncedSearch || stage !== ALL || track !== ALL_TRACKS
                       ? 'Try a different search or stage filter.'
                       : 'Applicants appear here as soon as registration opens and people apply.'
                   }

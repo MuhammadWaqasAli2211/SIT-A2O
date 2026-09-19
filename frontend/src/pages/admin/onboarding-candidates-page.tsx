@@ -18,6 +18,7 @@ import { agilyticsApi, onboardingApi } from '@/features/admin/api'
 import { AgilyticsOnboardDialog } from '@/features/agilytics/onboard-dialog'
 import { DocumentExportDialog } from '@/features/onboarding/document-export-dialog'
 import { IdCardSwitch } from '@/features/onboarding/id-card-switch'
+import { ALL_TRACKS, TrackFilter } from '@/features/admin/track-filter'
 import { AgilyticsStatusBadge, agilyticsStateOf } from '@/features/agilytics/status-badge'
 import {
   AsyncSection,
@@ -38,6 +39,7 @@ export default function AdminOnboardingCandidatesPage() {
   const navigate = useNavigate()
 
   const [search, setSearch] = useState('')
+  const [track, setTrack] = useState<string>(ALL_TRACKS)
   const [offset, setOffset] = useState(0)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -66,12 +68,13 @@ export default function AdminOnboardingCandidatesPage() {
     () =>
       selectedId
         ? onboardingApi.listCandidates(selectedId, {
+            program_id: track === ALL_TRACKS ? undefined : track,
             search: debouncedSearch || undefined,
             limit: PAGE_SIZE,
             offset,
           })
         : Promise.resolve(undefined),
-    [selectedId, debouncedSearch, offset],
+    [selectedId, track, debouncedSearch, offset],
   )
 
   const rows = data?.items ?? []
@@ -113,16 +116,27 @@ export default function AdminOnboardingCandidatesPage() {
       <BootcampGate icon={GraduationCap}>
         {(_selectedId) => (
           <div className="flex flex-col gap-4">
-            <div className="relative max-w-md">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value)
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative max-w-md flex-1">
+                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    setOffset(0)
+                  }}
+                  placeholder="Search by candidate code or name (e.g. B08-017)"
+                  className="pl-9"
+                />
+              </div>
+
+              <TrackFilter
+                value={track}
+                onChange={(value) => {
+                  setTrack(value)
                   setOffset(0)
                 }}
-                placeholder="Search by candidate code or name (e.g. B08-017)"
-                className="pl-9"
+                className="w-full sm:w-56"
               />
             </div>
 
