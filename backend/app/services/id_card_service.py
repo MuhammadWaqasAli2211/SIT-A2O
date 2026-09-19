@@ -248,6 +248,34 @@ def _is_adult(dob: date | None, on: date) -> bool:
     return years >= 18
 
 
+# The card's "Designation" is a role title, not the track name printed
+# everywhere else in the portal (`programs.title`) — a lookup here rather
+# than a column on `programs`, because this is presentation for one PDF,
+# not a fact about the program itself, and a dict keeps the whole mapping
+# visible in one place instead of spread across program rows.
+#
+# Mobile Development has no title of its own: it is treated as covered by
+# Web & App Development's, by explicit instruction. Machine Learning folds
+# into the AI title the same way, for the same reason — neither program was
+# named as needing a distinct designation.
+_DESIGNATION_BY_PROGRAM: dict[str, str] = {
+    "Web & App Development": "Web Dev Intern",
+    "Mobile Development": "Web Dev Intern",
+    "Data Science & AI": "AI Engineer Intern",
+    "Machine Learning": "AI Engineer Intern",
+    "Cloud & DevOps": "Data Engineer Intern",
+    "UI/UX Design": "UI/UX Design Intern",
+}
+
+
+def _designation_for(program_title: str) -> str:
+    """The role title printed on the card. Falls back to the track name
+    itself for any program not in the table, rather than a blank or a
+    generic label — a card is still owed to a candidate in a program this
+    mapping has not caught up with yet."""
+    return _DESIGNATION_BY_PROGRAM.get(program_title, program_title)
+
+
 def collect(db: Session, application: Application) -> CardData:
     """Read one candidate's card fields out of the database.
 
@@ -274,9 +302,7 @@ def collect(db: Session, application: Application) -> CardData:
         father_name=((candidate.father_name if candidate else None) or "").strip() or "—",
         id_number=((candidate.cnic if candidate else None) or "").strip() or "—",
         id_label="B-Form#" if minor else "CNIC#",
-        # The track, not a job title. `programs.title` is the candidate-facing
-        # name; `agilytics_track_name` exists only for their API's vocabulary.
-        designation=(program.title if program else "—"),
+        designation=_designation_for(program.title) if program else "—",
         valid_from=bootcamp.id_cards_valid_from if bootcamp else None,
         valid_to=bootcamp.id_cards_valid_to if bootcamp else None,
         photo=(
@@ -447,12 +473,15 @@ def _qr_image(text: str) -> ImageReader:
     return ImageReader(buffer)
 
 
-def _field(pdf: canvas.Canvas, label: str, value: str, *, from_top: float) -> None:
+def _field(
+    pdf: canvas.Canvas, label: str, value: str, *, from_top: float, value_size: float = 7.0
+) -> None:
     """One "Label: value" row sitting on a ruled line, as in the reference.
 
     The value is drawn on the rule rather than in place of it, so the card
     still reads as the printed form it is modelled on. A long value is
-    stepped down in size instead of running past the margin.
+    stepped down in size instead of running past the margin. `value_size` is
+    the size it starts from, for the rows whose values run long.
     """
     left, right = 13.0, CARD_W - 13.0
     baseline = _y(from_top)
@@ -466,7 +495,7 @@ def _field(pdf: canvas.Canvas, label: str, value: str, *, from_top: float) -> No
     pdf.setStrokeColor(INK)
     pdf.line(label_end, baseline - 1.6, right, baseline - 1.6)
 
-    size = 7.0
+    size = value_size
     available = right - label_end - 1.5
     while size > 4.4 and pdf.stringWidth(value, "Helvetica-Bold", size) > available:
         size -= 0.2
@@ -479,9 +508,9 @@ def _field(pdf: canvas.Canvas, label: str, value: str, *, from_top: float) -> No
 # scaled to fit this box without distortion, so an off-ratio scan simply sits
 # smaller rather than stretching.
 SIGNATURE_ASSET = "issuing-authority-signature.png"
-SIGNATURE_W = 66.0
-SIGNATURE_H = 28.0
-SIGNATURE_BOTTOM = 206.0  # from the top; the rule sits at 208
+SIGNATURE_W = 74.0
+SIGNATURE_H = 52.0
+SIGNATURE_BOTTOM = 215.0  # from the top; the rule sits at 213
 
 
 def _signature(pdf: canvas.Canvas) -> None:
@@ -505,19 +534,24 @@ def _signature(pdf: canvas.Canvas) -> None:
     )
 
 
+# Name and designation run longest, so they start a touch smaller than the
+# other rows; still stepped down further if a value would overflow.
+NAME_VALUE_SIZE = 6.2
+
+
 def _back(pdf: canvas.Canvas, data: CardData) -> None:
     pdf.setFillColor(white)
     pdf.rect(0, 0, CARD_W, CARD_H, stroke=0, fill=1)
     _border(pdf)
     _logos(pdf)
 
-    _field(pdf, "Name:", data.full_name, from_top=38)
+    _field(pdf, "Name:", data.full_name, from_top=38, value_size=NAME_VALUE_SIZE)
     _field(pdf, "Father's Name:", data.father_name, from_top=53)
     _field(pdf, f"{data.id_label}", data.id_number, from_top=68)
-    _field(pdf, "Designation:", data.designation, from_top=83)
+    _field(pdf, "Designation:", data.designation, from_top=83, value_size=NAME_VALUE_SIZE)
     _field(pdf, "Valid:", data.validity, from_top=98)
 
-    size = 38.0
+    size = 35.0
     pdf.drawImage(
         _qr_image(data.qr_text),
         (CARD_W - size) / 2,
@@ -527,15 +561,15 @@ def _back(pdf: canvas.Canvas, data: CardData) -> None:
     )
 
     pdf.setFillColor(INK)
-    _centred(pdf, "Note: This is for SMIT premises only.", from_top=160, font="Helvetica", size=6)
-    _centred(pdf, "if found please return to SMIT", from_top=168, font="Helvetica", size=6)
+    _centred(pdf, "Note: This is for SMIT premises only.", from_top=153, font="Helvetica", size=6)
+    _centred(pdf, "if found please return to SMIT", from_top=160.5, font="Helvetica", size=6)
 
     _signature(pdf)
 
     pdf.setStrokeColor(INK)
     pdf.setLineWidth(0.6)
-    pdf.line(38, _y(208), CARD_W - 38, _y(208))
-    _centred(pdf, "Issuing Authority", from_top=216, font="Helvetica", size=6)
+    pdf.line(38, _y(213), CARD_W - 38, _y(213))
+    _centred(pdf, "Issuing Authority", from_top=221, font="Helvetica", size=6)
 
 
 def render_card(data: CardData) -> bytes:
