@@ -1,19 +1,17 @@
 import { toast } from 'sonner'
 
+import { getSupabase } from '@/lib/supabase-client'
 import { cn } from '@/lib/utils'
 
 /**
- * Google and Apple sign-in.
+ * Google sign-in, via Supabase's OAuth redirect.
  *
- * Neither is wired to a provider yet, so both answer with a "coming soon"
- * toast. They are rendered as real buttons rather than being hidden because
- * the layout is designed around them and because a disabled-looking control
- * invites the same click anyway — better to say plainly what is going on.
- *
- * When these are implemented, the only change here is swapping the toast for
- * the provider call; the markup stays.
+ * `redirectTo` always points at this browser's own origin, not a hardcoded
+ * one — so this works identically in dev and in whatever origin the app is
+ * actually deployed to, as long as that origin is allow-listed in Supabase's
+ * Auth settings. `/auth/callback` is where the session actually gets read
+ * and saved; see that page for the rest of the flow.
  */
-
 const GoogleMark = () => (
   <svg viewBox="0 0 18 18" aria-hidden="true" className="size-[1.05rem] shrink-0">
     <path
@@ -35,41 +33,43 @@ const GoogleMark = () => (
   </svg>
 )
 
-const AppleMark = () => (
-  // Single path, so it takes the button's text colour and works on either theme.
-  <svg viewBox="0 0 18 18" aria-hidden="true" className="size-[1.15rem] shrink-0 fill-current">
-    <path d="M13.4 9.55c.02 2.28 2 3.04 2.02 3.05-.01.05-.31 1.08-1.04 2.14-.63.92-1.29 1.83-2.32 1.85-1.01.02-1.34-.6-2.5-.6-1.15 0-1.52.58-2.48.62-1 .04-1.76-.99-2.4-1.9-1.3-1.88-2.3-5.3-.96-7.62.66-1.15 1.85-1.87 3.14-1.9.98-.01 1.9.66 2.5.66.6 0 1.72-.82 2.9-.7.49.02 1.87.2 2.76 1.5-.07.05-1.65.96-1.63 2.87M11.5 3.1c.53-.64.89-1.53.79-2.42-.76.03-1.69.51-2.24 1.15-.49.56-.92 1.47-.8 2.34.85.06 1.71-.43 2.25-1.07" />
-  </svg>
-)
-
-const PROVIDERS = [
-  { id: 'google', label: 'Continue with Google', Mark: GoogleMark },
-  { id: 'apple', label: 'Continue with Apple', Mark: AppleMark },
-] as const
-
 export function OAuthButtons({ className }: { className?: string }) {
+  async function signInWithGoogle() {
+    let supabase: ReturnType<typeof getSupabase>
+    try {
+      supabase = getSupabase()
+    } catch (error) {
+      toast.error('Google sign-in is not available yet.', {
+        description: error instanceof Error ? error.message : undefined,
+      })
+      return
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    })
+    // Only reachable if Supabase rejected the request before ever leaving
+    // the page (misconfiguration, network failure) — a successful call
+    // navigates the browser away and never returns here.
+    if (error) toast.error('Could not start Google sign-in.', { description: error.message })
+  }
+
   return (
     <div className={cn('flex flex-col gap-2.5', className)}>
-      {PROVIDERS.map(({ id, label, Mark }) => (
-        <button
-          key={id}
-          type="button"
-          onClick={() =>
-            toast.info(`${label.replace('Continue with ', '')} sign-in is coming soon`, {
-              description: 'Use your email and password for now.',
-            })
-          }
-          className={cn(
-            'flex h-11 w-full items-center justify-center gap-2.5 rounded-full',
-            'border border-border bg-card text-sm font-medium text-card-foreground',
-            'transition-colors hover:bg-muted',
-            'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-          )}
-        >
-          <Mark />
-          {label}
-        </button>
-      ))}
+      <button
+        type="button"
+        onClick={() => void signInWithGoogle()}
+        className={cn(
+          'flex h-11 w-full items-center justify-center gap-2.5 rounded-full',
+          'border border-border bg-card text-sm font-medium text-card-foreground',
+          'transition-colors hover:bg-muted',
+          'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+        )}
+      >
+        <GoogleMark />
+        Continue with Google
+      </button>
     </div>
   )
 }
