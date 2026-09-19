@@ -219,8 +219,7 @@ export default function AdminCandidatesPage() {
               ) : (
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
+                    <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Code</TableHead>
@@ -274,7 +273,6 @@ export default function AdminCandidatesPage() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
                   </CardContent>
                 </Card>
               )}
