@@ -351,11 +351,17 @@ function RegisterAction() {
   // Nothing is known until the *first* fetch settles; a disabled button for a
   // moment beats offering an action that turns out to be the wrong one. A
   // later refetch leaves the label alone rather than flickering it.
+  // Below `sm` the header has no room for this button's label alongside the
+  // mobile menu toggle, notification bell, theme toggle and account menu —
+  // together they overflowed the header (and so the whole page) by about
+  // 11px on every candidate screen. Same fix as the account name lower down
+  // this file: icon-only below `sm`, with `aria-label` carrying the text
+  // that disappears visually.
   if (initialLoading) {
     return (
-      <Button size="sm" disabled>
+      <Button size="sm" disabled aria-label="Register">
         <ClipboardPen className="size-4" />
-        Register
+        <span className="hidden sm:inline">Register</span>
       </Button>
     )
   }
@@ -365,9 +371,9 @@ function RegisterAction() {
   // only walk them into a 409.
   if (application) {
     return (
-      <Button render={<Link to="/dashboard/track" />} size="sm">
+      <Button render={<Link to="/dashboard/track" />} size="sm" aria-label="View application">
         <Radar className="size-4" />
-        View application
+        <span className="hidden sm:inline">View application</span>
       </Button>
     )
   }
@@ -375,9 +381,9 @@ function RegisterAction() {
   if (openBootcamps.length === 0) {
     return (
       <>
-        <Button size="sm" onClick={() => setClosedNotice(true)}>
+        <Button size="sm" onClick={() => setClosedNotice(true)} aria-label="Register">
           <ClipboardPen className="size-4" />
-          Register
+          <span className="hidden sm:inline">Register</span>
         </Button>
         <RegistrationClosedDialog open={closedNotice} onOpenChange={setClosedNotice} />
       </>
@@ -385,9 +391,9 @@ function RegisterAction() {
   }
 
   return (
-    <Button render={<Link to="/dashboard/register" />} size="sm">
+    <Button render={<Link to="/dashboard/register" />} size="sm" aria-label="Register">
       <ClipboardPen className="size-4" />
-      Register
+      <span className="hidden sm:inline">Register</span>
     </Button>
   )
 }
