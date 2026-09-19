@@ -103,8 +103,7 @@ export default function SuperAdminProgramsPage() {
         ) : (
           <Card>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Program</TableHead>
@@ -210,7 +209,6 @@ export default function SuperAdminProgramsPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
             </CardContent>
           </Card>
         )}
