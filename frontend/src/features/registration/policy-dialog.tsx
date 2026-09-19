@@ -51,29 +51,33 @@ export function PolicyLink({ kind, children }: { kind: PolicyKind; children: Rea
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <span className="flex items-center gap-2">
-                <Icon className="size-5 text-primary" />
-                <DialogTitle className="text-lg">{policy.title}</DialogTitle>
-              </span>
-              <DialogDescription>{policy.summary}</DialogDescription>
-              <span className="text-xs text-muted-foreground">
-                Effective {POLICY_EFFECTIVE_DATE}
-              </span>
-            </div>
+        {/* The close (x) button DialogContent renders is a sibling of this
+            component's own children, inside whatever element carries the
+            scrolling — putting overflow-y-auto on DialogContent itself (as
+            this used to) scrolled the close button away with the text. It
+            now scrolls only the inner body, so the button stays fixed to
+            the popup regardless of read position. */}
+        <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-2xl">
+          <div className="flex flex-col gap-1.5 border-b border-border px-6 py-4">
+            <span className="flex items-center gap-2">
+              <Icon className="size-5 text-primary" />
+              <DialogTitle className="text-lg">{policy.title}</DialogTitle>
+            </span>
+            <DialogDescription>{policy.summary}</DialogDescription>
+            <span className="text-xs text-muted-foreground">
+              Effective {POLICY_EFFECTIVE_DATE}
+            </span>
+          </div>
 
-            <div className="flex flex-col gap-4">
-              {policy.sections.map((section) => (
-                <div key={section.heading} className="flex flex-col gap-1">
-                  <h3 className="text-sm font-semibold">{section.heading}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {section.body}
-                  </p>
-                </div>
-              ))}
-            </div>
+          <div className="flex flex-col gap-4 overflow-y-auto px-6 py-4">
+            {policy.sections.map((section) => (
+              <div key={section.heading} className="flex flex-col gap-1">
+                <h3 className="text-sm font-semibold">{section.heading}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {section.body}
+                </p>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

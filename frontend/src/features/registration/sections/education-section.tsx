@@ -135,12 +135,14 @@ export function EducationSection() {
             />
             {/* A range, because a timetable of 9-2 or 2-7 has no honest
                 answer among "Morning"/"Evening". Two native time inputs,
-                the same control the interview dialogs already use. */}
+                the same control the interview dialogs already use. "To"
+                waits one step behind "From" — filling one before the other
+                is what the gate is for, not both unlocking together. */}
             <div className="grid grid-cols-2 gap-3 sm:col-span-2">
               <TextField
                 name="university_timing_from"
                 label="Classes from"
-                locked={open < 7}
+                locked={open < 6}
                 type="time"
                 hint="When your classes start."
               />
@@ -155,15 +157,15 @@ export function EducationSection() {
             <TextField
               name="university_name"
               label="University name"
-              locked={open < 6}
-              placeholder="e.g. NED University of Engineering & Technology"
+              locked={open < 8}
+              placeholder="e.g. Dawood University of Engineering & Technology"
               className="sm:col-span-2"
             />
           </div>
         )}
       </div>
 
-      <PictureField locked={open < 8} />
+      <PictureField locked={open < 9} />
     </div>
   )
 }

@@ -272,7 +272,10 @@ export const SECTION_FIELDS = {
   education: [
     'computer_proficiency', 'last_qualification', 'referral_source',
     'has_laptop', 'is_university_student', 'university_semester',
-    'university_name', 'university_timing_from', 'university_timing_to', 'picture',
+    // Timing before name, matching the section's own visual order — the gate
+    // walks this array in order, so a mismatch here unlocks fields out of
+    // the sequence a candidate actually sees them in.
+    'university_timing_from', 'university_timing_to', 'university_name', 'picture',
   ],
   terms: [...DECLARATIONS.map((d) => d.id), POLICY_CONSENT.id],
 } as const satisfies Record<string, readonly string[]>
