@@ -207,11 +207,19 @@ class AgilyticsOnboardOutcome(BaseModel):
     because their program has no mapping or because the mapped name matched
     nothing in the workspace. Their API does not distinguish those two, and
     reports neither as an error.
+
+    `skipped_no_track` is different from `ungrouped`: their `/onboard`
+    endpoint now rejects an entry outright with "trackName is required" if
+    none is sent, despite documenting it as optional. A candidate with no
+    program mapping is filtered out *before* the call rather than sent and
+    failed, so they never reach `onboarded` at all — mapping their program to
+    a track on the Programs screen is what moves them out of this list.
     """
 
     onboarded: list[str] = []
     skipped_already_member: list[str] = []
     skipped_not_found: list[str] = []
+    skipped_no_track: list[str] = []
     skipped_other: list[str] = []
     ungrouped: int = 0
     track_distribution: dict[str, int] = {}

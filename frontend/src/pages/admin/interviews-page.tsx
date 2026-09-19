@@ -226,8 +226,7 @@ export default function AdminInterviewsPage() {
               ) : (
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
+                    <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>Candidate</TableHead>
@@ -332,7 +331,6 @@ export default function AdminInterviewsPage() {
                           ))}
                         </TableBody>
                       </Table>
-                    </div>
                   </CardContent>
                 </Card>
               )}

@@ -35,9 +35,25 @@ import type {
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-/** Big enough to cover an intake in one fetch — these are per-cohort figures,
- *  and paginating a statistic would make it wrong rather than shorter. */
-const ALL = 500
+// The backend caps `limit` at 100 (same as every other list endpoint — see
+// onboarding.py), so a statistic covering a whole intake cannot be one
+// fetch the way it originally assumed. This pages through instead: a
+// paginated *statistic* would be wrong rather than shorter, so the loop
+// exists to keep the one-fetch behavior's correctness without needing a
+// wider limit than every other caller of this endpoint gets.
+const PAGE_LIMIT = 100
+
+async function fetchAllCandidates(bootcampId: string): Promise<OnboardingCandidateSummary[]> {
+  const items: OnboardingCandidateSummary[] = []
+  let offset = 0
+  for (;;) {
+    const page = await onboardingApi.listCandidates(bootcampId, { limit: PAGE_LIMIT, offset })
+    items.push(...page.items)
+    offset += page.items.length
+    if (offset >= page.total || page.items.length === 0) break
+  }
+  return items
+}
 
 export default function AdminOnboardedStatsPage() {
   const { selected, loading: bootcampLoading } = useBootcamp()
@@ -83,11 +99,11 @@ function OnboardingStatsTab({ bootcampId }: { bootcampId: string }) {
   // The same endpoint the Onboarding folder grid is built from, so the two
   // screens cannot disagree about how far anybody has got.
   const { data, error, initialLoading, refetch } = useAsync(
-    () => onboardingApi.listCandidates(bootcampId, { limit: ALL, offset: 0 }),
+    () => fetchAllCandidates(bootcampId),
     [bootcampId],
   )
 
-  const rows = useMemo(() => data?.items ?? [], [data])
+  const rows = useMemo(() => data ?? [], [data])
   const stats = useMemo(() => summarise(rows), [rows])
 
   return (

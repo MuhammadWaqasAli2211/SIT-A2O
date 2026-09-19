@@ -2,17 +2,68 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Every table in the app is wide enough, on a narrow screen, to need this
+ * container's horizontal scroll — but a plain `overflow-x-auto` div gives no
+ * hint that there's more to the right. A candidate row would end at "AI
+ * score" and just look cut off, not scrollable. These two edge fades are the
+ * hint: present only on the side that actually has more content, so they
+ * double as a real signal (both gone means you're seeing the whole table),
+ * not decoration.
+ */
 function Table({ className, ...props }: React.ComponentProps<"table">) {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false)
+  const [canScrollRight, setCanScrollRight] = React.useState(false)
+
+  const updateFades = React.useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 1)
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+  }, [])
+
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    updateFades()
+    // Content can change width after mount (data loads, columns hide/show at
+    // a breakpoint) without the container itself resizing, so this watches
+    // the table's own size rather than only listening for scroll/resize.
+    const observer = new ResizeObserver(updateFades)
+    observer.observe(el)
+    el.addEventListener('scroll', updateFades, { passive: true })
+    window.addEventListener('resize', updateFades)
+    return () => {
+      observer.disconnect()
+      el.removeEventListener('scroll', updateFades)
+      window.removeEventListener('resize', updateFades)
+    }
+  }, [updateFades])
+
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
+    <div data-slot="table-container" className="relative w-full">
+      <div
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-linear-to-r from-card to-transparent transition-opacity duration-200',
+          canScrollLeft ? 'opacity-100' : 'opacity-0',
+        )}
       />
+      <div
+        aria-hidden="true"
+        className={cn(
+          'pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-linear-to-l from-card to-transparent transition-opacity duration-200',
+          canScrollRight ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+      <div ref={containerRef} className="overflow-x-auto">
+        <table
+          data-slot="table"
+          className={cn("w-full caption-bottom text-sm", className)}
+          {...props}
+        />
+      </div>
     </div>
   )
 }

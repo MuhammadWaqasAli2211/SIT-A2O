@@ -31,6 +31,7 @@ import { UserRole } from '@/lib/types'
 const LoginPage = lazy(() => import('@/pages/auth/login-page'))
 const SignupPage = lazy(() => import('@/pages/auth/signup-page'))
 const VerifyEmailPage = lazy(() => import('@/pages/auth/verify-email-page'))
+const OAuthCallbackPage = lazy(() => import('@/pages/auth/oauth-callback-page'))
 
 const ProgramsPage = lazy(() => import('@/pages/public/programs-page'))
 const ProgramDetailPage = lazy(() => import('@/pages/public/program-detail-page'))
@@ -127,6 +128,11 @@ export const router = createBrowserRouter([
   // session exists, before the success state it just earned is ever shown.
   // See the page's own header comment for the full reasoning.
   { path: '/verify-email', element: <VerifyEmailPage />, ...onError },
+
+  // Same reasoning as /verify-email above: this page establishes a session
+  // itself, mid-render, from Google's OAuth redirect, so it cannot sit
+  // inside GuestRoute either.
+  { path: '/auth/callback', element: <OAuthCallbackPage />, ...onError },
 
   // --------------------------------------------------------------- portal --
   {

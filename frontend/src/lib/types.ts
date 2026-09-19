@@ -1121,6 +1121,10 @@ export interface AgilyticsOnboardOutcome {
   /** No account on their side yet: provisioning has not run since these
    *  candidates arrived. Left unstamped, so still retryable. */
   skipped_not_found: string[]
+  /** Held back before the call: their API requires a track name per student
+   *  despite documenting it as optional, and rejects the whole request over
+   *  one missing one. Map the program to a track on the Programs screen. */
+  skipped_no_track: string[]
   skipped_other: string[]
   /** Onboarded but placed in no track, because the mapping was missing or
    *  matched nothing. Their API reports neither case as an error. */

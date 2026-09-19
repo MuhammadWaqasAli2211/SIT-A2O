@@ -198,7 +198,11 @@ function TopicRail({ groups }: { groups: typeof FAQS }) {
   return (
     <nav
       aria-label="FAQ topics"
-      className="lg:sticky lg:top-28 lg:self-start"
+      // `min-w-0`: below `lg` this is an implicit-column grid item, which
+      // defaults to `min-width: auto` and grows to fit the chip row's
+      // unwrapped content — overriding the row's own `overflow-x-auto` and
+      // pushing the whole page wider instead of just scrolling internally.
+      className="min-w-0 lg:sticky lg:top-28 lg:self-start"
     >
       <h2 className="mb-3 hidden text-xs font-semibold tracking-widest text-muted-foreground uppercase lg:block">
         Topics

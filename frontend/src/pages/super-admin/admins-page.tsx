@@ -189,8 +189,7 @@ export default function SuperAdminAdminsPage() {
           ) : (
             <Card>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
+                <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Administrator</TableHead>
@@ -294,7 +293,6 @@ export default function SuperAdminAdminsPage() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
               </CardContent>
             </Card>
           )}

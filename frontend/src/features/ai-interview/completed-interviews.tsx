@@ -221,8 +221,7 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
         ) : (
           <Card>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
+              <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Candidate</TableHead>
@@ -327,7 +326,6 @@ export function CompletedInterviewsPanel({ bootcampId }: { bootcampId?: string }
                     })}
                   </TableBody>
                 </Table>
-              </div>
             </CardContent>
           </Card>
         )}
