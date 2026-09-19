@@ -73,7 +73,6 @@ def test_a_super_admin_may_omit_the_intake(monkeypatch):
     page = hr_assessment_service.list_rows(EmptySession(), profile(UserRole.SUPER_ADMIN), None)
 
     assert page.items == []
-    assert page.stats.total == 0
 
 
 def test_naming_an_intake_goes_through_the_bootcamp_check(monkeypatch):
@@ -118,54 +117,6 @@ def test_an_empty_population_skips_the_external_call(monkeypatch):
     hr_assessment_service.list_rows(EmptySession(), profile(UserRole.SUPER_ADMIN), None)
 
     assert called == []
-
-
-# ------------------------------------------------------------------ stats --
-
-
-def test_stats_over_an_empty_page():
-    stats = hr_assessment_service._stats([], [])
-
-    assert stats.total == 0
-    assert stats.forms_complete == 0
-    assert stats.documents_pending == 0
-    assert stats.average_ai_score is None
-
-
-def test_forms_complete_counts_only_finished_checklists():
-    stats = hr_assessment_service._stats(
-        [
-            row(forms_submitted=4, forms_total=4),
-            row(forms_submitted=3, forms_total=4),
-            row(forms_submitted=0, forms_total=4),
-        ],
-        [],
-    )
-
-    assert stats.total == 3
-    assert stats.forms_complete == 1
-
-
-def test_documents_pending_sums_across_candidates():
-    stats = hr_assessment_service._stats(
-        [row(documents_pending=2), row(documents_pending=3), row(documents_pending=0)], []
-    )
-
-    assert stats.documents_pending == 5
-
-
-def test_average_score_ignores_unscored_rows():
-    """A candidate with no readable score must not be averaged in as a zero —
-    that would drag the headline down for people who simply have not sat it."""
-    stats = hr_assessment_service._stats(
-        [row(ai_score=80), row(ai_score=60), row(ai_score=None)], []
-    )
-
-    assert stats.average_ai_score == 70
-
-
-def test_average_score_is_none_when_nobody_has_one():
-    assert hr_assessment_service._stats([row(ai_score=None)], []).average_ai_score is None
 
 
 # --------------------------------------------- best interview per candidate --
@@ -285,35 +236,3 @@ def awaiting(**overrides) -> HrAssessmentAwaitingRow:
         status="pending",
     )
     return HrAssessmentAwaitingRow(**{**base, **overrides})
-
-
-def test_awaiting_decision_is_counted_separately_from_the_roster():
-    """`total` is the onboarding roster. Somebody still to be decided is not
-    in it yet, and must not inflate it."""
-    stats = hr_assessment_service._stats([row(), row()], [awaiting(), awaiting(), awaiting()])
-
-    assert stats.total == 2
-    assert stats.awaiting_decision == 3
-
-
-def test_an_empty_roster_can_still_have_people_awaiting_a_decision():
-    """The state right after a round of invites goes out: nobody has cleared
-    yet, so the bottom section is empty while the top is not."""
-    stats = hr_assessment_service._stats([], [awaiting()])
-
-    assert stats.total == 0
-    assert stats.awaiting_decision == 1
-
-
-def test_the_average_score_spans_both_sections():
-    """Otherwise the headline jumps every time a candidate is selected, purely
-    because they crossed from one list to the other."""
-    stats = hr_assessment_service._stats([row(ai_score=90)], [awaiting(ai_score=70)])
-
-    assert stats.average_ai_score == 80
-
-
-def test_unscored_awaiting_rows_are_ignored_by_the_average_too():
-    stats = hr_assessment_service._stats([row(ai_score=80)], [awaiting(ai_score=None)])
-
-    assert stats.average_ai_score == 80

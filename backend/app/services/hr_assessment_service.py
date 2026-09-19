@@ -34,7 +34,6 @@ from app.schemas.hr_assessment import (
     HrAssessmentAwaitingRow,
     HrAssessmentPage,
     HrAssessmentRow,
-    HrAssessmentStats,
 )
 from app.services import (
     ai_interview_service,
@@ -85,7 +84,7 @@ def list_rows(
     awaiting_records = _awaiting_records(db, bootcamp_id)
 
     if not records and not awaiting_records:
-        return HrAssessmentPage(items=[], awaiting=[], stats=_stats([], []))
+        return HrAssessmentPage(items=[], awaiting=[])
 
     # One external call for the whole page — both sections — not one per row.
     interviews = ai_interview_service.best_interviews_by_application(db, actor, bootcamp_id)
@@ -142,7 +141,7 @@ def list_rows(
         for invite, application, profile, bootcamp_name, program_title in awaiting_records
     ]
 
-    return HrAssessmentPage(items=items, awaiting=awaiting, stats=_stats(items, awaiting))
+    return HrAssessmentPage(items=items, awaiting=awaiting)
 
 
 def _awaiting_records(db: Session, bootcamp_id: uuid.UUID | None) -> list:
@@ -171,21 +170,3 @@ def _awaiting_records(db: Session, bootcamp_id: uuid.UUID | None) -> list:
     if bootcamp_id is not None:
         query = query.where(PhysicalInterviewBatch.bootcamp_id == bootcamp_id)
     return db.execute(query).all()
-
-
-def _stats(
-    items: list[HrAssessmentRow], awaiting: list[HrAssessmentAwaitingRow]
-) -> HrAssessmentStats:
-    # Averaged across both sections: an HR reviewer reads it as "the calibre of
-    # this intake at this point", and excluding the people still to be decided
-    # would make the figure jump every time somebody was selected.
-    scored = [row.ai_score for row in items if row.ai_score is not None]
-    scored += [row.ai_score for row in awaiting if row.ai_score is not None]
-    return HrAssessmentStats(
-        total=len(items),
-        forms_complete=sum(1 for row in items if row.forms_submitted >= row.forms_total),
-        documents_pending=sum(row.documents_pending for row in items),
-        # Rounded because it is a headline figure, not an input to anything.
-        average_ai_score=round(sum(scored) / len(scored), 1) if scored else None,
-        awaiting_decision=len(awaiting),
-    )

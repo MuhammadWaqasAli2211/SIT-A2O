@@ -96,19 +96,6 @@ class HrAssessmentAwaitingRow(BaseModel):
     interview: dict[str, Any] | None = None
 
 
-class HrAssessmentStats(BaseModel):
-    """The figures above the table. Computed over the same fetch the rows come
-    from, not a second pass — the screen already holds the data to answer them.
-    """
-
-    total: int
-    forms_complete: int
-    documents_pending: int
-    average_ai_score: float | None = None
-    # Open Physical Interview invites — the top section's headline count.
-    awaiting_decision: int = 0
-
-
 class HrAssessmentPage(BaseModel):
     items: list[HrAssessmentRow]
     # Answered by the same request as `items` rather than a second endpoint:
@@ -116,4 +103,3 @@ class HrAssessmentPage(BaseModel):
     # first moves a candidate into the second, so one fetch keeps them
     # consistent with each other instead of racing.
     awaiting: list[HrAssessmentAwaitingRow] = []
-    stats: HrAssessmentStats
